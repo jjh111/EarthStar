@@ -101,10 +101,18 @@
     
     .emoji-footer {
       font-size: 26px;
-      animation: footerAppear 0.5s ease-out forwards;
       cursor: pointer;
       transition: transform 0.2s;
       text-shadow: 0 2px 4px rgba(0,0,0,0.4);
+    }
+    
+    .emoji-footer.new {
+      animation: footerAppear 0.5s ease-out forwards;
+    }
+    
+    .emoji-footer.tree {
+      font-size: 32px;
+      animation: treeGrow 0.8s ease-out forwards;
     }
     
     .emoji-footer:hover {
@@ -114,6 +122,23 @@
     @keyframes footerAppear {
       0% { transform: scale(0) translateY(-10px); opacity: 0; }
       100% { transform: scale(1) translateY(0); opacity: 1; }
+    }
+    
+    @keyframes treeGrow {
+      0% { transform: scale(0.5) rotate(-10deg); opacity: 0; }
+      50% { transform: scale(1.3) rotate(5deg); opacity: 0.8; }
+      100% { transform: scale(1) rotate(0deg); opacity: 1; }
+    }
+    
+    /* Living butterfly */
+    .butterfly-living {
+      position: fixed;
+      pointer-events: none;
+      z-index: 9997;
+      font-size: 24px;
+      transition: opacity 0.3s;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
+      transform-origin: center;
     }
     
     .hero {
@@ -522,8 +547,15 @@
       heroLeft: [],
       heroRight: [],
       bodyPersistent: [],
-      footerGarden: []
+      footerGarden: [],
+      itemsSinceLastTree: 0
     };
+    
+    // Living butterflies state
+    let butterflies = [];
+    let mouseX = window.innerWidth / 2;
+    let mouseY = window.innerHeight / 2;
+    let animationFrameId = null;
     
     // Load state from localStorage
     function loadState() {
@@ -589,15 +621,45 @@
     // Just add a plant to footer (called when transient emoji fades)
     function addPlantToFooter() {
       const emojiChar = CONFIG.footerGarden.emojis[Math.floor(Math.random() * CONFIG.footerGarden.emojis.length)];
-      console.log('Plant grew in footer:', emojiChar);
+      
+      // Add as new item
       state.footerGarden.push({
         emoji: emojiChar,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        isNew: true,
+        isTree: false
       });
       
-      // Remove oldest if over max
-      if (state.footerGarden.length > CONFIG.footerGarden.max) {
-        state.footerGarden.shift();
+      state.itemsSinceLastTree++;
+      
+      // Every 5 items, transform oldest to tree
+      if (state.itemsSinceLastTree >= 5 && state.footerGarden.length > 0) {
+        // Find oldest non-tree item
+        for (let i = 0; i < state.footerGarden.length; i++) {
+          if (!state.footerGarden[i].isTree) {
+            state.footerGarden[i].emoji = '🌳';
+            state.footerGarden[i].isTree = true;
+            state.footerGarden[i].isNew = true; // Re-animate as tree
+            state.itemsSinceLastTree = 0;
+            console.log('A tree has grown!');
+            break;
+          }
+        }
+      }
+      
+      // Remove oldest if over max (but keep trees!)
+      while (state.footerGarden.length > CONFIG.footerGarden.max) {
+        // Prioritize removing non-trees
+        let removeIdx = -1;
+        for (let i = 0; i < state.footerGarden.length; i++) {
+          if (!state.footerGarden[i].isTree) {
+            removeIdx = i;
+            break;
+          }
+        }
+        // If all are trees, remove first one
+        if (removeIdx === -1) removeIdx = 0;
+        state.footerGarden.splice(removeIdx, 1);
       }
       
       saveState();
@@ -641,7 +703,6 @@
         console.log('Footer garden element NOT FOUND');
         return;
       }
-      console.log('Rendering footer garden, count:', state.footerGarden.length);
       garden.innerHTML = '';
       
       if (state.footerGarden.length === 0) {
@@ -651,12 +712,22 @@
       
       state.footerGarden.forEach((item, index) => {
         const el = document.createElement('span');
-        el.className = 'emoji-footer';
+        // Add classes for animation
+        if (item.isNew) {
+          el.className = item.isTree ? 'emoji-footer tree' : 'emoji-footer new';
+          item.isNew = false; // Mark as seen after first render
+        } else {
+          el.className = 'emoji-footer';
+        }
         el.textContent = item.emoji;
-        el.title = 'Click to remove';
+        el.title = item.isTree ? 'A grown tree. Click to remove. ' + (5 - state.itemsSinceLastTree) + ' more until next tree.' : 'Click to remove. ' + (5 - state.itemsSinceLastTree) + ' more until next tree.';
         el.addEventListener('click', (e) => {
           e.stopPropagation();
           state.footerGarden.splice(index, 1);
+          // Reset tree counter if we removed a tree
+          if (item.isTree) {
+            state.itemsSinceLastTree = 0;
+          }
           saveState();
           renderFooterGarden();
         });
@@ -669,13 +740,97 @@
       addPlantToFooter();
     }
     
+    // Living butterfly system
+    function createLivingButterfly(x, y) {
+      const el = document.createElement('div');
+      el.className = 'butterfly-living';
+      el.textContent = '🦋';
+      el.style.left = x + 'px';
+      el.style.top = y + 'px';
+      document.body.appendChild(el);
+      
+      const butterfly = {
+        el: el,
+        x: x,
+        y: y,
+        vx: (Math.random() - 0.5) * 2,
+        vy: (Math.random() - 0.5) * 2,
+        angle: Math.random() * 360,
+        wanderSpeed: 0.02 + Math.random() * 0.02
+      };
+      
+      butterflies.push(butterfly);
+      return butterfly;
+    }
+    
+    function updateButterflies() {
+      butterflies.forEach(b => {
+        // Base wandering - smooth random movement
+        b.angle += (Math.random() - 0.5) * 10;
+        
+        // Add wander velocity based on angle
+        const speed = 1.5;
+        b.vx += Math.cos(b.angle * Math.PI / 180) * b.wanderSpeed;
+        b.vy += Math.sin(b.angle * Math.PI / 180) * b.wanderSpeed;
+        
+        // Cursor attraction - if cursor is within 300px, drift toward it
+        const dx = mouseX - b.x;
+        const dy = mouseY - b.y;
+        const distToCursor = Math.sqrt(dx * dx + dy * dy);
+        
+        if (distToCursor < 300 && distToCursor > 20) {
+          const attraction = (300 - distToCursor) / 300 * 0.15;
+          b.vx += (dx / distToCursor) * attraction;
+          b.vy += (dy / distToCursor) * attraction;
+        }
+        
+        // Apply velocity with damping
+        b.x += b.vx;
+        b.y += b.vy;
+        b.vx *= 0.97;
+        b.vy *= 0.97;
+        
+        // Clamp velocity
+        const maxSpeed = 4;
+        const currentSpeed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+        if (currentSpeed > maxSpeed) {
+          b.vx = (b.vx / currentSpeed) * maxSpeed;
+          b.vy = (b.vy / currentSpeed) * maxSpeed;
+        }
+        
+        // Keep in bounds with soft bounce
+        const margin = 50;
+        if (b.x < margin) { b.x = margin; b.vx = Math.abs(b.vx) * 0.5; b.angle = 180 - b.angle; }
+        if (b.x > window.innerWidth - margin) { b.x = window.innerWidth - margin; b.vx = -Math.abs(b.vx) * 0.5; b.angle = 180 - b.angle; }
+        if (b.y < margin) { b.y = margin; b.vy = Math.abs(b.vy) * 0.5; b.angle = 360 - b.angle; }
+        if (b.y > window.innerHeight - margin) { b.y = window.innerHeight - margin; b.vy = -Math.abs(b.vy) * 0.5; b.angle = 360 - b.angle; }
+        
+        // Update element
+        b.el.style.left = b.x + 'px';
+        b.el.style.top = b.y + 'px';
+        b.el.style.transform = `scaleX(${b.vx > 0 ? 1 : -1})`; // Face direction of movement
+        
+        // Wing flap animation
+        const flap = Math.sin(Date.now() / 50 + b.x) * 0.2 + 1;
+        b.el.style.transform += ` scale(${flap})`;
+      });
+      
+      animationFrameId = requestAnimationFrame(updateButterflies);
+    }
+    
+    // Track mouse position
+    document.addEventListener('mousemove', (e) => {
+      mouseX = e.clientX;
+      mouseY = e.clientY;
+    });
+    
     // Handle hero left margin click (stars)
     function handleHeroLeftClick(e) {
       console.log('Hero left click');
       const x = 40;
       const y = e.clientY;
       
-      // Add to state
+      // Add star to state
       state.heroLeft.push({ x, y, timestamp: Date.now() });
       
       // Check limit - fade away oldest and add plant to footer
@@ -685,8 +840,12 @@
         setTimeout(addToFooterGarden, 800);
       }
       
-      // Create visual
+      // Create visual star
       createPersistentEmoji(x, y, CONFIG.heroLeft.emoji, document.body, -20);
+      
+      // Also spawn a living butterfly at click position
+      createLivingButterfly(e.clientX, e.clientY);
+      
       saveState();
     }
     
@@ -696,7 +855,7 @@
       const x = window.innerWidth - 60;
       const y = e.clientY;
       
-      // Add to state
+      // Add butterfly to state
       state.heroRight.push({ x, y, timestamp: Date.now() });
       
       // Check limit - fade away oldest and add plant to footer
@@ -706,8 +865,12 @@
         setTimeout(addToFooterGarden, 800);
       }
       
-      // Create visual
+      // Create visual butterfly
       createPersistentEmoji(x, y, CONFIG.heroRight.emoji, document.body, -20);
+      
+      // Also spawn a living butterfly at click position
+      createLivingButterfly(e.clientX, e.clientY);
+      
       saveState();
     }
     
@@ -791,6 +954,9 @@
       const style = document.createElement('style');
       style.textContent = '@keyframes fadeOut { to { opacity: 0; transform: scale(2); } }';
       document.head.appendChild(style);
+      
+      // Start butterfly animation
+      updateButterflies();
       
       console.log('Emoji garden ready!');
     }
