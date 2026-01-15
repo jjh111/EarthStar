@@ -550,6 +550,7 @@
     // State
     let state = {
       heroLeft: [],
+      heroRight: [],
       bodyPersistent: [],
       footerGarden: [],
       itemsSinceLastTree: 0
@@ -572,6 +573,7 @@
           const plantEmojis = CONFIG.footerGarden.emojis;
           state = {
             heroLeft: savedState.heroLeft || [],
+            heroRight: savedState.heroRight || [],
             bodyPersistent: savedState.bodyPersistent || [],
             footerGarden: (savedState.footerGarden || []).map(item => ({
               emoji: item.emoji || plantEmojis[Math.floor(Math.random() * plantEmojis.length)],
@@ -609,7 +611,7 @@
       console.log('Garden cleared!');
     }
     
-    // Create transient emoji (fades after 2s, no footer impact)
+    // Create transient emoji (fades after 2s, adds to footer when done)
     function createTransientEmoji(x, y) {
       const emoji = document.createElement('div');
       emoji.className = 'emoji-transient';
@@ -620,6 +622,8 @@
       
       setTimeout(() => {
         emoji.remove();
+        // Add a plant to footer when transient emoji fades
+        addPlantToFooter();
       }, 2000);
     }
     
@@ -894,7 +898,7 @@
       if (!state[side]) state[side] = [];
       state[side].push({ x, y, timestamp: Date.now() });
       
-      // Check limit - fade away oldest
+      // Check limit - fade away oldest (no footer, just stars)
       if (state[side].length > CONFIG.heroLeft.max) {
         const old = state[side].shift();
         fadeAwayEmoji(old.x, old.y, CONFIG.heroLeft.emoji);
@@ -943,6 +947,10 @@
       
       // Restore persistent elements on page
       state.heroLeft.forEach(item => {
+        createPersistentEmoji(item.x, item.y, CONFIG.heroLeft.emoji, document.body, -20);
+      });
+      
+      state.heroRight.forEach(item => {
         createPersistentEmoji(item.x, item.y, CONFIG.heroLeft.emoji, document.body, -20);
       });
       
