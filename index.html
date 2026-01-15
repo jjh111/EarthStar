@@ -570,9 +570,12 @@
             heroRight: savedState.heroRight || [],
             bodyPersistent: savedState.bodyPersistent || [],
             footerGarden: (savedState.footerGarden || []).map(item => ({
-              emoji: plantEmojis[Math.floor(Math.random() * plantEmojis.length)],
-              timestamp: item.timestamp
-            }))
+              emoji: item.emoji || plantEmojis[Math.floor(Math.random() * plantEmojis.length)],
+              timestamp: item.timestamp || Date.now(),
+              isTree: item.isTree || false,
+              isNew: false
+            })),
+            itemsSinceLastTree: savedState.itemsSinceLastTree || 0
           };
         }
       } catch (e) {
@@ -592,7 +595,10 @@
     // Clear state and refresh
     function clearGarden() {
       localStorage.removeItem('earthStarGarden');
-      state = { heroLeft: [], heroRight: [], bodyPersistent: [], footerGarden: [] };
+      state = { heroLeft: [], heroRight: [], bodyPersistent: [], footerGarden: [], itemsSinceLastTree: 0 };
+      butterflies = [];
+      // Remove all living butterflies from DOM
+      document.querySelectorAll('.butterfly-living').forEach(el => el.remove());
       renderFooterGarden();
       // Remove all existing persistent emojis
       document.querySelectorAll('.emoji-persistent, .emoji-fading').forEach(el => el.remove());
@@ -631,9 +637,11 @@
       });
       
       state.itemsSinceLastTree++;
+      console.log('Added plant, itemsSinceLastTree:', state.itemsSinceLastTree);
       
       // Every 5 items, transform oldest to tree
       if (state.itemsSinceLastTree >= 5 && state.footerGarden.length > 0) {
+        console.log('Tree evolution triggered!');
         // Find oldest non-tree item
         for (let i = 0; i < state.footerGarden.length; i++) {
           if (!state.footerGarden[i].isTree) {
@@ -641,7 +649,7 @@
             state.footerGarden[i].isTree = true;
             state.footerGarden[i].isNew = true; // Re-animate as tree
             state.itemsSinceLastTree = 0;
-            console.log('A tree has grown!');
+            console.log('A tree has grown! Index:', i);
             break;
           }
         }
@@ -742,12 +750,14 @@
     
     // Living butterfly system
     function createLivingButterfly(x, y) {
+      console.log('Creating living butterfly at:', x, y);
       const el = document.createElement('div');
       el.className = 'butterfly-living';
       el.textContent = '🦋';
       el.style.left = x + 'px';
       el.style.top = y + 'px';
       document.body.appendChild(el);
+      console.log('Butterfly element created, butterflies array length:', butterflies.length);
       
       const butterfly = {
         el: el,
@@ -764,6 +774,9 @@
     }
     
     function updateButterflies() {
+      if (butterflies.length > 0) {
+        console.log('Updating', butterflies.length, 'butterflies');
+      }
       butterflies.forEach(b => {
         // Base wandering - smooth random movement
         b.angle += (Math.random() - 0.5) * 10;
@@ -852,7 +865,7 @@
     // Handle hero right margin click (butterflies)
     function handleHeroRightClick(e) {
       console.log('Hero right click');
-      const x = window.innerWidth - 60;
+      const x = window.innerWidth - 40; // Match click detection zone
       const y = e.clientY;
       
       // Add butterfly to state
@@ -928,8 +941,12 @@
       
       // Single document click handler - check areas
       document.addEventListener('click', function handleClick(e) {
+        console.log('Document click at:', e.clientX, e.clientY);
         // Skip if clicking on footer garden items
-        if (e.target.closest('.emoji-footer') || e.target.closest('.footer-garden')) return;
+        if (e.target.closest('.emoji-footer') || e.target.closest('.footer-garden')) {
+          console.log('Click on footer garden - skipping');
+          return;
+        }
         
         // Visual debug - brief flash at click point
         const debug = document.createElement('div');
