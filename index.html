@@ -10,11 +10,19 @@
     body {
       font-family: "Georgia", serif;
       background: linear-gradient(135deg, #3d3429 0%, #5c4a3a 25%, #6b5a45 50%, #4a3f35 75%, #2b2520 100%);
+      background-size: 400% 400%;
       background-attachment: fixed;
       color: #f5f0e8;
-      line-height: 1.6;
+      line-height: 1.7;
       min-height: 100vh;
       overflow-x: hidden;
+      animation: earthPulse 30s ease-in-out infinite;
+    }
+    
+    @keyframes earthPulse {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
     }
     
     .margin-click-zone {
@@ -137,18 +145,18 @@
     }
     
     .equation-prime {
-      font-size: 1.5em;
+      font-size: 1.6em;
       color: #ffd700;
-      margin-bottom: 12px;
-      letter-spacing: 0.03em;
+      margin-bottom: 14px;
+      letter-spacing: 0.04em;
       position: relative;
       z-index: 1;
     }
     
     .equation-main {
-      font-size: 1.1em;
+      font-size: 1.2em;
       color: #daa520;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.05em;
       position: relative;
       z-index: 1;
     }
@@ -170,8 +178,8 @@
     
     h1 {
       font-size: clamp(2.5rem, 8vw, 5rem);
-      font-weight: 400;
-      letter-spacing: 0.05em;
+      font-weight: 600;
+      letter-spacing: 0.12em;
       margin-bottom: 8px;
       text-align: center;
       
@@ -190,45 +198,45 @@
     }
     
     .subtitle {
-      font-size: clamp(0.9rem, 2vw, 1.3em);
+      font-size: clamp(1rem, 2.5vw, 1.5em);
       color: #c9b8a1;
       text-align: center;
       margin-bottom: 8px;
       font-style: italic;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.08em;
     }
     
     .tagline {
       text-align: center;
       font-style: italic;
       color: #8b7355;
-      margin-bottom: 25px;
-      font-size: 1em;
-      letter-spacing: 0.1em;
+      margin-bottom: 35px;
+      font-size: 1.1em;
+      letter-spacing: 0.15em;
     }
     
     .intro {
-      font-size: 1.05em;
+      font-size: 1.2em;
       color: #d4c8b4;
-      margin-bottom: 25px;
-      padding: 20px;
+      margin-bottom: 35px;
+      padding: 24px;
       background: rgba(92, 64, 51, 0.3);
       border-radius: 8px;
-      line-height: 1.7;
+      line-height: 1.8;
     }
     
     ul {
       list-style: none;
-      margin: 0 0 30px;
+      margin: 0 0 40px;
     }
     
     li {
       position: relative;
-      padding-left: 28px;
-      margin-bottom: 12px;
-      font-size: 0.95em;
+      padding-left: 32px;
+      margin-bottom: 16px;
+      font-size: 1.1em;
       color: #e0d6c4;
-      letter-spacing: 0.01em;
+      letter-spacing: 0.02em;
     }
     
     li::before {
@@ -303,32 +311,55 @@
       color: #daa520;
     }
     
+    .link-btn-jewel {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 14px;
+      background: linear-gradient(145deg, #4a3f6b 0%, #6b5a8a 30%, #5a4a7a 50%, #8b7aaa 70%, #4a3f6b 100%);
+      background-size: 200% 200%;
+      color: #e8e0f5;
+      text-decoration: none;
+      border-radius: 4px;
+      font-size: 0.75em;
+      letter-spacing: 0.1em;
+      border: 1px solid #8b7aaa;
+      box-shadow: 0 0 10px rgba(139, 122, 170, 0.3);
+      transition: all 0.3s ease;
+      margin-bottom: 20px;
+    }
+    
+    .link-btn-jewel:hover {
+      background-position: 100% 50%;
+      box-shadow: 0 0 20px rgba(139, 122, 170, 0.5);
+      transform: translateY(-1px);
+    }
+    
     footer {
       max-width: 750px;
       margin: 0 auto 30px;
-      padding: 25px 40px;
+      padding: 30px 40px;
       text-align: center;
       color: #a89b85;
-      font-size: 0.9em;
+      font-size: 1em;
       letter-spacing: 0.1em;
     }
     
     .footer-logo {
       max-width: 150px;
-      margin-bottom: 12px;
+      margin-bottom: 16px;
       opacity: 0.9;
     }
     
     .footer-tagline {
       font-style: italic;
-      margin-top: 12px;
-      font-size: 0.9em;
+      margin-top: 16px;
+      font-size: 1em;
     }
     
     .footer-equation {
-      margin-top: 16px;
+      margin-top: 20px;
       font-family: "Courier New", monospace;
-      font-size: 0.75em;
+      font-size: 0.85em;
       color: #8b7355;
     }
     
@@ -392,15 +423,16 @@
     </section>
   </main>
   
-  <footer>
-    <img src="./Assets/EarthStar Logo JH 2025 w.png" alt="Logo" class="footer-logo">
-    <p>earth star is live</p>
-    <p class="footer-tagline">"Plant the seed. Tend the tending."</p>
-    <p class="footer-equation">Gomen'nasai — entropy's algorithmic antithesis</p>
-    <div class="banner-footer">
-      <img src="./Assets/EarthstarBanner.PNG" alt="EarthStar Banner">
-    </div>
-  </footer>
+   <footer>
+     <img src="./Assets/EarthStar Logo JH 2025 w.png" alt="Logo" class="footer-logo">
+     <p>earth star is live</p>
+     <p class="footer-tagline">"Plant the seed. Tend the tending."</p>
+     <p class="footer-equation">Gomen'nasai — entropy's algorithmic antithesis</p>
+     <a href="https://www.johnhanacek.com" class="link-btn-jewel" target="_blank">By JHDesign</a>
+     <div class="banner-footer">
+       <img src="./Assets/EarthstarBanner.PNG" alt="EarthStar Banner">
+     </div>
+   </footer>
   
   <script>
     const hero = document.querySelector('.hero');
