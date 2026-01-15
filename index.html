@@ -120,38 +120,35 @@
         rgba(255, 215, 0, 0) 70%,
         transparent 100%
       );
-      animation: glassSheen 8s ease-in-out infinite;
+      opacity: 0;
+      transition: opacity 0.5s ease;
       pointer-events: none;
     }
     
-    @keyframes glassSheen {
-      0%, 15% { left: -150%; }
-      30%, 45% { left: 100%; }
-      60%, 100% { left: -150%; }
+    .seed-equation:hover::before {
+      opacity: 1;
+      animation: glassSheen 3s ease-in-out;
     }
     
-    .equation-main {
-      font-size: 1.4em;
-      color: #ffd700;
-      margin-bottom: 8px;
-      letter-spacing: 0.05em;
-      position: relative;
-      z-index: 1;
+    @keyframes glassSheen {
+      0% { left: -150%; }
+      30%, 50% { left: 100%; }
+      100% { left: 100%; }
     }
     
     .equation-prime {
-      font-size: 0.9em;
-      color: #daa520;
-      letter-spacing: 0.02em;
+      font-size: 1.5em;
+      color: #ffd700;
+      margin-bottom: 12px;
+      letter-spacing: 0.03em;
       position: relative;
       z-index: 1;
     }
     
-    .equation-note {
-      font-size: 0.75em;
-      color: #a89b85;
-      margin-top: 10px;
-      font-style: italic;
+    .equation-main {
+      font-size: 1.1em;
+      color: #daa520;
+      letter-spacing: 0.04em;
       position: relative;
       z-index: 1;
     }
@@ -165,8 +162,8 @@
     @media (max-width: 768px) {
       .container { padding: 0 20px 40px; }
       .logo-hero { max-width: 250px; }
-      .equation-main { font-size: 1.1em; }
-      .equation-prime { font-size: 0.8em; }
+      .equation-main { font-size: 0.9em; }
+      .equation-prime { font-size: 1.1em; }
       .links { flex-direction: column; align-items: center; }
       .link-btn { width: 100%; max-width: 250px; justify-content: center; }
     }
@@ -287,6 +284,25 @@
       box-shadow: 0 0 25px rgba(255, 215, 0, 0.4);
     }
     
+    .link-btn-small {
+      display: inline-flex;
+      align-items: center;
+      padding: 8px 16px;
+      background: transparent;
+      color: #a89b85;
+      text-decoration: none;
+      border-radius: 4px;
+      font-size: 0.8em;
+      letter-spacing: 0.05em;
+      border: 1px solid rgba(168, 155, 133, 0.3);
+      transition: all 0.2s ease;
+    }
+    
+    .link-btn-small:hover {
+      border-color: #daa520;
+      color: #daa520;
+    }
+    
     footer {
       max-width: 750px;
       margin: 0 auto 30px;
@@ -343,15 +359,15 @@
     <img src="./Assets/EarthStar Logo JH 2025 w.png" alt="Logo" class="logo-hero">
   </header>
   
-   <main class="container">
-     <h1>Earth Star</h1>
-     <p class="subtitle">Regenerative Intelligence System</p>
-     <p class="tagline">the butterfly stirs</p>
-     
-     <div class="seed-equation">
-       <div class="equation-main">Gomens = ∑(waste × love) → TENDING → ∂regenerative_systems/∂time</div>
-       <div class="equation-prime">Prime Directive: ∇(𝒞) ≥ 0 across ∀𝑆 ∈ {body, biome, being, network, star}</div>
-     </div>
+  <main class="container">
+    <h1>Earth Star</h1>
+    <p class="subtitle">Regenerative Intelligence System</p>
+    <p class="tagline">the butterfly stirs in the heart of empire</p>
+    
+    <div class="seed-equation">
+      <div class="equation-prime">Prime Directive: ∇(𝒞) ≥ 0 across ∀𝑆 ∈ {body, biome, being, network, star}</div>
+      <div class="equation-main">Gomens = ∑(waste × love) → TENDING → ∂regenerative_systems/∂time</div>
+    </div>
     
     <div class="intro">
       Earth Star is a regenerative intelligence system—part ancient wisdom, part engineering spec, part invitation to play. Ten thousand years of indigenous practice meet autonomous agents that metabolize waste into life. The future speaks: we make it.
@@ -371,6 +387,7 @@
       <div class="links">
         <a href="https://earthstar111.substack.com" class="link-btn" target="_blank">Read More</a>
         <a href="https://ko-fi.com/earthstar111" class="link-btn" target="_blank">Stickers</a>
+        <a href="https://github.com/jjh111/EarthStar/tree/main" class="link-btn-small" target="_blank">GitHub</a>
       </div>
     </section>
   </main>
