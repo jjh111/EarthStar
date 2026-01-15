@@ -411,6 +411,13 @@
       max-width: 150px;
       margin-bottom: 16px;
       opacity: 0.9;
+      cursor: pointer;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+    }
+    
+    .footer-logo:hover {
+      transform: translateY(-4px);
+      opacity: 1;
     }
     
     .footer-tagline {
@@ -486,17 +493,17 @@
     </section>
   </main>
   
-   <footer>
-     <div class="footer-garden" id="footerGarden"></div>
-     <img src="./Assets/EarthStar Logo JH 2025 w.png" alt="Logo" class="footer-logo">
-     <p>earth star is live</p>
-     <p class="footer-tagline">"Plant the seed. Tend the tending."</p>
-     <p class="footer-equation">Gomen'nasai — entropy's algorithmic antithesis</p>
-     <a href="https://www.johnhanacek.com" class="link-btn-jewel" target="_blank">By JHDesign</a>
-     <div class="banner-footer">
-       <img src="./Assets/EarthstarBanner.PNG" alt="EarthStar Banner">
-     </div>
-   </footer>
+    <footer>
+      <div class="footer-garden" id="footerGarden"></div>
+      <img src="./Assets/EarthStar Logo JH 2025 w.png" alt="Logo" class="footer-logo" onclick="clearGarden()" title="Click to clear garden">
+      <p>earth star is live</p>
+      <p class="footer-tagline">"Plant the seed. Tend the tending."</p>
+      <p class="footer-equation">Gomen'nasai — entropy's algorithmic antithesis</p>
+      <a href="https://www.johnhanacek.com" class="link-btn-jewel" target="_blank">By JHDesign</a>
+      <div class="banner-footer">
+        <img src="./Assets/EarthstarBanner.PNG" alt="EarthStar Banner">
+      </div>
+    </footer>
   
   <script>
     // Emoji Garden System
@@ -507,7 +514,7 @@
       heroRight: { emoji: '🦋', max: 8 },
       bodyPersistent: { emojis: ['✦', '🦋'], max: 5 },
       bodyTransient: { emojis: ['🌱', '🌿', '🌸'], maxVisible: 22 },
-      footerGarden: { emojis: ['✦', '🦋', '🌸'], max: 14 }
+      footerGarden: { emojis: ['🌱', '🌿', '🌸'], max: 14 }
     };
     
     // State
@@ -523,7 +530,18 @@
       try {
         const saved = localStorage.getItem('earthStarGarden');
         if (saved) {
-          state = JSON.parse(saved);
+          const savedState = JSON.parse(saved);
+          // Convert old footer emojis to new plant/flower emojis
+          const plantEmojis = CONFIG.footerGarden.emojis;
+          state = {
+            heroLeft: savedState.heroLeft || [],
+            heroRight: savedState.heroRight || [],
+            bodyPersistent: savedState.bodyPersistent || [],
+            footerGarden: (savedState.footerGarden || []).map(item => ({
+              emoji: plantEmojis[Math.floor(Math.random() * plantEmojis.length)],
+              timestamp: item.timestamp
+            }))
+          };
         }
       } catch (e) {
         console.log('Could not load garden state');
@@ -539,6 +557,16 @@
       }
     }
     
+    // Clear state and refresh
+    function clearGarden() {
+      localStorage.removeItem('earthStarGarden');
+      state = { heroLeft: [], heroRight: [], bodyPersistent: [], footerGarden: [] };
+      renderFooterGarden();
+      // Remove all existing persistent emojis
+      document.querySelectorAll('.emoji-persistent, .emoji-fading').forEach(el => el.remove());
+      console.log('Garden cleared!');
+    }
+    
     // Create transient emoji (fades after 2s)
     function createTransientEmoji(x, y) {
       const emoji = document.createElement('div');
@@ -547,7 +575,33 @@
       emoji.style.left = (x - 12) + 'px';
       emoji.style.top = (y - 12) + 'px';
       document.body.appendChild(emoji);
-      setTimeout(() => emoji.remove(), 2000);
+      
+      // Track this transient emoji
+      const emojiChar = emoji.textContent;
+      
+      setTimeout(() => {
+        emoji.remove();
+        // Add a plant to footer when transient emoji fades
+        addPlantToFooter();
+      }, 2000);
+    }
+    
+    // Just add a plant to footer (called when transient emoji fades)
+    function addPlantToFooter() {
+      const emojiChar = CONFIG.footerGarden.emojis[Math.floor(Math.random() * CONFIG.footerGarden.emojis.length)];
+      console.log('Plant grew in footer:', emojiChar);
+      state.footerGarden.push({
+        emoji: emojiChar,
+        timestamp: Date.now()
+      });
+      
+      // Remove oldest if over max
+      if (state.footerGarden.length > CONFIG.footerGarden.max) {
+        state.footerGarden.shift();
+      }
+      
+      saveState();
+      renderFooterGarden();
     }
     
     // Create persistent emoji (floats in place)
@@ -575,31 +629,25 @@
       setTimeout(() => el.remove(), 800);
     }
     
-    // Add to footer garden
-    function addToFooterGarden(emojiChar) {
-      state.footerGarden.push({
-        emoji: emojiChar,
-        timestamp: Date.now()
-      });
-      
-      // Remove oldest if over max
-      if (state.footerGarden.length > CONFIG.footerGarden.max) {
-        state.footerGarden.shift();
-      }
-      
-      saveState();
-      renderFooterGarden();
+    // Add to footer garden (always plants/flowers)
+    function addToFooterGarden() {
+      addPlantToFooter();
     }
     
     // Render footer garden
     function renderFooterGarden() {
       const garden = document.getElementById('footerGarden');
       if (!garden) {
-        console.log('Footer garden element not found');
+        console.log('Footer garden element NOT FOUND');
         return;
       }
-      console.log('Rendering footer garden:', state.footerGarden);
+      console.log('Rendering footer garden, count:', state.footerGarden.length);
       garden.innerHTML = '';
+      
+      if (state.footerGarden.length === 0) {
+        garden.innerHTML = '<span style="font-size: 0.8em; color: rgba(168,155,133,0.5);">click margins to plant...</span>';
+        return;
+      }
       
       state.footerGarden.forEach((item, index) => {
         const el = document.createElement('span');
@@ -616,20 +664,9 @@
       });
     }
     
-    // Add to footer garden
-    function addToFooterGarden(emojiChar) {
-      state.footerGarden.push({
-        emoji: emojiChar,
-        timestamp: Date.now()
-      });
-      
-      // Remove oldest if over max
-      if (state.footerGarden.length > CONFIG.footerGarden.max) {
-        state.footerGarden.shift();
-      }
-      
-      saveState();
-      renderFooterGarden();
+    // Add to footer garden (always plants/flowers) - wrapper
+    function addToFooterGarden() {
+      addPlantToFooter();
     }
     
     // Handle hero left margin click (stars)
@@ -641,10 +678,11 @@
       // Add to state
       state.heroLeft.push({ x, y, timestamp: Date.now() });
       
-      // Check limit - fade away oldest if over max
+      // Check limit - fade away oldest and add plant to footer
       if (state.heroLeft.length > CONFIG.heroLeft.max) {
         const old = state.heroLeft.shift();
         fadeAwayEmoji(old.x, old.y, CONFIG.heroLeft.emoji);
+        setTimeout(addToFooterGarden, 800);
       }
       
       // Create visual
@@ -661,10 +699,11 @@
       // Add to state
       state.heroRight.push({ x, y, timestamp: Date.now() });
       
-      // Check limit - fade away oldest if over max
+      // Check limit - fade away oldest and add plant to footer
       if (state.heroRight.length > CONFIG.heroRight.max) {
         const old = state.heroRight.shift();
         fadeAwayEmoji(old.x, old.y, CONFIG.heroRight.emoji);
+        setTimeout(addToFooterGarden, 800);
       }
       
       // Create visual
@@ -687,10 +726,11 @@
         
         state.bodyPersistent.push({ x, y, emoji: emojiChar, timestamp: Date.now() });
         
-        // Check limit - fade away oldest if over max
+        // Check limit - fade away oldest and add plant to footer
         if (state.bodyPersistent.length > CONFIG.bodyPersistent.max) {
           const old = state.bodyPersistent.shift();
           fadeAwayEmoji(old.x, old.y, old.emoji);
+          setTimeout(addToFooterGarden, 800);
         }
         
         // Create visual
