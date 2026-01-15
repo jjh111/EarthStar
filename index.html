@@ -61,7 +61,7 @@
     .emoji-persistent {
       position: fixed;
       pointer-events: none;
-      z-index: 9998;
+      z-index: 9995;
       font-size: 32px;
       animation: persistentFloat 3s ease-in-out infinite;
       text-shadow: 0 2px 8px rgba(0,0,0,0.6);
@@ -134,11 +134,17 @@
     .butterfly-living {
       position: fixed;
       pointer-events: none;
-      z-index: 9997;
-      font-size: 24px;
-      transition: opacity 0.3s;
-      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
+      z-index: 10000;
+      font-size: 22px;
+      filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.5)) drop-shadow(0 2px 4px rgba(0,0,0,0.6));
       transform-origin: center;
+      will-change: transform, left, top;
+      animation: butterflyGlow 4s ease-in-out infinite;
+    }
+    
+    @keyframes butterflyGlow {
+      0%, 100% { filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.5)) drop-shadow(0 2px 4px rgba(0,0,0,0.6)); }
+      50% { filter: drop-shadow(0 0 12px rgba(255, 215, 0, 0.7)) drop-shadow(0 2px 4px rgba(0,0,0,0.6)); }
     }
     
     .hero {
@@ -536,8 +542,7 @@
     // Configuration
     const CONFIG = {
       heroLeft: { emoji: '✦', max: 8 },
-      heroRight: { emoji: '🦋', max: 8 },
-      bodyPersistent: { emojis: ['✦', '🦋'], max: 5 },
+      bodyPersistent: { emojis: ['✦'], max: 5 },
       bodyTransient: { emojis: ['🌱', '🌿', '🌸'], maxVisible: 22 },
       footerGarden: { emojis: ['🌱', '🌿', '🌸'], max: 14 }
     };
@@ -545,7 +550,6 @@
     // State
     let state = {
       heroLeft: [],
-      heroRight: [],
       bodyPersistent: [],
       footerGarden: [],
       itemsSinceLastTree: 0
@@ -555,6 +559,7 @@
     let butterflies = [];
     let mouseX = window.innerWidth / 2;
     let mouseY = window.innerHeight / 2;
+    let mouseOnPage = false;
     let animationFrameId = null;
     
     // Load state from localStorage
@@ -567,7 +572,6 @@
           const plantEmojis = CONFIG.footerGarden.emojis;
           state = {
             heroLeft: savedState.heroLeft || [],
-            heroRight: savedState.heroRight || [],
             bodyPersistent: savedState.bodyPersistent || [],
             footerGarden: (savedState.footerGarden || []).map(item => ({
               emoji: item.emoji || plantEmojis[Math.floor(Math.random() * plantEmojis.length)],
@@ -595,7 +599,7 @@
     // Clear state and refresh
     function clearGarden() {
       localStorage.removeItem('earthStarGarden');
-      state = { heroLeft: [], heroRight: [], bodyPersistent: [], footerGarden: [], itemsSinceLastTree: 0 };
+      state = { heroLeft: [], bodyPersistent: [], footerGarden: [], itemsSinceLastTree: 0 };
       butterflies = [];
       // Remove all living butterflies from DOM
       document.querySelectorAll('.butterfly-living').forEach(el => el.remove());
@@ -605,7 +609,7 @@
       console.log('Garden cleared!');
     }
     
-    // Create transient emoji (fades after 2s)
+    // Create transient emoji (fades after 2s, no footer impact)
     function createTransientEmoji(x, y) {
       const emoji = document.createElement('div');
       emoji.className = 'emoji-transient';
@@ -614,13 +618,8 @@
       emoji.style.top = (y - 12) + 'px';
       document.body.appendChild(emoji);
       
-      // Track this transient emoji
-      const emojiChar = emoji.textContent;
-      
       setTimeout(() => {
         emoji.remove();
-        // Add a plant to footer when transient emoji fades
-        addPlantToFooter();
       }, 2000);
     }
     
@@ -743,175 +742,191 @@
       });
     }
     
-    // Add to footer garden (always plants/flowers) - wrapper
-    function addToFooterGarden() {
-      addPlantToFooter();
-    }
-    
-    // Living butterfly system
+    // Living butterfly system (max 5)
     function createLivingButterfly(x, y) {
-      console.log('Creating living butterfly at:', x, y);
       const el = document.createElement('div');
       el.className = 'butterfly-living';
       el.textContent = '🦋';
-      el.style.left = x + 'px';
-      el.style.top = y + 'px';
+      // Random offset to prevent stacking
+      const offsetX = (Math.random() - 0.5) * 40;
+      const offsetY = (Math.random() - 0.5) * 40;
+      const spawnX = x + offsetX;
+      const spawnY = y + offsetY;
+      el.style.left = (spawnX - 12) + 'px';
+      el.style.top = (spawnY - 12) + 'px';
       document.body.appendChild(el);
-      console.log('Butterfly element created, butterflies array length:', butterflies.length);
       
       const butterfly = {
         el: el,
-        x: x,
-        y: y,
-        vx: (Math.random() - 0.5) * 2,
-        vy: (Math.random() - 0.5) * 2,
+        x: spawnX,
+        y: spawnY,
+        vx: (Math.random() - 0.5) * 1.5,
+        vy: (Math.random() - 0.5) * 1.5,
         angle: Math.random() * 360,
-        wanderSpeed: 0.02 + Math.random() * 0.02
+        birthTime: Date.now()
       };
       
       butterflies.push(butterfly);
+      
+      // Max 5, fade oldest when over limit (no footer)
+      while (butterflies.length > 5) {
+        const old = butterflies.shift();
+        if (old && old.el) {
+          old.el.style.transition = 'opacity 0.5s, transform 0.5s';
+          old.el.style.opacity = '0';
+          old.el.style.transform = 'scale(0)';
+          setTimeout(() => old.el?.remove(), 500);
+        }
+      }
+      
       return butterfly;
     }
     
     function updateButterflies() {
-      if (butterflies.length > 0) {
-        console.log('Updating', butterflies.length, 'butterflies');
-      }
-      butterflies.forEach(b => {
-        // Base wandering - smooth random movement
-        b.angle += (Math.random() - 0.5) * 10;
+      // Clean up stale references
+      butterflies = butterflies.filter(b => b && b.el && b.el.parentElement);
+      
+      butterflies.forEach((b, i) => {
+        // Skip invalid butterflies
+        if (!b.el || !b.el.parentElement) return;
         
-        // Add wander velocity based on angle
-        const speed = 1.5;
-        b.vx += Math.cos(b.angle * Math.PI / 180) * b.wanderSpeed;
-        b.vy += Math.sin(b.angle * Math.PI / 180) * b.wanderSpeed;
-        
-        // Cursor attraction - if cursor is within 300px, drift toward it
-        const dx = mouseX - b.x;
-        const dy = mouseY - b.y;
-        const distToCursor = Math.sqrt(dx * dx + dy * dy);
-        
-        if (distToCursor < 300 && distToCursor > 20) {
-          const attraction = (300 - distToCursor) / 300 * 0.15;
-          b.vx += (dx / distToCursor) * attraction;
-          b.vy += (dy / distToCursor) * attraction;
+        if (mouseOnPage) {
+          // Cursor on page: orbit around cursor at gentle distance
+          const dx = b.x - mouseX;
+          const dy = b.y - mouseY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          
+          // Each butterfly has slightly different target distance for spread
+          const baseTarget = 100 + (i * 20);
+          const targetDist = baseTarget + Math.sin(Date.now() / 3000 + b.x * 0.01 + i) * 30;
+          
+          // Each butterfly orbits at different speed
+          const orbitSpeed = 0.4 + (i * 0.1);
+          b.angle += orbitSpeed;
+          
+          // Avoid center of cursor (50px exclusion zone)
+          if (dist < 50) {
+            // Too close - push away strongly
+            b.vx += (dx / dist) * 0.2;
+            b.vy += (dy / dist) * 0.2;
+          } else if (dist < targetDist - 30) {
+            // Too close - drift away faster
+            b.vx += (dx / dist) * 0.08;
+            b.vy += (dy / dist) * 0.08;
+          } else if (dist > targetDist + 30) {
+            // Too far - drift closer faster
+            b.vx -= (dx / dist) * 0.06;
+            b.vy -= (dy / dist) * 0.06;
+          }
+          
+          // Add gentle orbit tangential force
+          const orbitStrength = 0.008;
+          b.vx += Math.cos(b.angle) * orbitStrength;
+          b.vy += Math.sin(b.angle) * orbitStrength;
+        } else {
+          // Cursor off page: gentle random wandering with unique patterns per butterfly
+          b.angle += (Math.random() - 0.5) * (2 + i * 0.5);
+          const wanderStrength = 0.05 + (i * 0.01);
+          b.vx += Math.cos(b.angle * Math.PI / 180) * wanderStrength;
+          b.vy += Math.sin(b.angle * Math.PI / 180) * wanderStrength;
         }
         
-        // Apply velocity with damping
+        // Gentle damping
         b.x += b.vx;
         b.y += b.vy;
-        b.vx *= 0.97;
-        b.vy *= 0.97;
+        b.vx *= 0.94;
+        b.vy *= 0.94;
         
-        // Clamp velocity
-        const maxSpeed = 4;
+        // Each butterfly has different max speed (faster when cursor on page)
+        const maxSpeed = mouseOnPage ? 4 + (i * 0.3) : 2 + (i * 0.2);
         const currentSpeed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
         if (currentSpeed > maxSpeed) {
           b.vx = (b.vx / currentSpeed) * maxSpeed;
           b.vy = (b.vy / currentSpeed) * maxSpeed;
         }
         
-        // Keep in bounds with soft bounce
-        const margin = 50;
-        if (b.x < margin) { b.x = margin; b.vx = Math.abs(b.vx) * 0.5; b.angle = 180 - b.angle; }
-        if (b.x > window.innerWidth - margin) { b.x = window.innerWidth - margin; b.vx = -Math.abs(b.vx) * 0.5; b.angle = 180 - b.angle; }
-        if (b.y < margin) { b.y = margin; b.vy = Math.abs(b.vy) * 0.5; b.angle = 360 - b.angle; }
-        if (b.y > window.innerHeight - margin) { b.y = window.innerHeight - margin; b.vy = -Math.abs(b.vy) * 0.5; b.angle = 360 - b.angle; }
+        // Minimum movement
+        if (currentSpeed < 0.2) {
+          b.vx += (Math.random() - 0.5) * 0.15;
+          b.vy += (Math.random() - 0.5) * 0.15;
+        }
         
-        // Update element
-        b.el.style.left = b.x + 'px';
-        b.el.style.top = b.y + 'px';
-        b.el.style.transform = `scaleX(${b.vx > 0 ? 1 : -1})`; // Face direction of movement
+        // Soft bounds
+        const margin = 80;
+        if (b.x < margin) { b.x = margin; b.vx = Math.abs(b.vx) * 0.6; }
+        if (b.x > window.innerWidth - margin) { b.x = window.innerWidth - margin; b.vx = -Math.abs(b.vx) * 0.6; }
+        if (b.y < margin) { b.y = margin; b.vy = Math.abs(b.vy) * 0.6; }
+        if (b.y > window.innerHeight - margin) { b.y = window.innerHeight - margin; b.vy = -Math.abs(b.vy) * 0.6; }
         
-        // Wing flap animation
-        const flap = Math.sin(Date.now() / 50 + b.x) * 0.2 + 1;
-        b.el.style.transform += ` scale(${flap})`;
+        // Update element with unique wing flap phase per butterfly
+        const facingRight = b.vx > 0;
+        const wingFlap = Math.sin(Date.now() / 150 + b.y * 0.05 + i * 10) * 0.08 + 1;
+        b.el.style.transform = `scaleX(${facingRight ? 1 : -1}) scale(${wingFlap})`;
+        b.el.style.left = (b.x - 12) + 'px';
+        b.el.style.top = (b.y - 12) + 'px';
       });
       
       animationFrameId = requestAnimationFrame(updateButterflies);
     }
     
-    // Track mouse position
+    // Track mouse position and page presence
     document.addEventListener('mousemove', (e) => {
       mouseX = e.clientX;
       mouseY = e.clientY;
+      mouseOnPage = true;
     });
     
-    // Handle hero left margin click (stars)
-    function handleHeroLeftClick(e) {
-      console.log('Hero left click');
-      const x = 40;
+    document.addEventListener('mouseleave', () => {
+      mouseOnPage = false;
+    });
+    
+    document.addEventListener('mouseenter', () => {
+      mouseOnPage = true;
+    });
+    
+    // Handle margin click (stars on both sides)
+    function handleMarginClick(e, isLeft) {
+      const x = isLeft ? 40 : window.innerWidth - 40;
       const y = e.clientY;
       
       // Add star to state
-      state.heroLeft.push({ x, y, timestamp: Date.now() });
+      const side = isLeft ? 'heroLeft' : 'heroRight';
+      if (!state[side]) state[side] = [];
+      state[side].push({ x, y, timestamp: Date.now() });
       
-      // Check limit - fade away oldest and add plant to footer
-      if (state.heroLeft.length > CONFIG.heroLeft.max) {
-        const old = state.heroLeft.shift();
+      // Check limit - fade away oldest
+      if (state[side].length > CONFIG.heroLeft.max) {
+        const old = state[side].shift();
         fadeAwayEmoji(old.x, old.y, CONFIG.heroLeft.emoji);
-        setTimeout(addToFooterGarden, 800);
       }
       
       // Create visual star
       createPersistentEmoji(x, y, CONFIG.heroLeft.emoji, document.body, -20);
       
-      // Also spawn a living butterfly at click position
-      createLivingButterfly(e.clientX, e.clientY);
-      
       saveState();
     }
     
-    // Handle hero right margin click (butterflies)
+    // Handle hero left margin click (stars)
+    function handleHeroLeftClick(e) {
+      handleMarginClick(e, true);
+    }
+    
+    // Handle hero right margin click (stars)
     function handleHeroRightClick(e) {
-      console.log('Hero right click');
-      const x = window.innerWidth - 40; // Match click detection zone
-      const y = e.clientY;
-      
-      // Add butterfly to state
-      state.heroRight.push({ x, y, timestamp: Date.now() });
-      
-      // Check limit - fade away oldest and add plant to footer
-      if (state.heroRight.length > CONFIG.heroRight.max) {
-        const old = state.heroRight.shift();
-        fadeAwayEmoji(old.x, old.y, CONFIG.heroRight.emoji);
-        setTimeout(addToFooterGarden, 800);
-      }
-      
-      // Create visual butterfly
-      createPersistentEmoji(x, y, CONFIG.heroRight.emoji, document.body, -20);
-      
-      // Also spawn a living butterfly at click position
-      createLivingButterfly(e.clientX, e.clientY);
-      
-      saveState();
+      handleMarginClick(e, false);
     }
     
     // Handle body area click
     function handleBodyClick(e) {
-      console.log('Body click at:', e.clientX, e.clientY);
       const x = e.clientX;
       const y = e.clientY;
       
-      // 70% chance: transient (sprouts), 30% chance: persistent (star/butterfly)
+      // 70% chance: transient (sprouts), 30% chance: animated living butterfly
       const isPersistent = Math.random() < 0.3;
       
       if (isPersistent) {
-        // Persistent element
-        const emojiChar = CONFIG.bodyPersistent.emojis[Math.floor(Math.random() * CONFIG.bodyPersistent.emojis.length)];
-        
-        state.bodyPersistent.push({ x, y, emoji: emojiChar, timestamp: Date.now() });
-        
-        // Check limit - fade away oldest and add plant to footer
-        if (state.bodyPersistent.length > CONFIG.bodyPersistent.max) {
-          const old = state.bodyPersistent.shift();
-          fadeAwayEmoji(old.x, old.y, old.emoji);
-          setTimeout(addToFooterGarden, 800);
-        }
-        
-        // Create visual
-        createPersistentEmoji(x, y, emojiChar);
-        saveState();
+        // Animated living butterfly (max 5)
+        createLivingButterfly(x, y);
       } else {
         // Transient element
         createTransientEmoji(x, y);
@@ -931,13 +946,8 @@
         createPersistentEmoji(item.x, item.y, CONFIG.heroLeft.emoji, document.body, -20);
       });
       
-      state.heroRight.forEach(item => {
-        createPersistentEmoji(item.x, item.y, CONFIG.heroRight.emoji, document.body, -20);
-      });
-      
-      state.bodyPersistent.forEach(item => {
-        createPersistentEmoji(item.x, item.y, item.emoji);
-      });
+      // Body persistent was only for stars/butterflies, now we use living butterflies only
+      // No restoration needed for bodyPersistent since we now use living butterflies
       
       // Single document click handler - check areas
       document.addEventListener('click', function handleClick(e) {
