@@ -3,140 +3,229 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>EarthStar v2.5 – Main Points</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: "Georgia", serif; background: #eae2d6; color: #2b2b2b; line-height: 1.6; }
-    
-    .hero {
-      position: relative;
-      width: 100%;
-      overflow: hidden;
-      margin-bottom: 40px;
-      background: #0d0d15;
-    }
-    .hero-images {
-      position: relative;
-      width: 100%;
-    }
-    .hero-images img {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: auto;
-      will-change: transform;
-    }
-    .hero-images img:first-child {
-      position: relative;
-    }
-    
-    .container {
-      max-width: 720px;
-      margin: 0 auto;
-      padding: 0 24px;
-    }
-    
-    .intro {
-      font-size: 1.1em;
-      color: #4a3f35;
-      margin-bottom: 40px;
-      padding: 24px;
-      background: rgba(255,255,255,0.4);
-      border-left: 3px solid #6b4f31;
-      border-radius: 0 8px 8px 0;
-    }
-    
-    h1 {
-      color: #5c4033;
-      font-weight: 400;
-      letter-spacing: 0.02em;
-      border-bottom: 1px solid #c9b8a1;
-      padding-bottom: 16px;
-      margin-bottom: 36px;
-      font-size: 2.2em;
-    }
-    
-    h2 {
-      color: #5c4033;
-      font-weight: 400;
-      font-size: 1.4em;
-      margin-top: 40px;
-      margin-bottom: 20px;
-      letter-spacing: 0.01em;
-    }
-    
-    ul {
-      list-style: none;
-      margin-left: 0;
-      margin-bottom: 24px;
-    }
-    
-    li {
-      position: relative;
-      padding-left: 24px;
-      margin-bottom: 16px;
-      color: #3d3429;
-    }
-    
-    li::before {
-      content: "—";
-      position: absolute;
-      left: 0;
-      color: #8b7355;
-    }
-    
-    .links-section {
-      margin-top: 60px;
-      padding: 32px 0;
-      border-top: 1px solid #c9b8a1;
-    }
-    
-    .links-title {
-      font-size: 0.9em;
-      text-transform: uppercase;
-      letter-spacing: 0.15em;
-      color: #8b7355;
-      margin-bottom: 20px;
-    }
-    
-    .links {
-      display: flex;
-      gap: 24px;
-      flex-wrap: wrap;
-    }
-    
-    .link-btn {
-      display: inline-flex;
-      align-items: center;
-      padding: 12px 24px;
-      background: #6b4f31;
-      color: #f5f0e8;
-      text-decoration: none;
-      border-radius: 4px;
-      font-size: 0.95em;
-      transition: all 0.2s ease;
-    }
-    
-    .link-btn:hover {
-      background: #4a3622;
-      transform: translateY(-2px);
-    }
-    
-    .section {
-      margin-bottom: 40px;
-    }
-    
-    footer {
-      text-align: center;
-      padding: 20px;
-      color: #6b4f31;
-      border-top: 2px solid #c9b8a1;
-      margin-top: 40px;
-    }
-  </style>
+    <title>Earth Star</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      
+      body {
+        font-family: "Georgia", serif;
+        background: linear-gradient(135deg, #3d3429 0%, #5c4a3a 25%, #6b5a45 50%, #4a3f35 75%, #2b2520 100%);
+        background-attachment: fixed;
+        color: #f5f0e8;
+        line-height: 1.8;
+        min-height: 100vh;
+        overflow-x: hidden;
+      }
+      
+      .margin-click-zone {
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        width: 80px;
+        cursor: pointer;
+        z-index: 1000;
+        transition: background 0.3s;
+      }
+      .margin-click-zone:hover {
+        background: rgba(139, 115, 85, 0.15);
+      }
+      .margin-left { left: 0; }
+      .margin-right { right: 0; }
+      
+      .sprout {
+        position: fixed;
+        pointer-events: none;
+        z-index: 999;
+        animation: grow 2s ease-out forwards;
+      }
+      
+      .sprout::before {
+        content: "🌱";
+        font-size: 24px;
+        display: block;
+      }
+      
+      .sprout.large::before {
+        font-size: 48px;
+      }
+      
+      @keyframes grow {
+        0% { transform: scale(0) translateY(0); opacity: 0; }
+        20% { opacity: 1; }
+        100% { transform: scale(1) translateY(-60px); opacity: 1; }
+      }
+      
+      .hero {
+        position: relative;
+        width: 100%;
+        overflow: hidden;
+        margin-bottom: 60px;
+        background: #0d0d15;
+      }
+      .hero-images {
+        position: relative;
+        width: 100%;
+      }
+      .hero-images img {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: auto;
+        will-change: transform;
+      }
+      .hero-images img:first-child {
+        position: relative;
+      }
+      
+      .container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 0 60px;
+      }
+      
+      h1 {
+        font-size: 8em;
+        font-weight: 400;
+        letter-spacing: 0.04em;
+        margin-bottom: 10px;
+        padding-top: 20px;
+        text-align: center;
+        
+        background: linear-gradient(
+          135deg,
+          #ffd700 0%,
+          #ffec8b 10%,
+          #ffd700 20%,
+          #daa520 30%,
+          #ffd700 40%,
+          #fffacd 50%,
+          #ffd700 60%,
+          #b8860b 70%,
+          #ffd700 80%,
+          #ffec8b 90%,
+          #ffd700 100%
+        );
+        background-size: 200% 200%;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        
+        animation: liquidGold 20s ease-in-out infinite;
+        
+        text-shadow: 
+          0 4px 8px rgba(0,0,0,0.4),
+          0 8px 16px rgba(0,0,0,0.3),
+          0 12px 24px rgba(0,0,0,0.2),
+          0 16px 32px rgba(0,0,0,0.1);
+      }
+      
+      @keyframes liquidGold {
+        0%, 100% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+      }
+      
+      .subtitle {
+        font-size: 1.4em;
+        color: #c9b8a1;
+        text-align: center;
+        margin-bottom: 60px;
+        font-style: italic;
+        letter-spacing: 0.05em;
+      }
+      
+      .intro {
+        font-size: 1.5em;
+        color: #d4c8b4;
+        margin-bottom: 50px;
+        padding: 30px;
+        background: rgba(92, 64, 51, 0.4);
+        border-left: 4px solid #8b7355;
+        border-radius: 0 12px 12px 0;
+        line-height: 1.7;
+      }
+      
+      ul {
+        list-style: none;
+        margin-left: 0;
+        margin-bottom: 40px;
+      }
+      
+      li {
+        position: relative;
+        padding-left: 36px;
+        margin-bottom: 20px;
+        font-size: 1.2em;
+        color: #e0d6c4;
+      }
+      
+      li::before {
+        content: "✦";
+        position: absolute;
+        left: 0;
+        color: #daa520;
+        font-size: 1em;
+      }
+      
+      .links-section {
+        margin-top: 80px;
+        padding: 40px 0;
+        border-top: 2px solid rgba(201, 184, 161, 0.3);
+      }
+      
+      .links-title {
+        font-size: 1em;
+        text-transform: uppercase;
+        letter-spacing: 0.25em;
+        color: #c9b8a1;
+        margin-bottom: 24px;
+        text-align: center;
+      }
+      
+      .links {
+        display: flex;
+        justify-content: center;
+        gap: 24px;
+        flex-wrap: wrap;
+      }
+      
+      .link-btn {
+        display: inline-flex;
+        align-items: center;
+        padding: 16px 32px;
+        background: linear-gradient(135deg, #6b4f31 0%, #8b6b4a 100%);
+        color: #f5f0e8;
+        text-decoration: none;
+        border-radius: 8px;
+        font-size: 1.1em;
+        transition: all 0.3s ease;
+        border: 1px solid rgba(255,255,255,0.1);
+      }
+      
+      .link-btn:hover {
+        transform: translateY(-4px) scale(1.02);
+        box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+      }
+      
+      .section {
+        margin-bottom: 60px;
+      }
+      
+      footer {
+        text-align: center;
+        padding: 40px 20px;
+        color: #a89b85;
+        border-top: 2px solid rgba(201, 184, 161, 0.3);
+        margin-top: 60px;
+        font-size: 1em;
+        letter-spacing: 0.1em;
+      }
+    </style>
 </head>
 <body>
+  <div class="margin-click-zone margin-left" id="marginLeft"></div>
+  <div class="margin-click-zone margin-right" id="marginRight"></div>
+  
   <header class="hero">
     <div class="hero-images">
       <img src="./Assets/0-BG.png" alt="Background">
@@ -149,22 +238,23 @@
   
   <main class="container">
     <section class="section">
-      <h1>EarthStar v2.5 – Main Points</h1>
+      <h1>Earth Star</h1>
+      <p class="subtitle">The Complete Regenerative Intelligence System</p>
       
       <div class="intro">
-        The Complete Regenerative Intelligence System — integrating theory, practice, history, engineering, economics, spirituality, embodiment, and proof from the future.
+        Integrating theory, practice, history, engineering, economics, spirituality, embodiment, and proof from the future.
       </div>
       
       <ul>
-        <li>10,000‑year indigenous validation of the underlying principles</li>
+        <li>10,000-year indigenous validation of the underlying principles</li>
         <li>Progressive disclosure: metadata → skill → reference layers</li>
-        <li>Enables waste‑as‑resource, life‑coherence optimization, cross‑scale thinking, paradigm bridging, and mortality acceptance</li>
-        <li>Engineering specs: Gomens, waste‑metabolizers, diamond‑armor, resonance levitation</li>
-        <li>Policy mechanisms: Waste Reclamation Fund, import/export bans, wealth‑spreading protocols</li>
-        <li>Human training: Earth Steward protocols, death‑acceptance practice, 90‑day transformation challenge</li>
-        <li>Implementation roadmap: immediate → short‑term → medium‑term → long‑term deployment</li>
-        <li>FAQ covers feasibility, misuse safeguards, and distinction from techno‑utopianism</li>
-        <li>Vision: thriving planetary ecosystems, waste‑free societies, regenerative economies across all scales</li>
+        <li>Enables waste-as-resource, life-coherence optimization, cross-scale thinking, paradigm bridging, and mortality acceptance</li>
+        <li>Engineering specs: Gomens, waste-metabolizers, diamond-armor, resonance levitation</li>
+        <li>Policy mechanisms: Waste Reclamation Fund, import/export bans, wealth-spreading protocols</li>
+        <li>Human training: Earth Steward protocols, death-acceptance practice, 90-day transformation challenge</li>
+        <li>Implementation roadmap: immediate → short-term → medium-term → long-term deployment</li>
+        <li>FAQ covers feasibility, misuse safeguards, and distinction from techno-utopianism</li>
+        <li>Vision: thriving planetary ecosystems, waste-free societies, regenerative economies across all scales</li>
       </ul>
       
       <section class="links-section">
@@ -178,7 +268,7 @@
   </main>
   
   <footer>
-    <p>EarthStar v2.5 – The Complete Regenerative Intelligence System</p>
+    <p>Earth Star</p>
   </footer>
   
   <script>
@@ -206,6 +296,33 @@
       images.forEach((img) => {
         img.style.transform = '';
       });
+    });
+    
+    function createSprout(x, y, isLarge) {
+      const sprout = document.createElement('div');
+      sprout.className = 'sprout' + (isLarge ? ' large' : '');
+      sprout.style.left = x + 'px';
+      sprout.style.top = y + 'px';
+      document.body.appendChild(sprout);
+      
+      setTimeout(() => sprout.remove(), 2000);
+    }
+    
+    document.getElementById('marginLeft').addEventListener('click', (e) => {
+      createSprout(30, e.clientY, true);
+    });
+    
+    document.getElementById('marginRight').addEventListener('click', (e) => {
+      createSprout(window.innerWidth - 60, e.clientY, true);
+    });
+    
+    document.addEventListener('click', (e) => {
+      const inLeftMargin = e.clientX < 80;
+      const inRightMargin = e.clientX > window.innerWidth - 80;
+      
+      if (!inLeftMargin && !inRightMargin) {
+        createSprout(e.clientX, e.clientY, false);
+      }
     });
   </script>
 </body>
