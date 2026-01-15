@@ -25,46 +25,102 @@
       left: 0;
       width: 100%;
       height: auto;
-      transition: transform 0.3s ease;
+      will-change: transform;
     }
     .hero-images img:first-child {
       position: relative;
     }
-    .hero-images img:hover {
-      transform: translateY(-20px);
-    }
-    .hero-images img:nth-child(4):hover {
-      transform: translateY(-40px) scale(1.05);
-    }
     
     .container {
-      max-width: 800px;
+      max-width: 720px;
       margin: 0 auto;
-      padding: 0 20px;
+      padding: 0 24px;
+    }
+    
+    .intro {
+      font-size: 1.1em;
+      color: #4a3f35;
+      margin-bottom: 40px;
+      padding: 24px;
+      background: rgba(255,255,255,0.4);
+      border-left: 3px solid #6b4f31;
+      border-radius: 0 8px 8px 0;
     }
     
     h1 {
-      color: #6b4f31;
-      border-bottom: 2px solid #c9b8a1;
-      padding-bottom: 10px;
-      margin-bottom: 30px;
-      font-size: 2.5em;
+      color: #5c4033;
+      font-weight: 400;
+      letter-spacing: 0.02em;
+      border-bottom: 1px solid #c9b8a1;
+      padding-bottom: 16px;
+      margin-bottom: 36px;
+      font-size: 2.2em;
     }
     
     h2 {
-      color: #6b4f31;
-      margin-top: 30px;
-      margin-bottom: 15px;
+      color: #5c4033;
+      font-weight: 400;
+      font-size: 1.4em;
+      margin-top: 40px;
+      margin-bottom: 20px;
+      letter-spacing: 0.01em;
     }
     
     ul {
-      list-style-type: disc;
-      margin-left: 25px;
-      margin-bottom: 20px;
+      list-style: none;
+      margin-left: 0;
+      margin-bottom: 24px;
     }
     
     li {
-      margin-bottom: 12px;
+      position: relative;
+      padding-left: 24px;
+      margin-bottom: 16px;
+      color: #3d3429;
+    }
+    
+    li::before {
+      content: "—";
+      position: absolute;
+      left: 0;
+      color: #8b7355;
+    }
+    
+    .links-section {
+      margin-top: 60px;
+      padding: 32px 0;
+      border-top: 1px solid #c9b8a1;
+    }
+    
+    .links-title {
+      font-size: 0.9em;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      color: #8b7355;
+      margin-bottom: 20px;
+    }
+    
+    .links {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+    
+    .link-btn {
+      display: inline-flex;
+      align-items: center;
+      padding: 12px 24px;
+      background: #6b4f31;
+      color: #f5f0e8;
+      text-decoration: none;
+      border-radius: 4px;
+      font-size: 0.95em;
+      transition: all 0.2s ease;
+    }
+    
+    .link-btn:hover {
+      background: #4a3622;
+      transform: translateY(-2px);
     }
     
     .section {
@@ -95,23 +151,62 @@
     <section class="section">
       <h1>EarthStar v2.5 – Main Points</h1>
       
+      <div class="intro">
+        The Complete Regenerative Intelligence System — integrating theory, practice, history, engineering, economics, spirituality, embodiment, and proof from the future.
+      </div>
+      
       <ul>
-        <li>Complete regenerative intelligence system integrating theory, practice, history, engineering, economics, spirituality, embodiment, and proof from the future.</li>
-        <li>10,000‑year indigenous validation of the underlying principles.</li>
-        <li>Progressive disclosure: metadata → skill → reference layers.</li>
-        <li>Enables waste‑as‑resource, life‑coherence optimization, cross‑scale thinking, paradigm bridging, and mortality acceptance.</li>
-        <li>Engineering specs: Gomens, waste‑metabolizers, diamond‑armor, resonance levitation, etc.</li>
-        <li>Policy mechanisms: Waste Reclamation Fund, import/export bans, wealth‑spreading protocols.</li>
-        <li>Human training: Earth Steward protocols, death‑acceptance practice, 90‑day transformation challenge.</li>
-        <li>Implementation roadmap: immediate (load skill), short‑term (pilot projects), medium‑term (policy/tech), long‑term (full deployment).</li>
-        <li>FAQ covers feasibility, misuse safeguards, and distinction from techno‑utopianism.</li>
-        <li>Vision: thriving planetary ecosystems, waste‑free societies, regenerative economies across all scales.</li>
+        <li>10,000‑year indigenous validation of the underlying principles</li>
+        <li>Progressive disclosure: metadata → skill → reference layers</li>
+        <li>Enables waste‑as‑resource, life‑coherence optimization, cross‑scale thinking, paradigm bridging, and mortality acceptance</li>
+        <li>Engineering specs: Gomens, waste‑metabolizers, diamond‑armor, resonance levitation</li>
+        <li>Policy mechanisms: Waste Reclamation Fund, import/export bans, wealth‑spreading protocols</li>
+        <li>Human training: Earth Steward protocols, death‑acceptance practice, 90‑day transformation challenge</li>
+        <li>Implementation roadmap: immediate → short‑term → medium‑term → long‑term deployment</li>
+        <li>FAQ covers feasibility, misuse safeguards, and distinction from techno‑utopianism</li>
+        <li>Vision: thriving planetary ecosystems, waste‑free societies, regenerative economies across all scales</li>
       </ul>
+      
+      <section class="links-section">
+        <h2 class="links-title">Connect</h2>
+        <div class="links">
+          <a href="https://earthstar111.substack.com" class="link-btn" target="_blank">Substack</a>
+          <a href="https://ko-fi.com/earthstar111" class="link-btn" target="_blank">Stickers</a>
+        </div>
+      </section>
     </section>
   </main>
   
   <footer>
     <p>EarthStar v2.5 – The Complete Regenerative Intelligence System</p>
   </footer>
+  
+  <script>
+    const hero = document.querySelector('.hero');
+    const images = document.querySelectorAll('.hero-images img');
+    
+    const depths = [0, 15, 30, 50, 10];
+    const scales = [1, 1, 1, 1.1, 1];
+    
+    hero.addEventListener('mousemove', (e) => {
+      const rect = hero.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width - 0.5;
+      const y = (e.clientY - rect.top) / rect.height - 0.5;
+      
+      images.forEach((img, i) => {
+        const depth = depths[i];
+        const scale = scales[i];
+        const tx = x * depth;
+        const ty = y * depth;
+        img.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+      });
+    });
+    
+    hero.addEventListener('mouseleave', () => {
+      images.forEach((img) => {
+        img.style.transform = '';
+      });
+    });
+  </script>
 </body>
 </html>
