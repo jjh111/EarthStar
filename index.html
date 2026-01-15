@@ -33,6 +33,7 @@
       cursor: pointer;
       z-index: 1000;
       transition: background 0.3s;
+      pointer-events: none; /* Let clicks pass through to document handler */
     }
     .margin-click-zone:hover {
       background: rgba(139, 115, 85, 0.15);
@@ -40,29 +41,79 @@
     .margin-left { left: 0; }
     .margin-right { right: 0; }
     
-    .sprout {
+    /* Transient emojis - fade up and away */
+    .emoji-transient {
       position: fixed;
       pointer-events: none;
-      z-index: 999;
-      animation: grow 2s ease-out forwards;
+      z-index: 9999;
+      font-size: 28px;
+      animation: transientFloat 2s ease-out forwards;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.5);
     }
     
-    .sprout::before {
-      content: "🌱";
-      font-size: 24px;
-      display: block;
-    }
-    
-    .sprout.large::before { font-size: 48px; }
-    .sprout[data-seed="leaf"]::before { content: "🌿"; }
-    .sprout[data-seed="flower"]::before { content: "🌸"; }
-    .sprout[data-seed="butterfly"]::before { content: "🦋"; }
-    .sprout[data-seed="star"]::before { content: "✦"; }
-    
-    @keyframes grow {
+    @keyframes transientFloat {
       0% { transform: scale(0) translateY(0); opacity: 0; }
-      20% { opacity: 1; }
-      100% { transform: scale(1) translateY(-60px); opacity: 1; }
+      15% { transform: scale(1) translateY(0); opacity: 1; }
+      100% { transform: scale(1) translateY(-80px); opacity: 0; }
+    }
+    
+    /* Persistent emojis - float gently in place */
+    .emoji-persistent {
+      position: fixed;
+      pointer-events: none;
+      z-index: 9998;
+      font-size: 32px;
+      animation: persistentFloat 3s ease-in-out infinite;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+    }
+    
+    @keyframes persistentFloat {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      50% { transform: translateY(-8px) rotate(3deg); }
+    }
+    
+    /* Fade away animation for cleared emojis */
+    .emoji-fading {
+      position: fixed;
+      pointer-events: none;
+      z-index: 9997;
+      font-size: 28px;
+      animation: fadeAway 0.8s ease-out forwards;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+    }
+    
+    @keyframes fadeAway {
+      0% { transform: scale(1) translateY(0); opacity: 1; }
+      100% { transform: scale(0.5) translateY(-30px); opacity: 0; }
+    }
+    
+    /* Footer garden row */
+    .footer-garden {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 24px;
+      min-height: 40px;
+      padding: 12px 0;
+      border-bottom: 1px solid rgba(201, 184, 161, 0.2);
+    }
+    
+    .emoji-footer {
+      font-size: 26px;
+      animation: footerAppear 0.5s ease-out forwards;
+      cursor: pointer;
+      transition: transform 0.2s;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.4);
+    }
+    
+    .emoji-footer:hover {
+      transform: scale(1.3);
+    }
+    
+    @keyframes footerAppear {
+      0% { transform: scale(0) translateY(-10px); opacity: 0; }
+      100% { transform: scale(1) translateY(0); opacity: 1; }
     }
     
     .hero {
@@ -436,6 +487,7 @@
   </main>
   
    <footer>
+     <div class="footer-garden" id="footerGarden"></div>
      <img src="./Assets/EarthStar Logo JH 2025 w.png" alt="Logo" class="footer-logo">
      <p>earth star is live</p>
      <p class="footer-tagline">"Plant the seed. Tend the tending."</p>
@@ -447,20 +499,273 @@
    </footer>
   
   <script>
+    // Emoji Garden System
+    
+    // Configuration
+    const CONFIG = {
+      heroLeft: { emoji: '✦', max: 8 },
+      heroRight: { emoji: '🦋', max: 8 },
+      bodyPersistent: { emojis: ['✦', '🦋'], max: 5 },
+      bodyTransient: { emojis: ['🌱', '🌿', '🌸'], maxVisible: 22 },
+      footerGarden: { emojis: ['✦', '🦋', '🌸'], max: 14 }
+    };
+    
+    // State
+    let state = {
+      heroLeft: [],
+      heroRight: [],
+      bodyPersistent: [],
+      footerGarden: []
+    };
+    
+    // Load state from localStorage
+    function loadState() {
+      try {
+        const saved = localStorage.getItem('earthStarGarden');
+        if (saved) {
+          state = JSON.parse(saved);
+        }
+      } catch (e) {
+        console.log('Could not load garden state');
+      }
+    }
+    
+    // Save state to localStorage
+    function saveState() {
+      try {
+        localStorage.setItem('earthStarGarden', JSON.stringify(state));
+      } catch (e) {
+        console.log('Could not save garden state');
+      }
+    }
+    
+    // Create transient emoji (fades after 2s)
+    function createTransientEmoji(x, y) {
+      const emoji = document.createElement('div');
+      emoji.className = 'emoji-transient';
+      emoji.textContent = CONFIG.bodyTransient.emojis[Math.floor(Math.random() * CONFIG.bodyTransient.emojis.length)];
+      emoji.style.left = (x - 12) + 'px';
+      emoji.style.top = (y - 12) + 'px';
+      document.body.appendChild(emoji);
+      setTimeout(() => emoji.remove(), 2000);
+    }
+    
+    // Create persistent emoji (floats in place)
+    function createPersistentEmoji(x, y, emojiChar, container = document.body, offsetY = 0) {
+      const el = document.createElement('div');
+      el.className = 'emoji-persistent';
+      el.textContent = emojiChar;
+      el.style.left = (x - 14) + 'px';
+      el.style.top = (y - 14 + offsetY) + 'px';
+      el.dataset.x = x;
+      el.dataset.y = y;
+      el.dataset.emoji = emojiChar;
+      document.body.appendChild(el);
+      return el;
+    }
+    
+    // Fade away and remove emoji when limit exceeded
+    function fadeAwayEmoji(x, y, emojiChar) {
+      const el = document.createElement('div');
+      el.className = 'emoji-fading';
+      el.textContent = emojiChar;
+      el.style.left = (x - 14) + 'px';
+      el.style.top = (y - 14) + 'px';
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 800);
+    }
+    
+    // Add to footer garden
+    function addToFooterGarden(emojiChar) {
+      state.footerGarden.push({
+        emoji: emojiChar,
+        timestamp: Date.now()
+      });
+      
+      // Remove oldest if over max
+      if (state.footerGarden.length > CONFIG.footerGarden.max) {
+        state.footerGarden.shift();
+      }
+      
+      saveState();
+      renderFooterGarden();
+    }
+    
+    // Render footer garden
+    function renderFooterGarden() {
+      const garden = document.getElementById('footerGarden');
+      if (!garden) {
+        console.log('Footer garden element not found');
+        return;
+      }
+      console.log('Rendering footer garden:', state.footerGarden);
+      garden.innerHTML = '';
+      
+      state.footerGarden.forEach((item, index) => {
+        const el = document.createElement('span');
+        el.className = 'emoji-footer';
+        el.textContent = item.emoji;
+        el.title = 'Click to remove';
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          state.footerGarden.splice(index, 1);
+          saveState();
+          renderFooterGarden();
+        });
+        garden.appendChild(el);
+      });
+    }
+    
+    // Add to footer garden
+    function addToFooterGarden(emojiChar) {
+      state.footerGarden.push({
+        emoji: emojiChar,
+        timestamp: Date.now()
+      });
+      
+      // Remove oldest if over max
+      if (state.footerGarden.length > CONFIG.footerGarden.max) {
+        state.footerGarden.shift();
+      }
+      
+      saveState();
+      renderFooterGarden();
+    }
+    
+    // Handle hero left margin click (stars)
+    function handleHeroLeftClick(e) {
+      console.log('Hero left click');
+      const x = 40;
+      const y = e.clientY;
+      
+      // Add to state
+      state.heroLeft.push({ x, y, timestamp: Date.now() });
+      
+      // Check limit - fade away oldest if over max
+      if (state.heroLeft.length > CONFIG.heroLeft.max) {
+        const old = state.heroLeft.shift();
+        fadeAwayEmoji(old.x, old.y, CONFIG.heroLeft.emoji);
+      }
+      
+      // Create visual
+      createPersistentEmoji(x, y, CONFIG.heroLeft.emoji, document.body, -20);
+      saveState();
+    }
+    
+    // Handle hero right margin click (butterflies)
+    function handleHeroRightClick(e) {
+      console.log('Hero right click');
+      const x = window.innerWidth - 60;
+      const y = e.clientY;
+      
+      // Add to state
+      state.heroRight.push({ x, y, timestamp: Date.now() });
+      
+      // Check limit - fade away oldest if over max
+      if (state.heroRight.length > CONFIG.heroRight.max) {
+        const old = state.heroRight.shift();
+        fadeAwayEmoji(old.x, old.y, CONFIG.heroRight.emoji);
+      }
+      
+      // Create visual
+      createPersistentEmoji(x, y, CONFIG.heroRight.emoji, document.body, -20);
+      saveState();
+    }
+    
+    // Handle body area click
+    function handleBodyClick(e) {
+      console.log('Body click at:', e.clientX, e.clientY);
+      const x = e.clientX;
+      const y = e.clientY;
+      
+      // 70% chance: transient (sprouts), 30% chance: persistent (star/butterfly)
+      const isPersistent = Math.random() < 0.3;
+      
+      if (isPersistent) {
+        // Persistent element
+        const emojiChar = CONFIG.bodyPersistent.emojis[Math.floor(Math.random() * CONFIG.bodyPersistent.emojis.length)];
+        
+        state.bodyPersistent.push({ x, y, emoji: emojiChar, timestamp: Date.now() });
+        
+        // Check limit - fade away oldest if over max
+        if (state.bodyPersistent.length > CONFIG.bodyPersistent.max) {
+          const old = state.bodyPersistent.shift();
+          fadeAwayEmoji(old.x, old.y, old.emoji);
+        }
+        
+        // Create visual
+        createPersistentEmoji(x, y, emojiChar);
+        saveState();
+      } else {
+        // Transient element
+        createTransientEmoji(x, y);
+      }
+    }
+    
+    // Initialize
+    function init() {
+      console.log('Emoji garden initializing...');
+      loadState();
+      renderFooterGarden();
+      
+      console.log('State loaded:', state);
+      
+      // Restore persistent elements on page
+      state.heroLeft.forEach(item => {
+        createPersistentEmoji(item.x, item.y, CONFIG.heroLeft.emoji, document.body, -20);
+      });
+      
+      state.heroRight.forEach(item => {
+        createPersistentEmoji(item.x, item.y, CONFIG.heroRight.emoji, document.body, -20);
+      });
+      
+      state.bodyPersistent.forEach(item => {
+        createPersistentEmoji(item.x, item.y, item.emoji);
+      });
+      
+      // Single document click handler - check areas
+      document.addEventListener('click', function handleClick(e) {
+        // Skip if clicking on footer garden items
+        if (e.target.closest('.emoji-footer') || e.target.closest('.footer-garden')) return;
+        
+        // Visual debug - brief flash at click point
+        const debug = document.createElement('div');
+        debug.style.cssText = 'position:fixed;width:10px;height:10px;background:gold;border-radius:50%;pointer-events:none;z-index:10002;left:'+(e.clientX-5)+'px;top:'+(e.clientY-5)+'px;animation:fadeOut 0.3s forwards';
+        document.body.appendChild(debug);
+        setTimeout(() => debug.remove(), 300);
+        
+        const marginLeft = e.clientX < 80;
+        const marginRight = e.clientX > window.innerWidth - 80;
+        
+        if (marginLeft) {
+          handleHeroLeftClick(e);
+        } else if (marginRight) {
+          handleHeroRightClick(e);
+        } else {
+          // Body area click
+          handleBodyClick(e);
+        }
+      });
+      
+      // Add fadeOut keyframe
+      const style = document.createElement('style');
+      style.textContent = '@keyframes fadeOut { to { opacity: 0; transform: scale(2); } }';
+      document.head.appendChild(style);
+      
+      console.log('Emoji garden ready!');
+    }
+    
+    // Parallax code (unchanged)
     const hero = document.querySelector('.hero');
     const images = document.querySelectorAll('.hero-images img');
-    
     const depths = [1, 5, 20, 50, 8];
     const scales = [1, 1, 1, 1.05, 1];
-    
     let currentX = 0, currentY = 0, targetX = 0, targetY = 0;
     
     function updateParallax() {
       currentX += (targetX - currentX) * 0.15;
       currentY += (targetY - currentY) * 0.15;
-      
       const diff = Math.abs(targetX - currentX) + Math.abs(targetY - currentY);
-      
       images.forEach((img, i) => {
         const depth = depths[i];
         const scale = scales[i];
@@ -468,7 +773,6 @@
         const ty = currentY * depth;
         img.style.transform = `translate3d(${tx}px, ${ty}px, 0) scale(${scale})`;
       });
-      
       if (diff > 0.1) requestAnimationFrame(updateParallax);
     }
     
@@ -493,31 +797,8 @@
       });
     });
     
-    const seeds = ['', 'leaf', 'flower', 'butterfly', 'star'];
-    
-    function createSprout(x, y, isLarge) {
-      const sprout = document.createElement('div');
-      sprout.className = 'sprout' + (isLarge ? ' large' : '');
-      sprout.setAttribute('data-seed', seeds[Math.floor(Math.random() * seeds.length)]);
-      sprout.style.left = x + 'px';
-      sprout.style.top = y + 'px';
-      document.body.appendChild(sprout);
-      setTimeout(() => sprout.remove(), 2000);
-    }
-    
-    document.getElementById('marginLeft').addEventListener('click', (e) => {
-      createSprout(30, e.clientY, true);
-    });
-    
-    document.getElementById('marginRight').addEventListener('click', (e) => {
-      createSprout(window.innerWidth - 60, e.clientY, true);
-    });
-    
-    document.addEventListener('click', (e) => {
-      const inLeftMargin = e.clientX < 80;
-      const inRightMargin = e.clientX > window.innerWidth - 80;
-      if (!inLeftMargin && !inRightMargin) createSprout(e.clientX, e.clientY, false);
-    });
+    // Start
+    init();
   </script>
 </body>
 </html>
