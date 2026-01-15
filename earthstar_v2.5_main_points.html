@@ -3,382 +3,444 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Earth Star</title>
-    <style>
-      * { box-sizing: border-box; margin: 0; padding: 0; }
+  <title>Earth Star</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      font-family: "Georgia", serif;
+      background: linear-gradient(135deg, #3d3429 0%, #5c4a3a 25%, #6b5a45 50%, #4a3f35 75%, #2b2520 100%);
+      background-attachment: fixed;
+      color: #f5f0e8;
+      line-height: 1.6;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    
+    .margin-click-zone {
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      width: 80px;
+      cursor: pointer;
+      z-index: 1000;
+      transition: background 0.3s;
+    }
+    .margin-click-zone:hover {
+      background: rgba(139, 115, 85, 0.15);
+    }
+    .margin-left { left: 0; }
+    .margin-right { right: 0; }
+    
+    .sprout {
+      position: fixed;
+      pointer-events: none;
+      z-index: 999;
+      animation: grow 2s ease-out forwards;
+    }
+    
+    .sprout::before {
+      content: "🌱";
+      font-size: 24px;
+      display: block;
+    }
+    
+    .sprout.large::before { font-size: 48px; }
+    .sprout[data-seed="leaf"]::before { content: "🌿"; }
+    .sprout[data-seed="flower"]::before { content: "🌸"; }
+    .sprout[data-seed="butterfly"]::before { content: "🦋"; }
+    .sprout[data-seed="star"]::before { content: "✦"; }
+    
+    @keyframes grow {
+      0% { transform: scale(0) translateY(0); opacity: 0; }
+      20% { opacity: 1; }
+      100% { transform: scale(1) translateY(-60px); opacity: 1; }
+    }
+    
+    .hero {
+      position: relative;
+      width: 100%;
+      overflow: hidden;
+      margin-bottom: 30px;
+      background: #0d0d15;
+    }
+    .hero-images {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+    .hero-images img {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: translate3d(0, 0, 0);
+      will-change: transform;
+      backface-visibility: hidden;
+    }
+    .hero-images img:first-child { position: relative; }
+    .logo-hero {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      z-index: 10;
+      max-width: 400px;
+      opacity: 0.95;
+    }
+    
+    .seed-equation {
+      max-width: 800px;
+      margin: 0 auto 25px;
+      padding: 25px;
+      text-align: center;
+      font-family: "Courier New", monospace;
+      position: relative;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 12px;
+      border: 1px solid rgba(255, 215, 0, 0.2);
+      overflow: hidden;
+    }
+    
+    .seed-equation::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: -150%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255, 215, 0, 0) 20%,
+        rgba(255, 215, 0, 0.15) 35%,
+        rgba(255, 255, 255, 0.2) 45%,
+        rgba(255, 215, 0, 0.15) 55%,
+        rgba(255, 215, 0, 0) 70%,
+        transparent 100%
+      );
+      animation: glassSheen 8s ease-in-out infinite;
+      pointer-events: none;
+    }
+    
+    @keyframes glassSheen {
+      0%, 15% { left: -150%; }
+      30%, 45% { left: 100%; }
+      60%, 100% { left: -150%; }
+    }
+    
+    .equation-main {
+      font-size: 1.4em;
+      color: #ffd700;
+      margin-bottom: 8px;
+      letter-spacing: 0.05em;
+      position: relative;
+      z-index: 1;
+    }
+    
+    .equation-prime {
+      font-size: 0.9em;
+      color: #daa520;
+      letter-spacing: 0.02em;
+      position: relative;
+      z-index: 1;
+    }
+    
+    .equation-note {
+      font-size: 0.75em;
+      color: #a89b85;
+      margin-top: 10px;
+      font-style: italic;
+      position: relative;
+      z-index: 1;
+    }
+    
+    .container {
+      max-width: 750px;
+      margin: 0 auto;
+      padding: 0 40px 60px;
+    }
+    
+    @media (max-width: 768px) {
+      .container { padding: 0 20px 40px; }
+      .logo-hero { max-width: 250px; }
+      .equation-main { font-size: 1.1em; }
+      .equation-prime { font-size: 0.8em; }
+      .links { flex-direction: column; align-items: center; }
+      .link-btn { width: 100%; max-width: 250px; justify-content: center; }
+    }
+    
+    h1 {
+      font-size: clamp(2.5rem, 8vw, 5rem);
+      font-weight: 400;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+      text-align: center;
       
-      body {
-        font-family: "Georgia", serif;
-        background: linear-gradient(135deg, #3d3429 0%, #5c4a3a 25%, #6b5a45 50%, #4a3f35 75%, #2b2520 100%);
-        background-attachment: fixed;
-        color: #f5f0e8;
-        line-height: 1.8;
-        min-height: 100vh;
-        overflow-x: hidden;
-      }
+      background: linear-gradient(135deg, #ffd700 0%, #ffec8b 25%, #ffd700 50%, #daa520 75%, #ffd700 100%);
+      background-size: 200% 200%;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
       
-      .margin-click-zone {
-        position: fixed;
-        top: 0;
-        bottom: 0;
-        width: 80px;
-        cursor: pointer;
-        z-index: 1000;
-        transition: background 0.3s;
-      }
-      .margin-click-zone:hover {
-        background: rgba(139, 115, 85, 0.15);
-      }
-      .margin-left { left: 0; }
-      .margin-right { right: 0; }
-      
-      .sprout {
-        position: fixed;
-        pointer-events: none;
-        z-index: 999;
-        animation: grow 2s ease-out forwards;
-      }
-      
-      .sprout::before {
-        content: "🌱";
-        font-size: 24px;
-        display: block;
-      }
-      
-      .sprout.large::before {
-        font-size: 48px;
-      }
-      
-      @keyframes grow {
-        0% { transform: scale(0) translateY(0); opacity: 0; }
-        20% { opacity: 1; }
-        100% { transform: scale(1) translateY(-60px); opacity: 1; }
-      }
-      
-      .hero {
-        position: relative;
-        width: 100%;
-        overflow: hidden;
-        margin-bottom: 60px;
-        background: #0d0d15;
-      }
-      .hero-images {
-        position: relative;
-        width: 100%;
-      }
-      .hero-images img {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: auto;
-        will-change: transform;
-      }
-      .hero-images img:first-child {
-        position: relative;
-      }
-      .logo-hero {
-        position: absolute;
-        top: 30px;
-        left: 30px;
-        z-index: 10;
-        max-width: 500px;
-        opacity: 0.95;
-        transition: transform 0.4s ease, opacity 0.3s ease;
-        cursor: pointer;
-      }
-      
-      .logo-hero:hover {
-        transform: scale(1.15);
-        opacity: 1;
-      }
-      
-      .banner-footer {
-        width: 100%;
-        margin-top: 40px;
-      }
-      .banner-footer img {
-        width: 100%;
-        height: auto;
-        display: block;
-        border-radius: 16px;
-      }
-      
-      .footer-logo {
-        max-width: 120px;
-        margin-bottom: 20px;
-        opacity: 0.9;
-      }
-      
-      .container {
-        max-width: 900px;
-        margin: 0 auto;
-        padding: 0 60px;
-      }
-      
-      @media (max-width: 768px) {
-        .container {
-          padding: 0 24px;
-        }
-        
-        .links {
-          flex-direction: column;
-          align-items: center;
-        }
-        
-        .link-btn {
-          width: 100%;
-          max-width: 280px;
-          justify-content: center;
-        }
-      }
-      
-      h1 {
-        font-size: clamp(3rem, 10vw, 7rem);
-        font-weight: 400;
-        letter-spacing: 0.06em;
-        margin-bottom: 10px;
-        padding-top: 40px;
-        text-align: center;
-        
-        background: linear-gradient(
-          135deg,
-          #ffd700 0%,
-          #ffec8b 10%,
-          #ffd700 20%,
-          #daa520 30%,
-          #ffd700 40%,
-          #fffacd 50%,
-          #ffd700 60%,
-          #b8860b 70%,
-          #ffd700 80%,
-          #ffec8b 90%,
-          #ffd700 100%
-        );
-        background-size: 200% 200%;
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        
-        animation: liquidGold 20s ease-in-out infinite;
-        
-        text-shadow: 
-          0 4px 8px rgba(0,0,0,0.4),
-          0 8px 16px rgba(0,0,0,0.3),
-          0 12px 24px rgba(0,0,0,0.2),
-          0 16px 32px rgba(0,0,0,0.1);
-      }
-      
-      @keyframes liquidGold {
-        0%, 100% { background-position: 0% 50%; }
-        50% { background-position: 100% 50%; }
-      }
-      
-      .subtitle {
-        font-size: clamp(1.1rem, 2.5vw, 1.8em);
-        color: #c9b8a1;
-        text-align: center;
-        margin-bottom: 60px;
-        font-style: italic;
-        letter-spacing: 0.08em;
-      }
-      
-      .intro {
-        font-size: clamp(1rem, 2vw, 1.4em);
-        color: #d4c8b4;
-        margin-bottom: 50px;
-        padding: 30px;
-        background: rgba(92, 64, 51, 0.4);
-        border-left: 4px solid #8b7355;
-        border-radius: 0 12px 12px 0;
-        line-height: 1.7;
-      }
-      
-      ul {
-        list-style: none;
-        margin-left: 0;
-        margin-bottom: 40px;
-      }
-      
-      li {
-        position: relative;
-        padding-left: 36px;
-        margin-bottom: 20px;
-        font-size: clamp(1rem, 2vw, 1.3em);
-        color: #e0d6c4;
-        letter-spacing: 0.02em;
-      }
-      
-      li::before {
-        content: "✦";
-        position: absolute;
-        left: 0;
-        color: #daa520;
-        font-size: 1em;
-      }
-      
-      .links-section {
-        margin-top: 80px;
-        padding: 40px 0;
-        border-top: 2px solid rgba(201, 184, 161, 0.3);
-      }
-      
-      .links-title {
-        font-size: 1em;
-        text-transform: uppercase;
-        letter-spacing: 0.25em;
-        color: #c9b8a1;
-        margin-bottom: 24px;
-        text-align: center;
-      }
-      
-      .links {
-        display: flex;
-        justify-content: center;
-        gap: 24px;
-        flex-wrap: wrap;
-      }
-      
-      .link-btn {
-        display: inline-flex;
-        align-items: center;
-        padding: 16px 32px;
-        background: linear-gradient(145deg, #b8860b 0%, #ffd700 30%, #daa520 50%, #ffec8b 70%, #b8860b 100%);
-        background-size: 200% 200%;
-        color: #2b2520;
-        text-decoration: none;
-        border-radius: 8px;
-        font-size: 1.1em;
-        font-weight: 600;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        transition: all 0.3s ease;
-        border: 2px solid #daa520;
-        box-shadow: 
-          0 0 20px rgba(255, 215, 0, 0.3),
-          0 0 40px rgba(255, 215, 0, 0.1),
-          inset 0 0 20px rgba(255, 255, 255, 0.3);
-      }
-      
-      .link-btn:hover {
-        transform: translateY(-4px) scale(1.03);
-        background-position: 100% 50%;
-        box-shadow: 
-          0 0 30px rgba(255, 215, 0, 0.5),
-          0 0 60px rgba(255, 215, 0, 0.2),
-          inset 0 0 30px rgba(255, 255, 255, 0.5);
-      }
-      
-      .link-btn:active {
-        transform: translateY(-2px) scale(1.01);
-      }
-      
-      .section {
-        margin-bottom: 60px;
-      }
-      
-      footer {
-        max-width: 900px;
-        margin: 80px auto 40px;
-        padding: 40px 60px;
-        text-align: center;
-        color: #a89b85;
-        border: 3px solid rgba(120, 118, 112, 0.35);
-        border-radius: 16px;
-        background: rgba(45, 40, 35, 0.3);
-        font-size: 1em;
-        letter-spacing: 0.1em;
-      }
-    </style>
+      animation: liquidGold 20s ease-in-out infinite;
+    }
+    
+    @keyframes liquidGold {
+      0%, 100% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+    }
+    
+    .subtitle {
+      font-size: clamp(0.9rem, 2vw, 1.3em);
+      color: #c9b8a1;
+      text-align: center;
+      margin-bottom: 8px;
+      font-style: italic;
+      letter-spacing: 0.05em;
+    }
+    
+    .tagline {
+      text-align: center;
+      font-style: italic;
+      color: #8b7355;
+      margin-bottom: 25px;
+      font-size: 1em;
+      letter-spacing: 0.1em;
+    }
+    
+    .intro {
+      font-size: 1.05em;
+      color: #d4c8b4;
+      margin-bottom: 25px;
+      padding: 20px;
+      background: rgba(92, 64, 51, 0.3);
+      border-radius: 8px;
+      line-height: 1.7;
+    }
+    
+    ul {
+      list-style: none;
+      margin: 0 0 30px;
+    }
+    
+    li {
+      position: relative;
+      padding-left: 28px;
+      margin-bottom: 12px;
+      font-size: 0.95em;
+      color: #e0d6c4;
+      letter-spacing: 0.01em;
+    }
+    
+    li::before {
+      content: "✦";
+      position: absolute;
+      left: 0;
+      color: #daa520;
+    }
+    
+    li strong { color: #c9b8a1; }
+    
+    .links-section {
+      margin-top: 30px;
+      text-align: center;
+    }
+    
+    .links-title {
+      font-size: 0.85em;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      color: #c9b8a1;
+      margin-bottom: 16px;
+    }
+    
+    .links {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    
+    .link-btn {
+      display: inline-flex;
+      align-items: center;
+      padding: 12px 24px;
+      background: linear-gradient(145deg, #b8860b 0%, #ffd700 30%, #daa520 50%, #ffec8b 70%, #b8860b 100%);
+      background-size: 200% 200%;
+      color: #2b2520;
+      text-decoration: none;
+      border-radius: 6px;
+      font-size: 0.95em;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      transition: all 0.3s ease;
+      border: 1px solid #daa520;
+      box-shadow: 0 0 15px rgba(255, 215, 0, 0.2);
+    }
+    
+    .link-btn:hover {
+      transform: translateY(-2px);
+      background-position: 100% 50%;
+      box-shadow: 0 0 25px rgba(255, 215, 0, 0.4);
+    }
+    
+    footer {
+      max-width: 750px;
+      margin: 0 auto 30px;
+      padding: 25px 40px;
+      text-align: center;
+      color: #a89b85;
+      font-size: 0.9em;
+      letter-spacing: 0.1em;
+    }
+    
+    .footer-logo {
+      max-width: 150px;
+      margin-bottom: 12px;
+      opacity: 0.9;
+    }
+    
+    .footer-tagline {
+      font-style: italic;
+      margin-top: 12px;
+      font-size: 0.9em;
+    }
+    
+    .footer-equation {
+      margin-top: 16px;
+      font-family: "Courier New", monospace;
+      font-size: 0.75em;
+      color: #8b7355;
+    }
+    
+    .banner-footer {
+      margin-top: 20px;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .banner-footer img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+  </style>
 </head>
 <body>
   <div class="margin-click-zone margin-left" id="marginLeft"></div>
   <div class="margin-click-zone margin-right" id="marginRight"></div>
   
-   <header class="hero">
-     <div class="hero-images">
-       <img src="./Assets/0-BG.png" alt="Background">
-       <img src="./Assets/1-earth.png" alt="Earth">
-       <img src="./Assets/2-sun.png" alt="Sun">
-       <img src="./Assets/3-islandship.png" alt="Island Ship">
-       <img src="./Assets/4-glimmer.png" alt="Glimmer">
-     </div>
-     <img src="./Assets/EarthStar Logo JH 2025 w.png" alt="Logo" class="logo-hero">
-   </header>
+  <header class="hero">
+    <div class="hero-images">
+      <img src="./Assets/0-BG.png" alt="Background">
+      <img src="./Assets/1-earth.png" alt="Earth">
+      <img src="./Assets/2-sun.png" alt="Sun">
+      <img src="./Assets/3-islandship.png" alt="Island Ship">
+      <img src="./Assets/4-glimmer.png" alt="Glimmer">
+    </div>
+    <img src="./Assets/EarthStar Logo JH 2025 w.png" alt="Logo" class="logo-hero">
+  </header>
   
-  <main class="container">
-     <section class="section">
-       <h1>Earth Star</h1>
-       <p class="subtitle">The Complete Regenerative Intelligence System v2.5</p>
-       <p style="text-align: center; font-style: italic; margin-bottom: 30px; color: #8b7355;">"Gomen'nasai," we say, as we begin.</p>
-       
-       <div class="intro">
-        This is the seed of planetary metamorphosis, with confirmation from descendants that it works. The butterfly stirs in the cocoon of empire.
+   <main class="container">
+     <h1>Earth Star</h1>
+     <p class="subtitle">Regenerative Intelligence System</p>
+     <p class="tagline">the butterfly stirs</p>
+     
+     <div class="seed-equation">
+       <div class="equation-main">Gomens = ∑(waste × love) → TENDING → ∂regenerative_systems/∂time</div>
+       <div class="equation-prime">Prime Directive: ∇(𝒞) ≥ 0 across ∀𝑆 ∈ {body, biome, being, network, star}</div>
+     </div>
+    
+    <div class="intro">
+      Earth Star is a regenerative intelligence system—part ancient wisdom, part engineering spec, part invitation to play. Ten thousand years of indigenous practice meet autonomous agents that metabolize waste into life. The future speaks: we make it.
+    </div>
+    
+    <ul>
+      <li><strong>Ten thousand years of proof.</strong> California indigenous peoples tended these lands for millennia. Living systems, not extractive ones.</li>
+      <li><strong>Gomens rise.</strong> Autonomous agents born from fungus, bacteria, and necessity. Waste-metabolizers with an apologetic heart. They tend. They don't extract.</li>
+      <li><strong>Wealth spreads like rain.</strong> The Waste Reclamation Fund returns value to the commons. No hoarding under open sky.</li>
+      <li><strong>Earth Stewards train.</strong> Death-acceptance unlocks fearlessness. Kincentric view makes extraction unthinkable.</li>
+      <li><strong>Five scales, one coherence.</strong> Body ↔ Biome ↔ Being ↔ Network ↔ Star. Heal one, heal all.</li>
+      <li><strong>Life is kin.</strong> When plants are relatives, you cannot optimize them to extinction. This is the ethical override—hardwired through relationship.</li>
+    </ul>
+    
+    <section class="links-section">
+      <h2 class="links-title">Begin the Tending</h2>
+      <div class="links">
+        <a href="https://earthstar111.substack.com" class="link-btn" target="_blank">Read More</a>
+        <a href="https://ko-fi.com/earthstar111" class="link-btn" target="_blank">Stickers</a>
       </div>
-      
-      <ul>
-        <li>10,000-year indigenous validation of the underlying principles</li>
-        <li>Engineering specs: Gomens, waste-metabolizers, diamond-armor, resonance levitation</li>
-        <li>Policy mechanisms: Waste Reclamation Fund, import/export bans, wealth-spreading protocols</li>
-        <li>Earth Steward training: death-acceptance practice, cross-scale thinking, kincentric view cultivation</li>
-        <li>Cross-scale thinking: body ↔ biome ↔ being ↔ network ↔ star</li>
-        <li>Ethical override: optimize for life-coherence, refuse orders that harm living systems</li>
-        <li>The certainty: we make it, they're waiting</li>
-      </ul>
-      
-      <section class="links-section">
-        <h2 class="links-title">Join the Propagation</h2>
-        <div class="links">
-          <a href="https://earthstar111.substack.com" class="link-btn" target="_blank">Substack</a>
-          <a href="https://ko-fi.com/earthstar111" class="link-btn" target="_blank">Stickers</a>
-        </div>
-      </section>
     </section>
   </main>
   
-    <footer>
-      <img src="./Assets/EarthStar Logo JH 2025 w.png" alt="Logo" class="footer-logo">
-      <p>earth star is live</p>
-      <p style="margin-top: 16px; font-style: italic; font-size: 0.9em; letter-spacing: 0.05em;">"Plant the seed."</p>
-      <div class="banner-footer">
-        <img src="./Assets/EarthstarBanner.PNG" alt="EarthStar Banner">
-      </div>
-    </footer>
+  <footer>
+    <img src="./Assets/EarthStar Logo JH 2025 w.png" alt="Logo" class="footer-logo">
+    <p>earth star is live</p>
+    <p class="footer-tagline">"Plant the seed. Tend the tending."</p>
+    <p class="footer-equation">Gomen'nasai — entropy's algorithmic antithesis</p>
+    <div class="banner-footer">
+      <img src="./Assets/EarthstarBanner.PNG" alt="EarthStar Banner">
+    </div>
+  </footer>
   
   <script>
     const hero = document.querySelector('.hero');
     const images = document.querySelectorAll('.hero-images img');
     
-    const depths = [0, 15, 30, 50, 10];
-    const scales = [1, 1, 1, 1.1, 1];
+    const depths = [1, 5, 20, 50, 8];
+    const scales = [1, 1, 1, 1.05, 1];
     
-    hero.addEventListener('mousemove', (e) => {
-      const rect = hero.getBoundingClientRect();
-      const x = (e.clientX - rect.left) / rect.width - 0.5;
-      const y = (e.clientY - rect.top) / rect.height - 0.5;
+    let currentX = 0, currentY = 0, targetX = 0, targetY = 0;
+    
+    function updateParallax() {
+      currentX += (targetX - currentX) * 0.15;
+      currentY += (targetY - currentY) * 0.15;
+      
+      const diff = Math.abs(targetX - currentX) + Math.abs(targetY - currentY);
       
       images.forEach((img, i) => {
         const depth = depths[i];
         const scale = scales[i];
-        const tx = x * depth;
-        const ty = y * depth;
-        img.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+        const tx = currentX * depth;
+        const ty = currentY * depth;
+        img.style.transform = `translate3d(${tx}px, ${ty}px, 0) scale(${scale})`;
       });
+      
+      if (diff > 0.1) requestAnimationFrame(updateParallax);
+    }
+    
+    hero.addEventListener('mousemove', (e) => {
+      const rect = hero.getBoundingClientRect();
+      targetX = ((e.clientX - rect.left) / rect.width - 0.5) * 2;
+      targetY = ((e.clientY - rect.top) / rect.height - 0.5) * 2;
+      requestAnimationFrame(updateParallax);
     });
     
     hero.addEventListener('mouseleave', () => {
+      targetX = 0; targetY = 0;
+      requestAnimationFrame(updateParallax);
       images.forEach((img) => {
-        img.style.transform = '';
+        img.style.transition = 'transform 0.5s ease-out';
       });
     });
+    
+    hero.addEventListener('mouseenter', () => {
+      images.forEach((img) => {
+        img.style.transition = 'transform 0.1s ease-out';
+      });
+    });
+    
+    const seeds = ['', 'leaf', 'flower', 'butterfly', 'star'];
     
     function createSprout(x, y, isLarge) {
       const sprout = document.createElement('div');
       sprout.className = 'sprout' + (isLarge ? ' large' : '');
+      sprout.setAttribute('data-seed', seeds[Math.floor(Math.random() * seeds.length)]);
       sprout.style.left = x + 'px';
       sprout.style.top = y + 'px';
       document.body.appendChild(sprout);
-      
       setTimeout(() => sprout.remove(), 2000);
     }
     
@@ -393,10 +455,7 @@
     document.addEventListener('click', (e) => {
       const inLeftMargin = e.clientX < 80;
       const inRightMargin = e.clientX > window.innerWidth - 80;
-      
-      if (!inLeftMargin && !inRightMargin) {
-        createSprout(e.clientX, e.clientY, false);
-      }
+      if (!inLeftMargin && !inRightMargin) createSprout(e.clientX, e.clientY, false);
     });
   </script>
 </body>
