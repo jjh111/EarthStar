@@ -446,9 +446,24 @@
       transition: transform 0.3s ease, opacity 0.3s ease;
     }
     
-    .footer-logo:hover {
-      transform: translateY(-4px);
-      opacity: 1;
+    .clear-garden-btn {
+      display: block;
+      margin: 0 auto 12px auto;
+      padding: 4px 12px;
+      background: transparent;
+      color: #8b7355;
+      border: 1px solid rgba(139, 115, 85, 0.4);
+      border-radius: 4px;
+      font-size: 0.7em;
+      font-family: "Georgia", serif;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    
+    .clear-garden-btn:hover {
+      border-color: #daa520;
+      color: #daa520;
     }
     
     .footer-tagline {
@@ -526,7 +541,8 @@
   
     <footer>
       <div class="footer-garden" id="footerGarden"></div>
-      <img src="./Assets/EarthStar Logo JH 2025 w.webp" alt="Logo" class="footer-logo" onclick="clearGarden()" title="Click to clear garden">
+      <button onclick="clearGarden()" class="clear-garden-btn" title="Clear garden">Clear Garden</button>
+      <img src="./Assets/EarthStar Logo JH 2025 w.webp" alt="Logo" class="footer-logo">
       <p>earth star is live</p>
       <p class="footer-tagline">"Plant the seed. Tend the soil."</p>
       <p class="footer-equation">Gomen'nasai — entropy's algorithmic antithesis</p>
