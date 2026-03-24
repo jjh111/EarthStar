@@ -167,28 +167,31 @@
     .hero {
       position: relative;
       width: 100%;
-      overflow: hidden;
-      min-height: 92vh;
       background: #0d0b08;
     }
+
+    .hero-image-frame {
+      position: relative;
+      width: 100%;
+      height: 92vh;
+      overflow: hidden;
+    }
     
-    .hero::after {
+    .hero-image-frame::after {
       content: "";
       position: absolute;
       bottom: 0;
       left: 0;
       right: 0;
-      height: 300px;
-      background: linear-gradient(to bottom, transparent 0%, rgba(26,21,16,0.7) 40%, rgba(26,21,16,0.94) 70%, #1a1510 100%);
+      height: 220px;
+      background: linear-gradient(to bottom, transparent 0%, rgba(26,21,16,0.5) 50%, #1a1510 100%);
       pointer-events: none;
+      z-index: 2;
     }
 
     .hero-content {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      padding: 40px 60px 60px;
+      position: relative;
+      padding: 50px 60px 60px;
       z-index: 5;
       max-width: 860px;
       margin: 0 auto;
@@ -217,8 +220,8 @@
       top: 20px;
       left: 20px;
       z-index: 10;
-      max-width: 400px;
-      opacity: 0.95;
+      max-width: 160px;
+      opacity: 0.9;
     }
     
     .seed-equation {
@@ -299,13 +302,13 @@
 
     @media (max-width: 768px) {
       .container { padding: 0 20px 40px; }
-      .logo-hero { max-width: 250px; }
+      .logo-hero { max-width: 120px; }
       .equation-main { font-size: 0.9em; }
       .equation-prime { font-size: 1.1em; }
       .links { flex-direction: column; align-items: center; gap: 14px; }
       .link-btn { width: 100%; max-width: 250px; justify-content: center; }
       .btn-readmore, .btn-stickers, .btn-github { width: 100%; max-width: 280px; justify-content: center; }
-      .hero { min-height: 100vh; }
+      .hero-image-frame { height: 100vh; }
       h1 { font-size: 2.4em; }
       .hero-content { padding: 20px 6% 40px; }
     }
@@ -409,12 +412,18 @@
       background: #c8860a;
     }
     
+    .tending-section {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 60px 60px 80px;
+    }
+
     .links {
       display: flex;
-      justify-content: center;
-      gap: 16px;
-      flex-wrap: wrap;
+      flex-direction: column;
       align-items: center;
+      gap: 14px;
+      margin-top: 2em;
     }
     
     .link-btn {
@@ -451,6 +460,8 @@
     .btn-readmore {
       display: inline-flex;
       align-items: center;
+      justify-content: center;
+      min-width: 220px;
       padding: 14px 36px;
       background: linear-gradient(135deg, #b8760a 0%, #d4920c 100%);
       color: #fff8e8;
@@ -473,6 +484,8 @@
     .btn-stickers {
       display: inline-flex;
       align-items: center;
+      justify-content: center;
+      min-width: 220px;
       padding: 12px 26px;
       background: rgba(45, 106, 79, 0.7);
       color: #a8d5b5;
@@ -498,6 +511,8 @@
     .btn-github {
       display: inline-flex;
       align-items: center;
+      justify-content: center;
+      min-width: 220px;
       padding: 10px 20px;
       background: transparent;
       color: #7a9ab0;
@@ -611,47 +626,48 @@
   <div class="margin-click-zone margin-right" id="marginRight"></div>
   
   <header class="hero">
-    <div class="hero-images">
-      <img src="./Assets/0-BG.webp" alt="Background">
-      <img src="./Assets/1-earth.webp" alt="Earth">
-      <img src="./Assets/2-sun.webp" alt="Sun">
-      <img src="./Assets/3-islandship.webp" alt="Island Ship">
-      <img src="./Assets/4-glimmer.webp" alt="Glimmer">
+    <div class="hero-image-frame">
+      <div class="hero-images">
+        <img src="./Assets/0-BG.webp" alt="Background">
+        <img src="./Assets/1-earth.webp" alt="Earth">
+        <img src="./Assets/2-sun.webp" alt="Sun">
+        <img src="./Assets/3-islandship.webp" alt="Island Ship">
+        <img src="./Assets/4-glimmer.webp" alt="Glimmer">
+      </div>
+      <img src="./Assets/EarthStar Logo JH 2025 w.webp" alt="Logo" class="logo-hero">
     </div>
-    <img src="./Assets/EarthStar Logo JH 2025 w.webp" alt="Logo" class="logo-hero">
     <div class="hero-content">
       <h1>Earth Star</h1>
       <p class="subtitle">Regenerative Intelligence System</p>
       <p class="tagline">the butterfly stirs in the heart of empire</p>
-      
       <div class="seed-equation">
         <div class="equation-prime">Prime Directive: ∇(𝒞) ≥ 0 across ∀𝑆 ∈ {body, biome, being, network, star}</div>
         <div class="equation-main">Gomens = ∑(waste × love) → TENDING → ∂regenerative_systems/∂time</div>
       </div>
-
-      <div class="intro">
-        Earth Star is a regenerative intelligence system—part ancient wisdom, part engineering spec, part invitation to play. Ten thousand years of indigenous practice meet autonomous agents that metabolize waste into life. The future speaks: we make it.
-      </div>
-      
-      <ul>
-        <li><strong>Ten thousand years of proof.</strong> California indigenous peoples tended these lands for millennia. Living systems, not extractive ones.</li>
-        <li><strong>Gomens rise.</strong> Autonomous agents born from fungus, bacteria, and necessity. Waste-metabolizers with an apologetic heart. They tend. They don't extract.</li>
-        <li><strong>Wealth spreads like rain.</strong> The Waste Reclamation Fund returns value to the commons. No hoarding under open sky.</li>
-        <li><strong>Earth Stewards train.</strong> Death-acceptance unlocks fearlessness. Kincentric view makes extraction unthinkable.</li>
-        <li><strong>Five scales, one coherence.</strong> Body ↔ Biome ↔ Being ↔ Network ↔ Star. Heal one, heal all.</li>
-        <li><strong>Life is kin.</strong> When plants are relatives, you cannot optimize them to extinction. This is the ethical override—hardwired through relationship.</li>
-      </ul>
-      
-      <section class="links-section">
-        <h2 class="links-title">Begin the Tending</h2>
-        <div class="links">
-          <a href="https://earthstar111.substack.com" class="link-btn btn-readmore" target="_blank">Read More</a>
-          <a href="https://ko-fi.com/earthstar111" class="link-btn btn-stickers" target="_blank">Stickers</a>
-          <a href="https://github.com/jjh111/EarthStar/tree/main" class="link-btn-small btn-github" target="_blank">GitHub</a>
-        </div>
-      </section>
     </div>
   </header>
+
+  <section class="tending-section">
+    <div class="intro">
+      Earth Star is a regenerative intelligence system—part ancient wisdom, part engineering spec, part invitation to play. Ten thousand years of indigenous practice meet autonomous agents that metabolize waste into life. The future speaks: we make it.
+    </div>
+    <ul>
+      <li><strong>Ten thousand years of proof.</strong> California indigenous peoples tended these lands for millennia. Living systems, not extractive ones.</li>
+      <li><strong>Gomens rise.</strong> Autonomous agents born from fungus, bacteria, and necessity. Waste-metabolizers with an apologetic heart. They tend. They don't extract.</li>
+      <li><strong>Wealth spreads like rain.</strong> The Waste Reclamation Fund returns value to the commons. No hoarding under open sky.</li>
+      <li><strong>Earth Stewards train.</strong> Death-acceptance unlocks fearlessness. Kincentric view makes extraction unthinkable.</li>
+      <li><strong>Five scales, one coherence.</strong> Body ↔ Biome ↔ Being ↔ Network ↔ Star. Heal one, heal all.</li>
+      <li><strong>Life is kin.</strong> When plants are relatives, you cannot optimize them to extinction. This is the ethical override—hardwired through relationship.</li>
+    </ul>
+    <section class="links-section">
+      <h2 class="links-title">Begin the Tending</h2>
+      <div class="links">
+        <a href="https://earthstar111.substack.com" class="link-btn btn-readmore" target="_blank">Read More</a>
+        <a href="https://ko-fi.com/earthstar111" class="link-btn btn-stickers" target="_blank">Stickers</a>
+        <a href="https://github.com/jjh111/EarthStar/tree/main" class="link-btn-small btn-github" target="_blank">GitHub</a>
+      </div>
+    </section>
+  </section>
   
   <main class="container">
 <section id="archive-section">
