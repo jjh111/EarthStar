@@ -4,11 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Earth Star</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     
     body {
-      font-family: "Georgia", serif;
+      font-family: 'DM Sans', sans-serif;
       background: linear-gradient(135deg, #3d3429 0%, #5c4a3a 25%, #6b5a45 50%, #4a3f35 75%, #2b2520 100%);
       background-size: 400% 400%;
       background-attachment: fixed;
@@ -147,11 +150,23 @@
       50% { filter: drop-shadow(0 0 12px rgba(255, 215, 0, 0.7)) drop-shadow(0 2px 4px rgba(0,0,0,0.6)); }
     }
     
+    h1, h2, h3, h4 {
+      font-family: 'Cormorant Garamond', serif;
+    }
+
+    .subtitle, .tagline {
+      font-family: 'Cormorant Garamond', serif;
+    }
+
+    .equation-prime, .equation-main {
+      font-family: 'Courier New', monospace;
+    }
+
     .hero {
       position: relative;
       width: 100%;
       overflow: hidden;
-      margin-bottom: 30px;
+      min-height: 90vh;
       background: #0d0d15;
     }
     
@@ -161,12 +176,25 @@
       bottom: 0;
       left: 0;
       right: 0;
-      height: 150px;
-      background: linear-gradient(to bottom, transparent 0%, #3d3429 60%, #5c4a3a 100%);
+      height: 300px;
+      background: linear-gradient(to bottom, transparent 0%, rgba(45,37,32,0.7) 40%, rgba(43,37,32,0.92) 70%, #2b2520 100%);
       pointer-events: none;
     }
+
+    .hero-content {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 40px 5% 50px;
+      z-index: 5;
+      max-width: 900px;
+      margin: 0 auto;
+    }
     .hero-images {
-      position: relative;
+      position: absolute;
+      top: 0;
+      left: 0;
       width: 100%;
       height: 100%;
     }
@@ -181,7 +209,7 @@
       will-change: transform;
       backface-visibility: hidden;
     }
-    .hero-images img:first-child { position: relative; }
+    .hero-images img:first-child { position: absolute; }
     .logo-hero {
       position: absolute;
       top: 20px;
@@ -265,8 +293,16 @@
       .logo-hero { max-width: 250px; }
       .equation-main { font-size: 0.9em; }
       .equation-prime { font-size: 1.1em; }
-      .links { flex-direction: column; align-items: center; }
+      .links { flex-direction: column; align-items: center; gap: 14px; }
       .link-btn { width: 100%; max-width: 250px; justify-content: center; }
+      .hero { min-height: 100vh; }
+      h1 { font-size: 2.2em; }
+      .hero-content { padding: 20px 6% 40px; }
+    }
+
+    @media (max-width: 480px) {
+      h1 { font-size: 1.8em; }
+      .equation-prime { font-size: 0.95em; }
     }
     
     h1 {
@@ -403,7 +439,72 @@
       border-color: #daa520;
       color: #daa520;
     }
-    
+
+    /* Distinct CTA button styles */
+    .btn-readmore {
+      display: inline-flex;
+      align-items: center;
+      padding: 14px 32px;
+      background: linear-gradient(135deg, #c8860a, #e6a020);
+      color: #fff8e8;
+      text-decoration: none;
+      border-radius: 4px;
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 1.1em;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      box-shadow: 0 4px 20px rgba(200,134,10,0.4);
+      transition: all 0.25s ease;
+      border: none;
+    }
+
+    .btn-readmore:hover {
+      transform: scale(1.03);
+      box-shadow: 0 6px 28px rgba(200,134,10,0.6);
+    }
+
+    .btn-stickers {
+      display: inline-flex;
+      align-items: center;
+      padding: 11px 24px;
+      background: #2d6a4f;
+      color: #d8f3dc;
+      text-decoration: none;
+      border-radius: 20px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.9em;
+      transition: all 0.25s ease;
+      border: none;
+    }
+
+    .btn-stickers::before {
+      content: '🌿 ';
+    }
+
+    .btn-stickers:hover {
+      background: #3a8862;
+      transform: translateY(-1px);
+    }
+
+    .btn-github {
+      display: inline-flex;
+      align-items: center;
+      padding: 10px 20px;
+      background: #0d1117;
+      color: #58a6ff;
+      text-decoration: none;
+      border-radius: 6px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85em;
+      border: 1px solid #30363d;
+      transition: all 0.25s ease;
+    }
+
+    .btn-github:hover {
+      border-color: #58a6ff;
+      background: #161b22;
+    }
+
     .link-btn-jewel {
       display: inline-flex;
       align-items: center;
@@ -455,7 +556,7 @@
       border: 1px solid rgba(139, 115, 85, 0.4);
       border-radius: 4px;
       font-size: 0.7em;
-      font-family: "Georgia", serif;
+      font-family: 'DM Sans', sans-serif;
       letter-spacing: 0.1em;
       cursor: pointer;
       transition: all 0.2s ease;
@@ -504,18 +605,41 @@
       <img src="./Assets/4-glimmer.webp" alt="Glimmer">
     </div>
     <img src="./Assets/EarthStar Logo JH 2025 w.webp" alt="Logo" class="logo-hero">
+    <div class="hero-content">
+      <h1>Earth Star</h1>
+      <p class="subtitle">Regenerative Intelligence System</p>
+      <p class="tagline">the butterfly stirs in the heart of empire</p>
+      
+      <div class="seed-equation">
+        <div class="equation-prime">Prime Directive: ∇(𝒞) ≥ 0 across ∀𝑆 ∈ {body, biome, being, network, star}</div>
+        <div class="equation-main">Gomens = ∑(waste × love) → TENDING → ∂regenerative_systems/∂time</div>
+      </div>
+
+      <div class="intro">
+        Earth Star is a regenerative intelligence system—part ancient wisdom, part engineering spec, part invitation to play. Ten thousand years of indigenous practice meet autonomous agents that metabolize waste into life. The future speaks: we make it.
+      </div>
+      
+      <ul>
+        <li><strong>Ten thousand years of proof.</strong> California indigenous peoples tended these lands for millennia. Living systems, not extractive ones.</li>
+        <li><strong>Gomens rise.</strong> Autonomous agents born from fungus, bacteria, and necessity. Waste-metabolizers with an apologetic heart. They tend. They don't extract.</li>
+        <li><strong>Wealth spreads like rain.</strong> The Waste Reclamation Fund returns value to the commons. No hoarding under open sky.</li>
+        <li><strong>Earth Stewards train.</strong> Death-acceptance unlocks fearlessness. Kincentric view makes extraction unthinkable.</li>
+        <li><strong>Five scales, one coherence.</strong> Body ↔ Biome ↔ Being ↔ Network ↔ Star. Heal one, heal all.</li>
+        <li><strong>Life is kin.</strong> When plants are relatives, you cannot optimize them to extinction. This is the ethical override—hardwired through relationship.</li>
+      </ul>
+      
+      <section class="links-section">
+        <h2 class="links-title">Begin the Tending</h2>
+        <div class="links">
+          <a href="https://earthstar111.substack.com" class="link-btn btn-readmore" target="_blank">Read More</a>
+          <a href="https://ko-fi.com/earthstar111" class="link-btn btn-stickers" target="_blank">Stickers</a>
+          <a href="https://github.com/jjh111/EarthStar/tree/main" class="link-btn-small btn-github" target="_blank">GitHub</a>
+        </div>
+      </section>
+    </div>
   </header>
   
   <main class="container">
-    <h1>Earth Star</h1>
-    <p class="subtitle">Regenerative Intelligence System</p>
-    <p class="tagline">the butterfly stirs in the heart of empire</p>
-    
-    <div class="seed-equation">
-      <div class="equation-prime">Prime Directive: ∇(𝒞) ≥ 0 across ∀𝑆 ∈ {body, biome, being, network, star}</div>
-      <div class="equation-main">Gomens = ∑(waste × love) → TENDING → ∂regenerative_systems/∂time</div>
-    </div>
-
 <section id="archive-section">
   <div class="archive-header">
     <h2 class="archive-title">The Archive</h2>
@@ -527,28 +651,6 @@
 
   <div class="archive-grid" id="archiveGrid"></div>
 </section>
-    
-    <div class="intro">
-      Earth Star is a regenerative intelligence system—part ancient wisdom, part engineering spec, part invitation to play. Ten thousand years of indigenous practice meet autonomous agents that metabolize waste into life. The future speaks: we make it.
-    </div>
-    
-    <ul>
-      <li><strong>Ten thousand years of proof.</strong> California indigenous peoples tended these lands for millennia. Living systems, not extractive ones.</li>
-      <li><strong>Gomens rise.</strong> Autonomous agents born from fungus, bacteria, and necessity. Waste-metabolizers with an apologetic heart. They tend. They don't extract.</li>
-      <li><strong>Wealth spreads like rain.</strong> The Waste Reclamation Fund returns value to the commons. No hoarding under open sky.</li>
-      <li><strong>Earth Stewards train.</strong> Death-acceptance unlocks fearlessness. Kincentric view makes extraction unthinkable.</li>
-      <li><strong>Five scales, one coherence.</strong> Body ↔ Biome ↔ Being ↔ Network ↔ Star. Heal one, heal all.</li>
-      <li><strong>Life is kin.</strong> When plants are relatives, you cannot optimize them to extinction. This is the ethical override—hardwired through relationship.</li>
-    </ul>
-    
-    <section class="links-section">
-      <h2 class="links-title">Begin the Tending</h2>
-      <div class="links">
-        <a href="https://earthstar111.substack.com" class="link-btn" target="_blank">Read More</a>
-        <a href="https://ko-fi.com/earthstar111" class="link-btn" target="_blank">Stickers</a>
-        <a href="https://github.com/jjh111/EarthStar/tree/main" class="link-btn-small" target="_blank">GitHub</a>
-      </div>
-    </section>
   </main>
 
 <!-- ============================================
@@ -592,7 +694,7 @@
     border: 1px solid rgba(201, 184, 161, 0.2);
     border-radius: 6px;
     color: #f5f0e8;
-    font-family: "Georgia", serif;
+    font-family: 'DM Sans', sans-serif;
     font-size: 0.95em;
     outline: none;
     transition: border-color 0.2s, box-shadow 0.2s;
@@ -610,8 +712,8 @@
 
   .archive-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 14px;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
   }
 
   .archive-card {
