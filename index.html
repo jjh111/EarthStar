@@ -2163,6 +2163,8 @@ function archiveHandleSearch(q) {
 // MARKDOWN RENDERER
 // ============================================
 function archiveRenderMarkdown(text) {
+  // Strip embedded line numbers (e.g. "     1|" or "   123|")
+  text = text.replace(/^\s*\d+\|/gm, '');
   let html = '';
   const lines = text.split('\n');
   let inCode = false, codeLines = [];
@@ -2257,6 +2259,9 @@ function archiveOpenDoc(id) {
 
   archiveCurrentDocId = id;
 
+  // Update URL hash for deep linking
+  history.replaceState(null, '', '#doc/' + id);
+
   document.getElementById('archivePanel').classList.add('open');
   document.getElementById('archivePanelOverlay').classList.add('open');
   document.body.style.overflow = 'hidden';
@@ -2282,6 +2287,7 @@ function archiveClosePanel() {
   document.getElementById('archivePanelOverlay').classList.remove('open');
   document.body.style.overflow = '';
   archiveCurrentDocId = null;
+  history.replaceState(null, '', window.location.pathname);
 }
 
 // ============================================
@@ -2355,6 +2361,30 @@ document.addEventListener('keydown', function(e) {
 // INIT ARCHIVE
 // ============================================
 archiveRenderGrid();
+
+// Deep link: open doc from URL hash (#doc/<id>)
+(function() {
+  const hash = window.location.hash;
+  if (hash && hash.startsWith('#doc/')) {
+    const id = hash.slice(5);
+    if (ARCHIVE_DOCS.find(d => d.id === id)) {
+      archiveOpenDoc(id);
+    }
+  }
+})();
+
+// Handle browser back/forward through hash changes
+window.addEventListener('hashchange', function() {
+  const hash = window.location.hash;
+  if (hash && hash.startsWith('#doc/')) {
+    const id = hash.slice(5);
+    if (ARCHIVE_DOCS.find(d => d.id === id)) {
+      archiveOpenDoc(id);
+    }
+  } else {
+    if (archiveCurrentDocId) archiveClosePanel();
+  }
+});
 </script>
 
     <footer>
