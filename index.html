@@ -647,6 +647,20 @@
     </div>
   </header>
 
+  <main class="container">
+<section id="archive-section">
+  <div class="archive-header">
+    <h2 class="archive-title">The Archive</h2>
+  </div>
+
+  <div class="archive-controls">
+    <input type="text" class="archive-search" id="archiveSearch" placeholder="search..." oninput="archiveHandleSearch(this.value)">
+  </div>
+
+  <div class="archive-grid" id="archiveGrid"></div>
+</section>
+  </main>
+
   <section class="tending-section">
     <div class="intro">
       Earth Star is a regenerative intelligence system—part ancient wisdom, part engineering spec, part invitation to play. Ten thousand years of indigenous practice meet autonomous agents that metabolize waste into life. The future speaks: we make it.
@@ -668,20 +682,6 @@
       </div>
     </section>
   </section>
-  
-  <main class="container">
-<section id="archive-section">
-  <div class="archive-header">
-    <h2 class="archive-title">The Archive</h2>
-  </div>
-
-  <div class="archive-controls">
-    <input type="text" class="archive-search" id="archiveSearch" placeholder="search..." oninput="archiveHandleSearch(this.value)">
-  </div>
-
-  <div class="archive-grid" id="archiveGrid"></div>
-</section>
-  </main>
 
 <!-- ============================================
      THE ARCHIVE — Document Library Section
@@ -2257,6 +2257,95 @@ The act threads the needle: communities should not have to choose between saying
    620|**Earth Star v2.0 is live.**  
    621|**"Gomen'nasai," we say, as we begin.**
    622|`
+  },
+  {
+    id: 'hca',
+    title: 'Harmonious Computing Act',
+    category: 'POLICY',
+    description: 'Model legislation treating datacenters as organs of living infrastructure — sited, powered, cooled, and integrated so computation becomes a mutualistic participant in ecosystems.',
+    tags: ['policy', 'datacenter', 'infrastructure', 'sustainability', 'legislation'],
+    content: `     1|# HARMONIOUS COMPUTING ACT
+     2|
+     3|## Vision
+     4|
+     5|Model legislation that treats datacenters not as extractive industrial facilities to be fought over and exiled, but as organs of a living infrastructure — sited, powered, cooled, and integrated so that computation becomes a mutualistic participant in both urban and rural ecosystems.
+     6|
+     7|The act threads the needle: communities should not have to choose between saying "not here" and having it dumped "over there." The affordances already exist in nature for everything to work together. We just haven't legislated as if we believed that.
+     8|
+     9|## Problem
+    10|
+    11|- **$64 billion** in datacenter projects blocked or delayed (May 2024–Mar 2025) due to local opposition
+    12|- Only **44%** of Americans would welcome a datacenter nearby — less popular than gas plants, wind farms, or nuclear facilities
+    13|- U.S. datacenters consumed **17 billion gallons** of water for cooling in 2023; projected to double or quadruple by 2028
+    14|- Continuous 24/7 noise from cooling systems causes documented hypertension, cardiovascular disease, tinnitus, cognitive impairment in neighboring communities
+    15|- Virginia's datacenter tax incentive program costs **~$1.6 billion annually**; Georgia expected to lose **$2.5 billion** to exemptions (664% above estimates)
+    16|- Current legislation is reactive and binary: permit or ban, incentivize or tax. No framework treats computation as something that can participate in ecological and community health.
+    17|
+    18|## Legislative Framework
+    19|
+    20|### Title I — Intelligent Siting
+    21|
+    22|- Mandatory environmental, hydrological, agricultural, and community impact studies before permitting
+    23|- Virginia model: within 500 ft of school/residential → detailed design and impact profiles required
+    24|- Scoring system for site selection that rewards symbiotic potential (proximity to district heating networks, agricultural operations, industrial processes that can use waste heat)
+    25|- Prohibit blanket preemption of local zoning (counter the West Virginia model)
+    26|- Require Community Benefit Agreements (CBAs) as condition of permitting
+    27|- Brookings framework: clean energy commitments, rate restructuring, revenue sharing
+    28|
+    29|### Title II — Water Stewardship
+    30|
+    31|- Zero net water consumption mandate with phased timeline (modeled on Microsoft's water-positive-by-2030 commitment)
+    32|- Require water reuse plans: reclaimed water, closed-loop cooling, or zero-water designs
+    33|- Microsoft's zero-water cooling: chip-level closed-loop, avoids 125M liters/year per facility
+    34|- Immersion cooling: reduces cooling energy by up to 90%, eliminates evaporative water use
+    35|- AirJoule-type systems: extract water from waste heat using metal-organic frameworks
+    36|- Water consumption reporting and public disclosure requirements
+    37|
+    38|### Title III — Clean Energy Mandates
+    39|
+    40|- Washington State model: 80% renewable/nonemitting by 2031 (from sources built after Jan 2026), 100% by 2046
+    41|- Require on-site generation or dedicated PPAs (not just RECs)
+    42|- Utilities must develop dedicated datacenter tariffs
+    43|- No tax incentives without verified clean energy compliance
+    44|- Priority permitting for facilities that exceed mandates
+    45|
+    46|### Title IV — Silent Running
+    47|
+    48|- Replace simple dBA ordinances with octave-band analysis that captures low-frequency hum
+    49|- Prince William County model: remove commercial HVAC exemptions from nighttime noise limits
+    50|- Mandate immersion or hybrid cooling for facilities within 1 mile of residential areas
+    51|- Acoustic monitoring with public-facing real-time dashboards
+    52|- Tiered noise penalties that escalate with duration and proximity
+    53|
+    54|### Title V — Waste Heat as Community Resource
+    55|
+    56|- Mandate waste heat recovery plans for all new facilities above threshold capacity
+    57|- Stockholm model: 30,000 apartments heated, ~50 gCO2/kWh reduction
+    58|- Microsoft Helsinki: heating ~100,000 homes (world's largest datacenter heat recovery)
+    59|- Google Hamina: 80% of local district heating demand
+    60|- Meta Odense: 100,000 MWh recovered annually
+    61|- Netherlands model: waste heat piped to greenhouses for agriculture
+    62|- Tax incentives tied to verified community heat delivery
+    63|
+    64|### Title VI — Non-Entropic Computing Subsidies
+    65|
+    66|- Research and deployment subsidies for:
+    67|  - Photonic computing (Lightmatter Envise, iPronics ONE-32): 8x training time reduction, market-ready interconnects 2025-26
+    68|  - Reversible computing (Vaire Ice River chip): first demonstrated net energy recovery, 50% energy savings, theoretical 4,000x improvement ceiling
+    69|  - Biological/neuromorphic computing: fungal memristors (90±1% accuracy at 5.85 kHz), organoid intelligence (DishBrain CL1)
+    70|- Structured as innovation subsidies: matching funds for facilities that deploy non-entropic compute below a Landauer efficiency threshold
+    71|- Landauer's principle floor: kT ln(2) ≈ 2.9 × 10⁻²¹ J per bit erasure at room temperature
+    72|- Subsidy tiers based on proximity to Landauer limit
+    73|
+    74|## Open Questions
+    75|
+    76|- What is the right phased timeline for zero-water mandates? 5 years? 10?
+    77|- How to structure subsidies so they spur innovation without becoming handouts to hyperscalers?
+    78|- Can biological computing research be incorporated without triggering bioethics backlash?
+    79|- How to handle the tension between state preemption (West Virginia model) and local autonomy (Virginia model)?
+    80|- What metric captures "symbiotic integration" in a way that's legislatively enforceable?
+    81|- Magic-angle graphene superconductors are cryogenic (1.7K) — what's the realistic timeline for room-temperature carbon-based superconducting interconnects?
+    82|`
   }
 ];
 
