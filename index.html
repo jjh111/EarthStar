@@ -12,22 +12,13 @@
     
     body {
       font-family: 'DM Sans', sans-serif;
-      background: linear-gradient(135deg, #1a1510 0%, #2a2018 40%, #1e1a14 100%);
-      background-size: 400% 400%;
-      background-attachment: fixed;
-      color: #f5f0e8;
+      background: #0a0806;
+      background-image:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='400' height='400' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+      color: #f0e6d0;
       line-height: 1.7;
       min-height: 100vh;
       overflow-x: hidden;
-      animation: earthPulse 30s ease-in-out infinite;
-      max-width: 1400px;
-      margin: 0 auto;
-    }
-    
-    @keyframes earthPulse {
-      0% { background-position: 0% 50%; }
-      50% { background-position: 100% 50%; }
-      100% { background-position: 0% 50%; }
     }
     
     .margin-click-zone {
@@ -227,17 +218,20 @@
     .seed-equation {
       max-width: 720px;
       margin: 0 auto 2.5em;
-      padding: 20px 24px;
+      padding: 24px 28px;
       text-align: left;
       font-family: "Courier New", monospace;
       position: relative;
-      background: rgba(0, 0, 0, 0.3);
-      border-left: 3px solid rgba(200, 134, 10, 0.4);
-      border-top: none;
-      border-right: none;
-      border-bottom: none;
-      border-radius: 0;
+      background: linear-gradient(135deg, rgba(10,8,4,0.85) 0%, rgba(18,14,8,0.9) 100%);
+      border: 1px solid rgba(200, 150, 12, 0.18);
+      border-left: 3px solid #C8960C;
+      border-radius: 2px;
       overflow: hidden;
+      box-shadow:
+        0 1px 0 rgba(255,215,0,0.06) inset,
+        0 -1px 0 rgba(0,0,0,0.5) inset,
+        0 8px 32px rgba(0,0,0,0.6),
+        0 0 0 1px rgba(0,0,0,0.3);
     }
     
     .seed-equation::before {
@@ -320,110 +314,120 @@
     
     h1 {
       font-family: 'Cormorant Garamond', serif;
-      font-size: 3.8em;
-      font-weight: 600;
-      letter-spacing: 0.06em;
-      margin-bottom: 10px;
-      color: #f5ede0;
-      -webkit-text-fill-color: #f5ede0;
+      font-size: 4.2em;
+      font-weight: 400;
+      letter-spacing: 0.12em;
+      margin-bottom: 12px;
+      color: #f0e6d0;
+      text-transform: uppercase;
     }
     
     .subtitle {
       font-family: 'DM Sans', sans-serif;
-      font-size: 0.95em;
-      color: #c8a87a;
-      margin-bottom: 8px;
+      font-size: 0.72em;
+      color: #C8960C;
+      margin-bottom: 6px;
       font-style: normal;
-      letter-spacing: 0.25em;
+      letter-spacing: 0.45em;
       text-transform: uppercase;
     }
     
     .tagline {
       font-family: 'Cormorant Garamond', serif;
       font-style: italic;
-      color: #d4c4a8;
+      color: #b8a882;
       margin-bottom: 2em;
-      font-size: 1.15em;
-      letter-spacing: 0.04em;
+      font-size: 1.2em;
+      letter-spacing: 0.03em;
     }
     
     .intro {
       max-width: 640px;
-      font-size: 1.05em;
-      color: #d4c8b4;
-      margin-bottom: 1.5em;
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 1.2em;
+      color: #c8baa0;
+      margin-bottom: 2em;
       padding: 0;
       background: transparent;
-      border-radius: 0;
-      line-height: 1.85;
+      line-height: 1.9;
     }
     
     ul {
       list-style: none;
       padding: 0;
-      margin: 0 0 2em;
+      margin: 0 0 2.5em;
     }
     
     li {
       position: relative;
-      padding-left: 28px;
-      margin-bottom: 0.6em;
-      font-size: 1em;
-      color: #d4c8b4;
+      padding-left: 32px;
+      margin-bottom: 1em;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.95em;
+      color: #b0a08a;
       letter-spacing: 0.01em;
-      line-height: 1.7;
+      line-height: 1.75;
     }
     
     li::before {
-      content: "✦";
+      content: "";
       position: absolute;
       left: 0;
-      color: #c8860a;
-      font-size: 0.75em;
-      top: 0.25em;
+      top: 0.72em;
+      width: 18px;
+      height: 1px;
+      background: linear-gradient(90deg, #C8960C, rgba(200,150,12,0));
     }
     
-    li strong { color: #e8dece; }
+    li strong {
+      color: #f0e6d0;
+      font-weight: 600;
+    }
     
     .links-section {
-      margin-top: 2em;
+      margin-top: 3em;
       text-align: center;
     }
     
     .links-title {
       font-family: 'DM Sans', sans-serif;
-      font-size: 0.8em;
+      font-size: 0.68em;
       text-transform: uppercase;
-      letter-spacing: 0.2em;
-      color: #9a8a72;
-      margin-bottom: 20px;
-      position: relative;
-      display: inline-block;
+      letter-spacing: 0.5em;
+      color: #C8960C;
+      margin-bottom: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+    }
+    
+    .links-title::before,
+    .links-title::after {
+      content: '';
+      flex: 1;
+      max-width: 80px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(200,150,12,0.5));
     }
     
     .links-title::after {
-      content: '';
-      position: absolute;
-      bottom: -6px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 40px;
-      height: 1px;
-      background: #c8860a;
+      background: linear-gradient(270deg, transparent, rgba(200,150,12,0.5));
     }
     
     .tending-section {
-      max-width: 860px;
+      max-width: 800px;
       margin: 0 auto;
-      padding: 60px 60px 80px;
+      padding: 80px 48px 96px;
+      border-top: 1px solid rgba(200,150,12,0.12);
     }
 
     .links {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 14px;
-      margin-top: 2em;
+      gap: 16px;
+      margin-top: 2.5em;
     }
     
     .link-btn {
@@ -461,50 +465,81 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-width: 220px;
-      padding: 14px 36px;
-      background: linear-gradient(135deg, #b8760a 0%, #d4920c 100%);
-      color: #fff8e8;
+      min-width: 240px;
+      padding: 15px 40px;
+      background: linear-gradient(180deg, #D4A010 0%, #A87008 50%, #C8960C 100%);
+      color: #FFF8E8;
       text-decoration: none;
-      border-radius: 2px;
-      font-family: 'Cormorant Garamond', serif;
-      font-size: 1em;
+      border-radius: 24px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.78em;
       font-weight: 600;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.25em;
       text-transform: uppercase;
       transition: all 0.2s ease;
-      border: none;
+      border: 1px solid rgba(255,215,0,0.3);
+      box-shadow:
+        0 1px 0 rgba(255,230,100,0.5) inset,
+        0 -2px 0 rgba(100,60,0,0.4) inset,
+        0 6px 20px rgba(180,120,0,0.3),
+        0 2px 4px rgba(0,0,0,0.4);
+      position: relative;
+      overflow: hidden;
     }
 
+    .btn-readmore::after {
+      content: '';
+      position: absolute;
+      top: 0; left: -100%; right: 0;
+      height: 50%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+      transition: left 0.5s ease;
+    }
+
+    .btn-readmore:hover::after { left: 100%; }
+
+
     .btn-readmore:hover {
-      transform: translateY(-2px) scale(1.02);
-      background: linear-gradient(135deg, #cc8610 0%, #e8a010 100%);
+      transform: translateY(-2px);
+      box-shadow:
+        0 1px 0 rgba(255,230,100,0.5) inset,
+        0 -2px 0 rgba(100,60,0,0.4) inset,
+        0 10px 28px rgba(180,120,0,0.4),
+        0 3px 8px rgba(0,0,0,0.5);
     }
 
     .btn-stickers {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-width: 220px;
-      padding: 12px 26px;
-      background: rgba(45, 106, 79, 0.7);
-      color: #a8d5b5;
+      gap: 8px;
+      min-width: 240px;
+      padding: 14px 32px;
+      background: rgba(10, 30, 18, 0.8);
+      color: #88C8A0;
       text-decoration: none;
-      border-radius: 2px;
+      border-radius: 24px;
       font-family: 'DM Sans', sans-serif;
-      font-size: 0.88em;
-      letter-spacing: 0.05em;
+      font-size: 0.78em;
+      font-weight: 500;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
       transition: all 0.2s ease;
-      border: 1px solid rgba(45, 106, 79, 0.8);
+      border: 1px solid rgba(45, 106, 79, 0.5);
+      box-shadow:
+        0 1px 0 rgba(100,200,130,0.1) inset,
+        0 4px 16px rgba(0,0,0,0.3);
     }
 
     .btn-stickers::before {
-      content: '🌿 ';
+      content: '🌿';
+      font-size: 1.1em;
     }
 
     .btn-stickers:hover {
-      background: rgba(45, 106, 79, 0.9);
-      color: #c8ecd0;
+      background: rgba(20, 50, 32, 0.9);
+      color: #aadcb8;
+      border-color: rgba(45, 106, 79, 0.8);
       transform: translateY(-2px);
     }
 
@@ -512,58 +547,65 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-width: 220px;
-      padding: 10px 20px;
+      padding: 10px 24px;
       background: transparent;
-      color: #7a9ab0;
+      color: #6a8a9a;
       text-decoration: none;
-      border-radius: 2px;
+      border-radius: 4px;
       font-family: 'Courier New', monospace;
-      font-size: 0.8em;
-      letter-spacing: 0.05em;
-      border: 1px solid rgba(122, 154, 176, 0.3);
+      font-size: 0.75em;
+      letter-spacing: 0.1em;
+      border: 1px solid rgba(106, 138, 154, 0.25);
       transition: all 0.2s ease;
     }
 
     .btn-github:hover {
-      border-color: rgba(122, 154, 176, 0.7);
-      color: #a0c0d6;
+      border-color: rgba(200, 150, 12, 0.4);
+      color: #C8960C;
       transform: translateY(-1px);
     }
 
     .link-btn-jewel {
       display: inline-flex;
       align-items: center;
-      padding: 6px 14px;
-      background: linear-gradient(145deg, #4a3f6b 0%, #6b5a8a 30%, #5a4a7a 50%, #8b7aaa 70%, #4a3f6b 100%);
-      background-size: 200% 200%;
-      color: #e8e0f5;
+      padding: 7px 18px;
+      background: linear-gradient(180deg, #1a1620 0%, #0d0a12 60%, #141020 100%);
+      color: #8878aa;
       text-decoration: none;
-      border-radius: 4px;
-      font-size: 0.75em;
-      letter-spacing: 0.1em;
-      border: 1px solid #8b7aaa;
-      box-shadow: 0 0 10px rgba(139, 122, 170, 0.3);
-      transition: all 0.3s ease;
-      margin-top: 20px;
+      border-radius: 14px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.68em;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      border: 1px solid rgba(138,120,170,0.3);
+      box-shadow:
+        0 1px 0 rgba(180,160,220,0.12) inset,
+        0 -1px 0 rgba(0,0,0,0.4) inset,
+        0 4px 12px rgba(0,0,0,0.4);
+      transition: all 0.25s ease;
+      margin-top: 24px;
       margin-bottom: 8px;
     }
     
     .link-btn-jewel:hover {
-      background-position: 100% 50%;
-      box-shadow: 0 0 20px rgba(139, 122, 170, 0.5);
+      color: #b0a0cc;
+      border-color: rgba(138,120,170,0.6);
+      box-shadow:
+        0 1px 0 rgba(180,160,220,0.15) inset,
+        0 -1px 0 rgba(0,0,0,0.4) inset,
+        0 6px 20px rgba(80,60,120,0.25);
       transform: translateY(-1px);
     }
     
     footer {
-      background: rgba(0, 0, 0, 0.4);
-      border-top: 1px solid rgba(201, 184, 161, 0.1);
-      padding: 40px 5% 60px;
+      background: #060402;
+      border-top: 1px solid rgba(200,150,12,0.15);
+      padding: 64px 5% 80px;
       text-align: center;
-      color: #7a6e62;
+      color: #5a5040;
       font-family: 'DM Sans', sans-serif;
-      font-size: 0.85em;
-      letter-spacing: 0.05em;
+      font-size: 0.82em;
+      letter-spacing: 0.06em;
     }
     
     .footer-logo {
@@ -647,8 +689,8 @@
     </div>
   </header>
 
-  <main class="container">
 <section id="archive-section">
+  <div class="archive-inner">
   <div class="archive-header">
     <h2 class="archive-title">The Archive</h2>
   </div>
@@ -658,8 +700,8 @@
   </div>
 
   <div class="archive-grid" id="archiveGrid"></div>
+  </div>
 </section>
-  </main>
 
   <section class="tending-section">
     <div class="intro">
@@ -684,150 +726,186 @@
   </section>
 
 <!-- ============================================
-     THE ARCHIVE — Document Library Section
+     THE ARCHIVE — styles consolidated into head
      ============================================ -->
 <style>
-  /* Archive Section Styles — Earth Star Palette */
+  /* ── Archive Section ────────────────────────── */
   #archive-section {
+    width: 100%;
+    background: #07050302;
+    border-bottom: 1px solid rgba(200,150,12,0.1);
+  }
+
+  .archive-inner {
     max-width: 1200px;
-    margin: 0 auto 40px;
-    padding: 40px 40px 20px;
-    background: rgba(13, 11, 8, 0.6);
-    border-bottom: 1px solid rgba(201, 184, 161, 0.1);
+    margin: 0 auto;
+    padding: 56px 48px 48px;
   }
 
   .archive-header {
     text-align: center;
     margin-bottom: 40px;
-    padding-bottom: 16px;
   }
 
   .archive-title {
     font-family: 'DM Sans', sans-serif;
-    font-size: 0.8em;
+    font-size: 0.65em;
     font-weight: 500;
-    letter-spacing: 0.2em;
+    letter-spacing: 0.5em;
     text-transform: uppercase;
-    color: #9a8a72;
-    margin-bottom: 0;
-    display: inline-block;
-    position: relative;
+    color: #C8960C;
+    display: inline-flex;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .archive-title::before,
+  .archive-title::after {
+    content: '';
+    width: 60px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(200,150,12,0.4));
   }
 
   .archive-title::after {
-    content: '';
-    position: absolute;
-    bottom: -8px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 40px;
-    height: 1px;
-    background: #c8860a;
+    background: linear-gradient(270deg, transparent, rgba(200,150,12,0.4));
   }
 
   .archive-controls {
-    margin-bottom: 20px;
+    margin-bottom: 28px;
   }
 
   .archive-search {
     width: 100%;
-    max-width: 320px;
-    padding: 10px 14px;
-    background: rgba(92, 64, 51, 0.3);
-    border: 1px solid rgba(201, 184, 161, 0.2);
-    border-radius: 6px;
-    color: #f5f0e8;
+    max-width: 280px;
+    padding: 10px 16px;
+    background: rgba(8,6,3,0.8);
+    border: 1px solid rgba(200,150,12,0.2);
+    border-radius: 4px;
+    color: #f0e6d0;
     font-family: 'DM Sans', sans-serif;
-    font-size: 0.95em;
+    font-size: 0.85em;
+    letter-spacing: 0.05em;
     outline: none;
     transition: border-color 0.2s, box-shadow 0.2s;
+    box-shadow:
+      0 1px 0 rgba(255,215,0,0.04) inset,
+      0 -1px 0 rgba(0,0,0,0.4) inset;
   }
 
   .archive-search:focus {
-    border-color: rgba(255, 215, 0, 0.5);
-    box-shadow: 0 0 12px rgba(255, 215, 0, 0.15);
+    border-color: rgba(200,150,12,0.5);
+    box-shadow:
+      0 1px 0 rgba(255,215,0,0.04) inset,
+      0 -1px 0 rgba(0,0,0,0.4) inset,
+      0 0 16px rgba(200,150,12,0.1);
   }
 
   .archive-search::placeholder {
-    color: #8b7355;
+    color: #4a3f30;
     font-style: italic;
   }
 
   .archive-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 20px;
+    gap: 24px;
   }
 
   @media (max-width: 1100px) {
-    #archive-section { padding: 0 24px; }
+    .archive-inner { padding: 40px 24px 36px; }
     .archive-grid { grid-template-columns: repeat(2, 1fr); }
   }
 
   @media (max-width: 600px) {
     .archive-grid { grid-template-columns: 1fr; }
-    #archive-section { padding: 0 16px; }
+    .archive-inner { padding: 32px 16px; }
   }
 
+  /* ── Archive Card — basalt tablet + aero bevel ── */
   .archive-card {
     position: relative;
-    background: rgba(26, 21, 16, 0.85);
-    border: 1px solid rgba(201, 184, 161, 0.15);
-    border-top: 2px solid rgba(200, 134, 10, 0.45);
-    border-radius: 4px;
-    padding: 24px 20px;
+    background: linear-gradient(155deg, #111009 0%, #0c0a06 60%, #0f0d08 100%);
+    border: 1px solid rgba(200,150,12,0.15);
+    border-top: 2px solid rgba(200,150,12,0.5);
+    border-radius: 3px;
+    padding: 28px 24px 24px;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: border-top-color 0.2s, transform 0.2s, box-shadow 0.2s;
     overflow: hidden;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+    box-shadow:
+      0 1px 0 rgba(255,215,0,0.05) inset,
+      0 -1px 0 rgba(0,0,0,0.5) inset,
+      0 4px 24px rgba(0,0,0,0.6),
+      0 1px 3px rgba(0,0,0,0.4);
+  }
+
+  .archive-card::before {
+    content: attr(data-category);
+    position: absolute;
+    top: 14px;
+    right: 16px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.55em;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: rgba(200,150,12,0.5);
   }
 
   .archive-card:hover {
-    border-top-color: rgba(200, 134, 10, 0.9);
-    background: rgba(40, 32, 22, 0.95);
-    transform: translateY(-3px);
-    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+    border-top-color: #D4AF37;
+    transform: translateY(-4px);
+    box-shadow:
+      0 1px 0 rgba(255,215,0,0.08) inset,
+      0 -1px 0 rgba(0,0,0,0.5) inset,
+      0 12px 40px rgba(0,0,0,0.7),
+      0 0 0 1px rgba(200,150,12,0.1);
   }
 
   .archive-card-title {
     font-family: 'Cormorant Garamond', serif;
-    font-size: 1.25em;
-    font-weight: 600;
-    color: #f0e8d8;
-    margin-bottom: 0.5em;
-    line-height: 1.3;
+    font-size: 1.3em;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    color: #f0e6d0;
+    margin-bottom: 10px;
+    margin-right: 48px;
+    line-height: 1.25;
   }
 
   .archive-card-desc {
     font-family: 'DM Sans', sans-serif;
-    font-size: 0.85em;
-    color: #b8a88e;
-    line-height: 1.6;
-    margin-bottom: 12px;
+    font-size: 0.82em;
+    color: #8a7a62;
+    line-height: 1.65;
+    margin-bottom: 16px;
   }
 
   .archive-card-tags {
     display: flex;
     flex-wrap: wrap;
-    gap: 5px;
+    gap: 6px;
   }
 
   .archive-tag {
-    font-size: 0.68em;
+    font-family: 'Courier New', monospace;
+    font-size: 0.62em;
     padding: 3px 8px;
-    background: rgba(200, 134, 10, 0.12);
-    border: 1px solid rgba(200, 134, 10, 0.2);
-    border-radius: 3px;
-    color: #c8a060;
+    background: rgba(200, 134, 10, 0.07);
+    border: 1px solid rgba(200, 134, 10, 0.18);
+    border-radius: 2px;
+    color: #7a6040;
+    letter-spacing: 0.05em;
   }
 
   .archive-empty {
     grid-column: 1 / -1;
     text-align: center;
-    padding: 60px 20px;
-    color: #8b7355;
+    padding: 80px 20px;
+    color: #4a3f30;
     font-style: italic;
-    font-size: 1.1em;
+    font-size: 1em;
+    letter-spacing: 0.05em;
   }
 
   /* Panel Overlay */
@@ -872,9 +950,6 @@
     .archive-panel {
       width: 95%;
       max-width: none;
-    }
-    #archive-section {
-      padding: 0 20px;
     }
   }
 
@@ -921,6 +996,7 @@
     display: flex;
     align-items: center;
     gap: 6px;
+
     font-size: 0.9em;
     min-width: 0;
     overflow: hidden;
@@ -1421,6 +1497,7 @@ const ARCHIVE_DOCS = [
    200|- (2) Food contact materials;
    201|- (3) Products with known persistent pollutants; and
    202|- (4) High-volume consumer products.
+
    203|
    204|(c) **Enforcement**: Products failing to meet standards shall be:
    205|- (1) Subject to sale prohibition;
@@ -1921,6 +1998,7 @@ The act threads the needle: communities should not have to choose between saying
    279|
    280|**The system bootstraps through conversation and direct action simultaneously.**
    281|
+
    282|1. **Micro-map**: Stories told between intelligences (this conversation)
    283|2. **Meso-map**: Patterns encoded into agent behavior (this skill file)
    284|3. **Macro-map**: Emergent networks of regenerative practice (Earth Stewards finding each other)
@@ -2421,6 +2499,7 @@ function archiveOpenDoc(id) {
 
   // Update breadcrumbs
   document.getElementById('archiveBreadcrumbs').innerHTML = `
+
     <span class="archive-crumb archive-crumb-root" onclick="archiveClosePanel()">The Archive</span>
     <span class="archive-crumb-sep">/</span>
     <span class="archive-crumb">${doc.category}</span>
@@ -2921,6 +3000,7 @@ window.addEventListener('hashchange', function() {
         fadeAwayEmoji(old.x, old.y, CONFIG.heroLeft.emoji);
       }
       
+
       // Create visual star
       createPersistentEmoji(x, y, CONFIG.heroLeft.emoji, document.body, -20);
       
