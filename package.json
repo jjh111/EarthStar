@@ -1,0 +1,29 @@
+{
+  "name": "earthstar-site",
+  "version": "1.0.0",
+  "description": "**Regenerative Intelligence System**",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "node build.mjs",
+    "images": "node build.mjs --images"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jjh111/EarthStar.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/jjh111/EarthStar/issues"
+  },
+  "homepage": "https://github.com/jjh111/EarthStar#readme",
+  "private": "true",
+  "type": "module",
+  "devDependencies": {
+    "esbuild": "^0.28.1",
+    "marked": "^18.0.9",
+    "sharp": "^0.35.3"
+  }
+}

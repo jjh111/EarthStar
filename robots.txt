@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://earthstar.space/sitemap.xml

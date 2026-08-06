@@ -17,9 +17,29 @@ Earth Star is a regenerative intelligence framework that combines:
 ## The Site
 
 The website at earthstar.space serves as the public face of the project, featuring:
-- Animated parallax hero with layered imagery
-- Interactive butterfly and plant-growing elements
+- Animated parallax hero with layered imagery (cursor, scroll, and device-tilt driven)
+- Interactive butterfly and plant-growing elements, margin-star constellations, and a coherence meter that grows with your garden
+- The Archive — policy documents and the framework spec, with provenance labels
 - The core equation: `Gomens = ∑(waste × love) → TENDING → ∂regenerative_systems/∂time`
+
+### Development
+
+The served site (repo root: `index.html`, `assets/`, `archive/`) is **built output** — edit the
+sources in `src/` instead, then rebuild:
+
+```bash
+npm install
+npm run build      # rebuild HTML/CSS/JS + archive fragments into the repo root
+npm run images     # additionally regenerate responsive AVIF/WebP images (slow)
+```
+
+- `src/index.html`, `src/css/site.css`, `src/js/*.js` — page template, styles, behavior modules
+- `src/archive/manifest.json` — Archive document list + provenance metadata; doc bodies are
+  rendered at build time from their canonical markdown (the WRF bill from
+  `Earth Star Supporting Documentation/`, the framework spec from `skill_extract/`)
+- `Assets/` — original artwork (source of truth for the image pipeline)
+- Built output is committed so GitHub Pages serves the branch root directly — no deploy
+  workflow needed. Commit the rebuilt files alongside source changes.
 
 ## Links
 
