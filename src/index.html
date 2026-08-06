@@ -30,6 +30,7 @@
   <script defer src="assets/js/main.js"></script>
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to content</a>
   <header class="hero">
     <div class="hero-image-frame">
       <div class="hero-images">
@@ -82,6 +83,7 @@
     </div>
   </header>
 
+<main id="main">
 <section id="archive-section">
   <div class="archive-inner">
   <div class="archive-header">
@@ -178,6 +180,7 @@
       </div>
     </section>
   </section>
+</main>
 
 <div class="archive-panel-overlay" id="archivePanelOverlay"></div>
 
@@ -208,7 +211,7 @@
     <footer>
       <div class="footer-garden" id="footerGarden"></div>
       <div class="coherence-meter">
-        <span class="coherence-meter-label" id="coherenceValue">∇𝒞 = 0.00</span>
+        <span class="coherence-meter-label" id="coherenceValue" aria-live="polite">∇𝒞 = 0.00</span>
         <div class="coherence-meter-track" role="meter" aria-label="Garden coherence" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0">
           <div class="coherence-meter-fill" id="coherenceBar"></div>
         </div>

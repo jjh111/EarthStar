@@ -1518,3 +1518,93 @@
 
 /* Keep intrinsic ratios now that imgs carry width/height attributes */
 .logo-hero, .footer-logo, .banner-footer img { height: auto; }
+
+/* ============================================================
+   Design pass: legibility & inclusion
+   Raises the type floor (nothing below ~12px), fixes every AA
+   contrast failure, caps the reading measure, and smooths text
+   rendering — while keeping the candlelit gold-on-basalt palette.
+   Later rules override earlier ones at equal specificity.
+   ============================================================ */
+
+body {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection { background: rgba(200, 150, 12, 0.45); color: #fff8e8; }
+
+h1, h2, h3, h4,
+.archive-card-title, .alignment-card-title { text-wrap: balance; }
+p, li { text-wrap: pretty; }
+
+/* Skip link for keyboard and screen-reader users */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 10005;
+  background: #ffd700;
+  color: #0a0806;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  padding: 12px 20px;
+  border-radius: 0 0 6px 0;
+  text-decoration: none;
+}
+.skip-link:focus { left: 0; }
+
+/* Fluid display type — replaces the stepped media-query sizes */
+h1 { font-size: clamp(2.375rem, 0.5rem + 4.6vw, 4.2rem); }
+
+/* Type floor: former 10–13px labels come up to legible sizes */
+.subtitle { font-size: 0.78em; color: #d4a114; }
+.archive-title { font-size: 0.72em; }
+.links-title { font-size: 0.72em; }
+.alignment-subhead { font-size: 0.75em; }
+.archive-card-desc { font-size: 0.875em; color: #9c8b71; }
+.archive-tag { font-size: 0.72em; color: #b08d55; border-color: rgba(200, 150, 12, 0.3); }
+.archive-search::placeholder { color: #85765e; }
+.archive-crumb { color: #a58c68; }
+.archive-crumb-sep { color: #9a8268; font-size: 0.85em; }
+.archive-footer-dir { color: #9a8268; font-size: 0.78em; }
+.alignment-card-body { font-size: 0.92em; color: #9c8b71; }
+.link-btn-jewel { font-size: 0.72em; }
+.btn-github { font-size: 0.8em; }
+.clear-garden-btn { font-size: 0.78em; padding: 8px 16px; }
+footer { font-size: 0.875em; }
+.footer-equation { color: #96805f; }
+.prov-status { font-size: 0.78em; }
+.prov-meta { font-size: 0.74em; }
+
+/* Reading surface: bounded measure, roomier padding, full-size body text */
+.archive-md { max-width: 64ch; }
+.archive-md p, .archive-md li { font-size: 1em; }
+.archive-panel-body { padding: 34px 32px 44px; }
+.intro { max-width: 58ch; }
+
+@media (max-width: 600px) {
+  .archive-panel-body { padding: 24px 18px 36px; }
+}
+
+/* Comfortable touch targets */
+.archive-nav-btn { width: 38px; height: 38px; }
+.archive-panel-close { padding: 6px 14px; min-width: 38px; min-height: 38px; }
+.emoji-footer { padding: 4px; }
+
+[role="button"]:focus-visible {
+  outline: 2px solid rgba(255, 215, 0, 0.6);
+  outline-offset: 2px;
+}
+
+/* Users who ask for more contrast get lifted mids, same palette */
+@media (prefers-contrast: more) {
+  body, li, .archive-md, .archive-md p, .archive-md li { color: #e8dfd0; }
+  .archive-card-desc, .alignment-card-body { color: #cfc2ad; }
+  .archive-tag { color: #d0ad6a; }
+  .subtitle, .archive-title, .links-title, .alignment-subhead, .prov-status { color: #e3b53a; }
+  .tagline, .footer-tagline, .archive-md blockquote { color: #ded2ba; }
+  .archive-crumb, .archive-footer-dir, .footer-equation, .prov-meta { color: #c0aa88; }
+  footer { color: #cfc2ad; }
+}

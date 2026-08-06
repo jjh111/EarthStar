@@ -205,6 +205,18 @@ export function initArchive() {
     if (e.target.closest('[data-close]')) closePanel();
   });
 
+  // role="button" elements must activate from the keyboard too
+  for (const el of [$('archiveFooterPrev'), $('archiveFooterNext'), $('archiveBreadcrumbs')]) {
+    el.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const btn = e.target.closest('[role="button"]');
+      if (btn) {
+        e.preventDefault();
+        btn.click();
+      }
+    });
+  }
+
   document.addEventListener('keydown', (e) => {
     if (!$('archivePanel').classList.contains('open')) return;
     if (e.key === 'Escape') {
