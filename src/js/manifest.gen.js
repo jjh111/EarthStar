@@ -37,7 +37,7 @@ export const DOCS = [
     "id": "earth-star-skill",
     "title": "Earth Star Framework",
     "category": "FRAMEWORK",
-    "description": "The complete operational specification — Gomens, Earth Stewards, five scales, kincentric worldview, seed equations.",
+    "description": "The complete operational specification — Gomens, Earth Stewards, five scales, kincentric worldview, seed equations, and the v3.0 epistemic-integrity protocols.",
     "tags": [
       "framework",
       "gomens",
@@ -46,7 +46,7 @@ export const DOCS = [
     "provenance": {
       "status": "Framework specification — vision & design document",
       "author": "Earth Star / JHDesign",
-      "date": "2025 · v2.0"
+      "date": "2025–2026 · v3.0"
     }
   }
 ];

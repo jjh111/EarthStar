@@ -4,7 +4,7 @@
   "description": "**Regenerative Intelligence System**",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node test/site.test.mjs",
     "build": "node build.mjs",
     "images": "node build.mjs --images"
   },
@@ -24,6 +24,7 @@
   "devDependencies": {
     "esbuild": "^0.28.1",
     "marked": "^18.0.9",
+    "playwright-core": "^1.62.1",
     "sharp": "^0.35.3"
   }
 }

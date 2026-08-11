@@ -1608,3 +1608,32 @@ footer { font-size: 0.875em; }
   .archive-crumb, .archive-footer-dir, .footer-equation, .prov-meta { color: #c0aa88; }
   footer { color: #cfc2ad; }
 }
+
+/* ===== Archive markdown tables (v3.0 skill carries the claim taxonomy) ===== */
+.archive-md table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 18px 0;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.9em;
+  display: block;
+  overflow-x: auto;
+}
+.archive-md th {
+  text-align: left;
+  font-weight: 600;
+  color: #f0e8d8;
+  padding: 8px 12px;
+  border-bottom: 2px solid rgba(200, 150, 12, 0.35);
+  white-space: nowrap;
+}
+.archive-md td {
+  padding: 8px 12px;
+  color: #c8bfb0;
+  border-bottom: 1px solid rgba(201, 184, 161, 0.12);
+  vertical-align: top;
+}
+.archive-md tr:hover td { background: rgba(200, 150, 12, 0.04); }
+@media print {
+  body.panel-open .archive-md th, body.panel-open .archive-md td { color: #111 !important; }
+}
