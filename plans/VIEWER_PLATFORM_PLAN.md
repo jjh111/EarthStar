@@ -236,7 +236,7 @@ Coordination mechanics:
   web track builds against the documented mock (`/v1/now` example in the contract).
 - **Merge order:** each track pushes to its branch and opens a PR against `main`; the
   Director reviews/merges, skill → web → platform, rebasing as needed.
-- **Briefs** for sessions 2 and 3 are self-contained in `plans/briefs/`.
+- **Briefs** for every track are self-contained in `plans/briefs/` (`PLATFORM_SESSION.md`, `SKILL_SESSION.md`, `WEB_SESSION.md`).
 - **Report-back format** (end of each session): what shipped, what's blocked, contract
   change requests, in the PR body.
 
