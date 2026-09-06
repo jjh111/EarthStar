@@ -90,10 +90,11 @@ You do not need MHD simulations for the MVP. Three tiers cover it:
 | 19 | WSA-Enlil solar-wind forecast (imagery) | SWPC `images/animations/enlil/` | ~6-hourly | Modeled·NOAA | 3 (HUD reference only) |
 | 20 | Earth textures | NASA Blue Marble (day/night), public domain | static | — | 1 |
 
-**CORS reality:** SWPC and Helioviewer are widely used client-side and are believed to send
-`Access-Control-Allow-Origin: *`; DONKI, Horizons, Kyoto, and INTERMAGNET should be assumed
-not to. **Decision: route everything through the data proxy from day one** (§5.2). It also
-gives us caching, upstream-outage resilience, key hiding, and the provenance stamp.
+**CORS reality:** SWPC, Helioviewer, and `api.nasa.gov` are widely used client-side and are
+believed to send `Access-Control-Allow-Origin: *`; the CCMC DONKI mirror, Horizons, Kyoto, and
+INTERMAGNET should be assumed not to. **Decision: stage the data layer** (§5.2) — direct
+browser fetch on GitHub Pages for phases 0–2, a GitHub Actions pipeline for the no-CORS
+sources in phase 4, Cloudflare only if a concrete need appears.
 
 Upstream shape notes (verify): SWPC `products/*` are arrays-of-arrays with a header row
 (`["time_tag","bx_gsm","by_gsm","bz_gsm","lon_gsm","lat_gsm","bt"]`; plasma
@@ -122,17 +123,38 @@ plans/DATA_CONTRACT.md    the interface all three tracks share
 Same convention as the site: source in one folder, built output committed to a servable
 folder; Pages needs no configuration change.
 
-### 5.2 Data proxy (Cloudflare Worker, free tier)
+### 5.2 Hosting & the data layer — staged, GitHub Pages first
 
-`data.earthstar.space/v1/…` — fetches upstream on a cron (every 60 s for 1-min feeds,
-5 min for OVATION, hourly for regions/DONKI), normalizes into the **data contract**, caches
-in KV, serves with CORS and `Cache-Control`. Every response carries
-`{ source, source_url, fetched_at, data_time, latency_s, tier, units, model? }`. Full
-schema in `plans/DATA_CONTRACT.md`. The splash site's teaser widgets consume the same
-endpoints — one source of truth, one provenance stamp.
+**The platform is static** (HTML + JS + WebGL) and hosts on GitHub Pages exactly like the
+splash: `platform/` builds to `bridge/`, committed on `main`, served at
+`earthstar.space/bridge/` with no Pages configuration change (Vite `base: '/bridge/'`).
 
-Fallback for phase 0 before the Worker exists: fetch SWPC directly (CORS permitting) through
-the same client interface, so swapping in the proxy is a base-URL change.
+The only server-side need is the **data layer**, and it is staged so nothing new is
+required until a real reason appears:
+
+| Stage | Mechanism | Covers | Cadence | Infra |
+|-------|-----------|--------|---------|-------|
+| **A · Direct fetch** (phases 0–2) | Browser fetches NOAA SWPC, Helioviewer, and `api.nasa.gov` DONKI (free NASA key in client config — rate-limited, not secret) directly; normalization + provenance stamp computed in the browser by a `DirectSource` adapter implementing the contract interface | solar wind, Kp, X-rays, aurora, regions, scales, alerts, sun imagery, CMEs | native (1-min) | none — pure Pages |
+| **B · Actions pipeline** (phase 4) | `.github/workflows/data.yml` on cron fetches no-CORS sources, normalizes to the contract, commits JSON to an orphan `data` branch; browser reads `raw.githubusercontent.com/jjh111/EarthStar/data/v1/*.json` (CORS `*`, CDN-cached); doubles as a last-good fallback for stage-A feeds | Horizons ephemerides, Kyoto Dst, INTERMAGNET, cached copies of everything | 5–20 min (Actions cron floor + delay) | none — this repo |
+| **C · Cloudflare Worker** (only if needed) | `platform/worker/` deployed with `wrangler`; 1-min cron, KV cache, `data.earthstar.space` | everything, 1-min proxied | 1 min | free CF account + one DNS record |
+
+All three serve the **same contract** (`plans/DATA_CONTRACT.md`); the client selects a
+source adapter by config, so moving up a stage is a base-URL change. Stage A's CORS
+assumptions (SWPC, Helioviewer, api.nasa.gov all believed to send
+`Access-Control-Allow-Origin: *`) are verified as the very first task of phase 0 — if one
+fails, that feed moves to stage B immediately.
+
+Repo hosting map after the platform lands:
+
+```
+main (root) ── GitHub Pages ── earthstar.space/
+  index.html, assets/, archive/   splash   (built from src/)
+  bridge/                         platform (built from platform/)
+data (orphan) ── raw.githubusercontent.com ── stage-B JSON, written by Actions
+platform/worker/ ── optional stage-C Worker, deployed by wrangler
+```
+
+Keep `bridge/` under ~20 MB (Pages: 1 GB site, 100 GB/month bandwidth).
 
 ### 5.3 Scene design (the snow globe)
 
@@ -235,11 +257,11 @@ the contract mock.
 
 ## 9. Risks & Open Questions
 
-- **CORS unverified** for SWPC/Helioviewer from this sandbox → the proxy-first decision
-  removes the dependency; confirm anyway in phase 0.
-- **Worker hosting** needs a Cloudflare account (free) and a DNS record for
-  `data.earthstar.space` — user action. Alternative: Vercel/Netlify edge function; same
-  contract.
+- **CORS unverified** for SWPC/Helioviewer/api.nasa.gov from this sandbox → first task of
+  phase 0; any failure moves that feed to stage B (Actions pipeline).
+- **Data layer staging** — stage A depends on upstream CORS holding; stage B on Actions
+  cron latency being acceptable for slow feeds; stage C (Cloudflare) is deferred until a
+  concrete need (traffic, 1-min proxied cadence). No new accounts required to ship the MVP.
 - **Upstream outages during storms** (SWPC saturates exactly when it matters): KV cache
   serves last-good with honest staleness; no silent gaps.
 - **Scale honesty vs. beauty** — resolved by the two scale modes; default is Globe with
@@ -255,8 +277,8 @@ the contract mock.
 ## 10. Decisions Needed From You
 
 1. **Name & URL** — "The Bridge" at `/bridge/`, or something else.
-2. **Proxy host** — Cloudflare Worker (recommended) vs. another edge; you'd create the
-   account and DNS record.
+2. **Proxy host** — resolved: none for the MVP (stage A direct fetch on Pages); revisit
+   Cloudflare only when a concrete need appears (see §5.2).
 3. **Environment** — a session environment with the network allowlist above (or allow-all)
    for the platform and skill sessions.
 4. **Launch** — I can spawn sessions 2 and 3 from the briefs now, or you start them.

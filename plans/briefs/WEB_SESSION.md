@@ -36,8 +36,9 @@ A new section between the hero and the Archive: the splash's window onto the pla
   `value · unit · HH:MM UTC` and carries the provenance convention from the contract §4
   (`[E]`/`[D]` badge + source on hover/focus; `stale` and `no data` states designed and
   tested — never a fabricated number, never a spinner forever).
-- Base URL configurable in one place (`src/js/config.js`); default to the contract's
-  base; ship with a **mock mode** (a checked-in `src/data/now.mock.json` matching the
+- Base URL configurable in one place (`src/js/config.js`); until the platform's data
+  layer exists the default is **mock mode** — see `plans/DATA_CONTRACT.md` transport
+  note; ship with a **mock mode** (a checked-in `src/data/now.mock.json` matching the
   contract exactly) used when the fetch fails or when `?mock=1` — the tiles must look
   finished before the proxy exists.
 - Reduced motion, keyboard, and AA contrast as everywhere else; tiles are `role="group"`

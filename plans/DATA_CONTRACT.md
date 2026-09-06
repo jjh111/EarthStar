@@ -4,8 +4,11 @@
 live teaser widgets, and the skill track's `heliosphere-data` reference (its human-readable
 twin). **Freeze:** when Bridge phase 0 ships; until then, changes go through the Director.
 
-Base URL: `https://data.earthstar.space/v1/` (Cloudflare Worker). Phase-0 fallback: the
-platform's client fetches upstream directly using the same TypeScript interface.
+Transport is adapter-selected (see platform plan §5.2): **stage A** — the browser fetches
+upstream directly and a `DirectSource` adapter produces this envelope client-side;
+**stage B** — static JSON at `https://raw.githubusercontent.com/jjh111/EarthStar/data/v1/`;
+**stage C** (if ever) — `https://data.earthstar.space/v1/`. Consumers code against the
+envelope and the TypeScript interface in §3, never against a transport.
 
 ## 1. Envelope — every response
 
