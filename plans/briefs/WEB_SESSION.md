@@ -1,10 +1,10 @@
 # Session Brief — Web Presence Track (splash / resources site)
 
-**Repo:** `jjh111/EarthStar` · **Branch:** `claude/site-bridge-teaser` (create from the
+**Repo:** `jjh111/EarthStar` · **Branch:** `claude/site-viewer-teaser` (create from the
 current `claude/website-skill-planning-hnmy8t` head, or from `main` after it merges)
 **You own:** `src/`, `index.html`, `assets/`, `archive/`, `test/`, `build.mjs`,
 `package.json` (site deps only). **Do not edit:** `skill_extract/`, `earth-star.skill`,
-`platform/`, `bridge/`, `plans/*` (propose changes in your PR description).
+`platform/`, `viewer/`, `plans/*` (propose changes in your PR description).
 **Environment:** no external data hosts needed — build against the contract mock. Node 22.
 
 ## Context (read these first)
@@ -16,19 +16,19 @@ current `claude/website-skill-planning-hnmy8t` head, or from `main` after it mer
 - The design pass commit (`git log --grep="Design pass"`): the AA contrast floor, type
   floor (~12 px minimum), 64ch reading measure, skip link, `prefers-contrast`. **Keep all
   of it.** The candlelit gold-on-basalt palette is the brand; nothing goes grey.
-- `plans/BRIDGE_PLATFORM_PLAN.md` — the 3D platform being built in parallel at
-  `/bridge/`. Your job is to *forward* it from the splash without depending on it shipping.
+- `plans/VIEWER_PLATFORM_PLAN.md` — the 3D platform being built in parallel at
+  `/viewer/`. Your job is to *forward* it from the splash without depending on it shipping.
 - `plans/DATA_CONTRACT.md` — the `/v1/now` shape your live widgets consume.
 
 ## Tasks
 
-### 1. "From the Bridge" teaser section
+### 1. "From the Viewer" teaser section
 
 A new section between the hero and the Archive: the splash's window onto the platform.
 
 - Heading in the existing label style; one paragraph in the intro voice explaining
-  that the tree-ship's bridge is where we watch the Sun and the shield; a CTA
-  `Open the Bridge →` linking to `/bridge/` (until the platform ships, the link goes to
+  that the tree-ship's deck is where we watch the Sun and the shield; a CTA
+  `Open the Viewer →` linking to `/viewer/` (until the platform ships, the link goes to
   an in-page "under construction — here is what it will show" note; make the swap a
   one-line change).
 - **Three live instrument tiles** fed by `GET /v1/now`: Kp (0–9 gauge, NOAA G-scale

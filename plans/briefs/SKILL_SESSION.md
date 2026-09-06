@@ -4,9 +4,9 @@
 current `claude/website-skill-planning-hnmy8t` head, or from `main` after it merges)
 **You own:** `skill_extract/`, `earth-star.skill`, `EARTH_STAR_V3_README.md`,
 `build_skill.sh`. **Do not edit:** `src/`, `index.html`, `assets/`, `archive/`, `platform/`,
-`bridge/`, `plans/*` (propose plan changes in your PR description instead).
+`viewer/`, `plans/*` (propose plan changes in your PR description instead).
 **Environment:** you need network access to the data hosts listed in
-`plans/BRIDGE_PLATFORM_PLAN.md` §8 — confirm before starting; if blocked, do tasks 1 and 3
+`plans/VIEWER_PLATFORM_PLAN.md` §8 — confirm before starting; if blocked, do tasks 1 and 3
 first and flag task 2 as blocked in your report.
 
 ## Context (read these first)
@@ -15,7 +15,7 @@ first and flag task 2 as blocked in your report.
   *keep the mythos, fix the epistemics.*
 - `skill_extract/earth-star/SKILL.md` (v3.0) and `references/research_veracity.md` — the
   epistemic registers `[E]/[H]/[D]/[P]/[M]`, the verification loop, attribution rules.
-- `plans/BRIDGE_PLATFORM_PLAN.md` — the 3D space-weather platform being built in parallel;
+- `plans/VIEWER_PLATFORM_PLAN.md` — the 3D space-weather platform being built in parallel;
   its Accuracy Charter (§2) and Data Catalog (§4).
 - `plans/DATA_CONTRACT.md` — the platform's data interface. Your task 2 is its
   human-readable twin.
@@ -43,7 +43,7 @@ include "do not apply" guidance), `SKILL.md` ≤ ~20 KB, `references/` for depth
 
 ### 2. `heliosphere-data` — the verified data catalog (feeds the platform)
 
-For every source in `plans/BRIDGE_PLATFORM_PLAN.md` §4, **fetch it live** and record, in
+For every source in `plans/VIEWER_PLATFORM_PLAN.md` §4, **fetch it live** and record, in
 `references/sources.md`:
 
 - exact endpoint URL, HTTP status, whether `Access-Control-Allow-Origin` is present

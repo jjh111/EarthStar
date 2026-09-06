@@ -1,9 +1,9 @@
-# The Bridge — Earth Star Sky Platform
+# The Viewer — Earth Star Sky Platform
 ## Director's Master Plan (MVP)
 
-**Working name:** *The Bridge* — you are monitoring the situation from the bridge of the
-tree-ship in the hero painting. URL target: `earthstar.space/bridge/`. (Rename freely;
-everything below uses "Bridge" as a placeholder.)
+**Working name:** *The Viewer* — you are monitoring the situation from the deck of the
+tree-ship in the hero painting. URL target: `earthstar.space/viewer/`. (Rename freely;
+everything below uses "Viewer" as the name.)
 
 **Status:** PLAN. No platform code exists yet. This document is the coordination hub for
 three parallel sessions — see §8.
@@ -12,7 +12,7 @@ three parallel sessions — see §8.
 
 ## 1. The Two Mandates
 
-The Bridge is **an instrument and a snow globe at the same time**, and neither is allowed
+The Viewer is **an instrument and a snow globe at the same time**, and neither is allowed
 to compromise the other:
 
 1. **Instrument** — real, current, correctly-labeled data about Earth's magnetic field and
@@ -116,7 +116,7 @@ platform/                 source (Vite + TypeScript + Three.js + postprocessing)
   src/a11y/               reduced motion, keyboard rig, text alternatives
   test/                   model unit tests against reference values (see §7)
   worker/                 Cloudflare Worker: data proxy → data.earthstar.space
-bridge/                   BUILT output, committed, served by Pages at /bridge/
+viewer/                   BUILT output, committed, served by Pages at /viewer/
 plans/DATA_CONTRACT.md    the interface all three tracks share
 ```
 
@@ -126,8 +126,8 @@ folder; Pages needs no configuration change.
 ### 5.2 Hosting & the data layer — staged, GitHub Pages first
 
 **The platform is static** (HTML + JS + WebGL) and hosts on GitHub Pages exactly like the
-splash: `platform/` builds to `bridge/`, committed on `main`, served at
-`earthstar.space/bridge/` with no Pages configuration change (Vite `base: '/bridge/'`).
+splash: `platform/` builds to `viewer/`, committed on `main`, served at
+`earthstar.space/viewer/` with no Pages configuration change (Vite `base: '/viewer/'`).
 
 The only server-side need is the **data layer**, and it is staged so nothing new is
 required until a real reason appears:
@@ -149,17 +149,17 @@ Repo hosting map after the platform lands:
 ```
 main (root) ── GitHub Pages ── earthstar.space/
   index.html, assets/, archive/   splash   (built from src/)
-  bridge/                         platform (built from platform/)
+  viewer/                         platform (built from platform/)
 data (orphan) ── raw.githubusercontent.com ── stage-B JSON, written by Actions
 platform/worker/ ── optional stage-C Worker, deployed by wrangler
 ```
 
-Keep `bridge/` under ~20 MB (Pages: 1 GB site, 100 GB/month bandwidth).
+Keep `viewer/` under ~20 MB (Pages: 1 GB site, 100 GB/month bandwidth).
 
 ### 5.3 Scene design (the snow globe)
 
 - **Glass shell** — a subtle refractive sphere with a rim highlight; the "pedestal" is the
-  tree-ship's balcony rail in the foreground at Bridge view (parallax-anchored, low-poly,
+  tree-ship's balcony rail in the foreground at Deck view (parallax-anchored, low-poly,
   matching the painting's palette). Vignette; time-of-day tint inherited from the site.
 - **Sun** — sphere with a procedural corona (brightness/turbulence from X-ray background
   and F10.7 `[M]`), **active regions placed at their reported heliographic lat/lon** `[E]`,
@@ -174,7 +174,7 @@ Keep `bridge/` under ~20 MB (Pages: 1 GB site, 100 GB/month bandwidth).
   as an emissive polar texture; Moon; L1 marker with DSCOVR label; observatories as
   points (phase 4).
 - **Inner planets** — Mercury, Venus, Mars at true positions `[D]` for orientation.
-- **Camera rig** — *Bridge view* (default, from the ship's rail), *Orbit* (free),
+- **Camera rig** — *Deck view* (default, from the ship's rail), *Orbit* (free),
   *Earth close*, *Sun close*; smooth transitions; keyboard-navigable.
 - **Scale modes** — *Globe* (log-compressed distances, planet sizes exaggerated, labeled)
   and *True* (honest, mostly empty, also beautiful).
@@ -200,7 +200,7 @@ Keep `bridge/` under ~20 MB (Pages: 1 GB site, 100 GB/month bandwidth).
 | **0 · Data spine** | Worker + contract; Vite/Three skeleton; Sun, Earth, Moon, planets at true positions; live solar wind + Kp in HUD; Situation Report v0 | Contract responses validated by schema tests; positions within 0.1° of Horizons for the test epoch; HUD numbers match swpc.noaa.gov dashboard at the same minute |
 | **1 · The shield** | IGRF-14 field lines; Shue/Farris-Russell surfaces driven live; terminator; OVATION aurora texture; X-ray flare class | IGRF output within 1 nT of NCEI calculator at 5 test points; magnetopause standoff matches published values for reference wind states; aurora texture orientation verified vs. SWPC map |
 | **2 · The wind** | Parker spiral; particle stream; CME cones + ETA from DONKI; Helioviewer HUD image; spacecraft markers | CME arrival ring within DONKI's stated window; imagery timestamp shown |
-| **3 · The globe** | Glass shell, bridge rail, bloom/post, time-of-day, ambient audio (off by default), Dream mode | Frame budget holds; reduced-motion verified; Lighthouse a11y 100 |
+| **3 · The globe** | Glass shell, deck rail, bloom/post, time-of-day, ambient audio (off by default), Dream mode | Frame budget holds; reduced-motion verified; Lighthouse a11y 100 |
 | **4 · Memory** | 7-day scrubber, +3-day preview, observatories, Dst | Scrub matches feed history; stale logic proven by replaying an outage |
 
 Phases 0–1 are the MVP. Ship 0 as soon as the numbers are right; the beauty compounds on top.
@@ -224,9 +224,9 @@ contract, integration, and this file.
 
 | Track | Session | Branch | Owns | Consumes |
 |-------|---------|--------|------|----------|
-| **Director / Platform** | this one | `claude/bridge-platform` | `platform/`, `bridge/`, `plans/DATA_CONTRACT.md`, `plans/BRIDGE_PLATFORM_PLAN.md`, merges | `heliosphere-data` reference from the skill track |
+| **Director / Platform** | this one | `claude/viewer-platform` | `platform/`, `viewer/`, `plans/DATA_CONTRACT.md`, `plans/VIEWER_PLATFORM_PLAN.md`, merges | `heliosphere-data` reference from the skill track |
 | **Skill(set)** | session 2 | `claude/skill-v3-1-skillset` | `skill_extract/`, `earth-star.skill`, `EARTH_STAR_V3_README.md`, `build_skill.sh` | `DATA_CONTRACT.md` (to write the data catalog reference) |
-| **Web presence** | session 3 | `claude/site-bridge-teaser` | `src/`, `index.html`, `assets/`, `archive/`, `test/` (the splash site) | `DATA_CONTRACT.md` (for the live teaser widgets) |
+| **Web presence** | session 3 | `claude/site-viewer-teaser` | `src/`, `index.html`, `assets/`, `archive/`, `test/` (the splash site) | `DATA_CONTRACT.md` (for the live teaser widgets) |
 
 Coordination mechanics:
 - **Directory ownership is the conflict-avoidance strategy.** Nobody edits another track's
@@ -276,7 +276,7 @@ the contract mock.
 
 ## 10. Decisions Needed From You
 
-1. **Name & URL** — "The Bridge" at `/bridge/`, or something else.
+1. **Name & URL** — "The Viewer" at `/viewer/`, or something else.
 2. **Proxy host** — resolved: none for the MVP (stage A direct fetch on Pages); revisit
    Cloudflare only when a concrete need appears (see §5.2).
 3. **Environment** — a session environment with the network allowlist above (or allow-all)

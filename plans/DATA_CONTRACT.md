@@ -1,8 +1,8 @@
 # Earth Star Data Contract — v1 (DRAFT)
 
-**Owner:** Director / platform track. **Consumers:** the Bridge platform, the splash site's
+**Owner:** Director / platform track. **Consumers:** the Viewer platform, the splash site's
 live teaser widgets, and the skill track's `heliosphere-data` reference (its human-readable
-twin). **Freeze:** when Bridge phase 0 ships; until then, changes go through the Director.
+twin). **Freeze:** when Viewer phase 0 ships; until then, changes go through the Director.
 
 Transport is adapter-selected (see platform plan §5.2): **stage A** — the browser fetches
 upstream directly and a `DirectSource` adapter produces this envelope client-side;
