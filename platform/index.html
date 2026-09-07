@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%2713%27 fill=%27%230b1f33%27/%3E%3Cpath d=%27M16 3a13 13 0 0 0 0 26z%27 fill=%27%237fd4c1%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%2713%27 fill=%27none%27 stroke=%27%237fd4c1%27 stroke-width=%272%27/%3E%3C/svg%3E" />
+  <title>The Viewer — Earth Star</title>
+  <meta name="description" content="Live 3D view of Earth's space-weather environment: solar wind, geomagnetic field, aurora and solar imagery from NOAA SWPC, every value carrying its source, timestamp and evidence tier." />
+  <link rel="preconnect" href="https://services.swpc.noaa.gov" crossorigin />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <a class="skip-link" href="#margin-body">Skip to the Situation Report</a>
+  <canvas id="scene" aria-hidden="true"></canvas>
+
+  <div class="shell">
+    <header class="top">
+      <h1 class="brand">The Viewer</h1>
+      <p class="clock" id="clock" role="status"></p>
+      <nav class="controls" aria-label="View and layer controls">
+        <span class="ctl-group" role="group" aria-label="Camera">
+          <button class="ctl" id="view-deck" aria-pressed="true">Deck</button>
+          <button class="ctl" id="view-shield" aria-pressed="false">Magnetosphere</button>
+          <button class="ctl" id="view-orbit" aria-pressed="false">Orbit</button>
+        </span>
+        <span class="ctl-group" role="group" aria-label="Layers">
+          <button class="ctl" id="shield-toggle" aria-pressed="true">Field</button>
+          <button class="ctl" id="aurora-toggle" aria-pressed="true">Aurora</button>
+          <button class="ctl" id="wind-toggle" aria-pressed="true">Wind</button>
+        </span>
+        <span class="ctl-group" role="group" aria-label="Display">
+          <button class="ctl" id="scale-toggle" aria-pressed="false"><span id="scale-label">Globe</span></button>
+          <button class="ctl" id="motion-toggle" aria-pressed="false">Motion</button>
+        </span>
+      </nav>
+    </header>
+
+    <main class="stage">
+      <div id="instruments" class="instruments"></div>
+      <div id="ticker" class="ticker"></div>
+    </main>
+
+    <aside class="margin" aria-label="Detail panel">
+      <nav class="tabs" id="tabs" role="tablist" aria-label="Detail sections"></nav>
+      <div class="margin-body" id="margin-body" tabindex="-1"></div>
+      <p class="status" id="status" role="status"></p>
+    </aside>
+  </div>
+
+  <p class="sr-only" id="announce" role="status" aria-live="polite"></p>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
