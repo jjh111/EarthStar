@@ -22,6 +22,9 @@ import { l1DistanceToScene, type ScaleMode } from './scales.js';
 const ACTIVE = new Color(0.62, 0.94, 1.0);
 const INACTIVE = new Color(0.52, 0.56, 0.64);
 
+/** Reused so the per-frame marker sizing allocates nothing. */
+const SCRATCH = new Vector3();
+
 interface Craft {
   group: Group;
   marker: Mesh;
@@ -96,6 +99,7 @@ export class SpacecraftMarkers {
     list: SpacecraftPos[],
     basis: { x: Vector3; y: Vector3; z: Vector3 },
     mode: ScaleMode,
+    cameraPos?: Vector3,
   ): void {
     if (list.length === 0) { this.group.visible = false; return; }
 
@@ -110,7 +114,9 @@ export class SpacecraftMarkers {
     this.axis.position.set(0, 0, 0);
     this.axis.quaternion.setFromUnitVectors(new Vector3(1, 0, 0), basis.x);
 
-    if (key === this.stamp) return;
+    // Positions change hourly and are rebuilt on the stamp, but the marker
+    // sizes follow the camera and must be recomputed every frame.
+    const positionsChanged = key !== this.stamp;
     this.stamp = key;
 
     for (let i = 0; i < list.length; i++) {
@@ -118,25 +124,35 @@ export class SpacecraftMarkers {
       const c = this.craft[i];
       if (!c) continue;
 
-      // Direction is exact in both modes; only the radius is compressed.
-      const dir = gseToScene(s.gse, basis).normalize();
-      const r = l1DistanceToScene(s.distanceRe, mode) * this.scale;
-      const pos = dir.multiplyScalar(r);
-      c.group.position.copy(pos);
-      // Markers are glyphs, not bodies: a fixed fraction of Earth's radius so
-      // they stay findable at every scale. Never mistakable for a spacecraft
-      // drawn to size — at true scale a spacecraft is a millionth of a pixel.
-      c.marker.scale.setScalar(this.scale * 0.26);
+      if (positionsChanged) {
+        // Direction is exact in both modes; only the radius is compressed.
+        const dir = gseToScene(s.gse, basis).normalize();
+        const r = l1DistanceToScene(s.distanceRe, mode) * this.scale;
+        const pos = dir.multiplyScalar(r);
+        c.group.position.copy(pos);
 
-      // Foot of the perpendicular onto the Sun–Earth axis.
-      const along = basis.x.clone().multiplyScalar(pos.dot(basis.x));
-      const local = along.sub(pos);
-      c.drop.geometry.dispose();
-      const g = new BufferGeometry();
-      g.setAttribute('position', new Float32BufferAttribute(
-        [0, 0, 0, local.x, local.y, local.z], 3,
-      ));
-      c.drop.geometry = g;
+        // Foot of the perpendicular onto the Sun–Earth axis.
+        const along = basis.x.clone().multiplyScalar(pos.dot(basis.x));
+        const local = along.sub(pos);
+        c.drop.geometry.dispose();
+        const g = new BufferGeometry();
+        g.setAttribute('position', new Float32BufferAttribute(
+          [0, 0, 0, local.x, local.y, local.z], 3,
+        ));
+        c.drop.geometry = g;
+      }
+
+      // Markers are glyphs, not bodies — at true scale a spacecraft is a
+      // millionth of a pixel — so they take a constant *screen* size rather
+      // than a constant world size. Looking down the Sun–Earth line the camera
+      // passes within a few Earth radii of them, and a world-sized glyph fills
+      // the frame with three diamonds and hides the thing they annotate. Sized
+      // every frame, because it follows the camera rather than the data.
+      const world = c.group.getWorldPosition(SCRATCH);
+      const size = cameraPos
+        ? cameraPos.distanceTo(world) * 0.011
+        : this.scale * 0.26;
+      c.marker.scale.setScalar(size);
     }
   }
 

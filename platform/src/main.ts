@@ -20,7 +20,7 @@ import { fetchSolarCycle } from './data/solar-cycle.js';
 import { bodyFacts, distanceText, lightTimeText } from './hud/body-facts.js';
 import { LOOPS, fetchLoop, preloadLoop, type ImageLoop } from './data/solar-imagery.js';
 import { scaleLabel, type ScaleMode } from './scene/scales.js';
-import type { ViewName } from './scene/camera-rig.js';
+import { VIEWS, type ViewName } from './scene/camera-rig.js';
 
 const canvas = document.getElementById('scene') as HTMLCanvasElement;
 const viewer = new Viewer(canvas);
@@ -142,16 +142,32 @@ const hud = new Hud({
 /* ---------------- controls ---------------- */
 
 const btn = (id: string) => document.getElementById(id) as HTMLButtonElement;
-const btnDeck = btn('view-deck');
-const btnShieldView = btn('view-shield');
-const btnOrbit = btn('view-orbit');
-const btnScale = btn('scale-toggle');
+const btnScaleGlobe = btn('scale-globe');
+const btnScaleTrue = btn('scale-true');
 const btnMotion = btn('motion-toggle');
 const btnShield = btn('shield-toggle');
 const btnAurora = btn('aurora-toggle');
 const btnWind = btn('wind-toggle');
 const btnCme = btn('cme-toggle');
-const scaleLabelEl = document.getElementById('scale-label') as HTMLElement;
+
+/**
+ * The view buttons are generated from the same list the camera reads, so a
+ * vantage point cannot exist in one and not the other.
+ */
+const viewGroup = document.getElementById('view-group') as HTMLElement;
+const viewButtons = new Map<ViewName, HTMLButtonElement>();
+for (const v of VIEWS) {
+  const b = document.createElement('button');
+  b.className = 'ctl';
+  b.type = 'button';
+  b.id = `view-${v.id}`;
+  b.textContent = v.label;
+  b.title = v.title;
+  b.setAttribute('aria-pressed', String(v.id === 'deck'));
+  b.addEventListener('click', () => setView(v.id));
+  viewGroup.append(b);
+  viewButtons.set(v.id, b);
+}
 
 let view: ViewName = 'deck';
 
@@ -168,19 +184,24 @@ function syncNarration(): void {
 function setView(v: ViewName): void {
   view = v;
   viewer.setView(v);
-  btnDeck.setAttribute('aria-pressed', String(v === 'deck'));
-  btnShieldView.setAttribute('aria-pressed', String(v === 'shield'));
-  btnOrbit.setAttribute('aria-pressed', String(v === 'orbit'));
-  announce(`${v === 'deck' ? 'Deck' : v === 'shield' ? 'Magnetosphere' : 'Orbit'} view.`);
-  if (v === 'shield' && !viewer.shieldOn) setShield(true);
+  for (const [id, b] of viewButtons) b.setAttribute('aria-pressed', String(id === v));
+  const spec = VIEWS.find((x) => x.id === v);
+  announce(`${spec?.label ?? v} view — ${spec?.title ?? ''}`);
+  // Three of the five views exist to show the shield; turning it on for them
+  // beats presenting an empty frame and leaving the reader to find the switch.
+  if ((v === 'profile' || v === 'sunward') && !viewer.shieldOn) {
+    setShield(true);
+  }
+  // The polar view exists to show the oval; arriving to a bare globe would be
+  // an odd way to present it.
+  if (v === 'polar' && !viewer.auroraOn) setAurora(true);
   syncNarration();
 }
 
 function setScale(mode: ScaleMode): void {
   viewer.setScaleMode(mode);
-  scaleLabelEl.textContent = mode === 'globe' ? 'Globe' : 'True';
-  btnScale.setAttribute('aria-pressed', String(mode === 'true'));
-  btnScale.title = scaleLabel(mode);
+  btnScaleGlobe.setAttribute('aria-pressed', String(mode === 'globe'));
+  btnScaleTrue.setAttribute('aria-pressed', String(mode === 'true'));
   announce(scaleLabel(mode));
   syncNarration();
 }
@@ -206,10 +227,8 @@ function setWind(on: boolean): void {
   syncNarration();
 }
 
-btnDeck.addEventListener('click', () => setView('deck'));
-btnShieldView.addEventListener('click', () => setView('shield'));
-btnOrbit.addEventListener('click', () => setView('orbit'));
-btnScale.addEventListener('click', () => setScale(viewer.scaleMode === 'globe' ? 'true' : 'globe'));
+btnScaleGlobe.addEventListener('click', () => setScale('globe'));
+btnScaleTrue.addEventListener('click', () => setScale('true'));
 btnShield.addEventListener('click', () => setShield(!viewer.shieldOn));
 btnAurora.addEventListener('click', () => setAurora(!viewer.auroraOn));
 btnWind.addEventListener('click', () => setWind(!viewer.windOn));
@@ -230,9 +249,7 @@ motion.subscribe((reduced) => {
 });
 
 installKeyboard({
-  deck: () => setView('deck'),
-  shieldView: () => setView('shield'),
-  orbit: () => setView('orbit'),
+  view: (i) => { const v = VIEWS[i]; if (v) setView(v.id); },
   toggleScale: () => setScale(viewer.scaleMode === 'globe' ? 'true' : 'globe'),
   toggleMotion: () => motion.setOverride(!motion.reduced),
   toggleShield: () => setShield(!viewer.shieldOn),
@@ -275,7 +292,9 @@ viewer.onHover = (p) => {
   }
   const facts = bodyFacts(p.id as never, new Date());
   // Earth has no distance-from-Earth to quote, so it says where it is instead.
-  const line = p.kind === 'spacecraft'
+  const line = p.kind === 'sun'
+    ? 'Sun · open the Sun panel'
+    : p.kind === 'spacecraft'
     ? `${p.label} · L1 monitor`
     : facts.auFromEarth !== null
       ? `${p.label} · ${distanceText(facts.auFromEarth)} · light ${lightTimeText(facts.lightSeconds)}`
@@ -289,7 +308,11 @@ viewer.onHover = (p) => {
 };
 
 viewer.onSelect = (p) => {
-  if (p.kind === 'spacecraft') hud.selectTab('sources');
+  // The Sun has a whole panel of its own — live imagery in six passbands, the
+  // region list, and 278 years of cycle history. Sending a click there beats
+  // sending it to a distance table.
+  if (p.kind === 'sun') hud.selectTab('sun');
+  else if (p.kind === 'spacecraft') hud.selectTab('sources');
   else hud.showBody(p.id);
 };
 

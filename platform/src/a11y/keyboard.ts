@@ -4,9 +4,8 @@
  */
 
 export interface KeyActions {
-  deck(): void;
-  shieldView(): void;
-  orbit(): void;
+  /** Number keys 1..5 select a view, in the order they appear in the header. */
+  view(index: number): void;
   toggleScale(): void;
   toggleMotion(): void;
   toggleShield(): void;
@@ -18,7 +17,7 @@ export interface KeyActions {
 }
 
 const HELP: [string, string][] = [
-  ['1', 'Deck view'], ['2', 'Magnetosphere view'], ['3', 'Orbit view'],
+  ['1–5', 'Deck, Sunward, Profile, Overhead, System views'],
   ['s', 'Toggle Globe / True scale'],
   ['m', 'Toggle reduced motion'], ['f', 'Toggle the magnetic shield'],
   ['a', 'Toggle the aurora overlay'], ['w', 'Toggle the solar wind stream'], ['c', 'Toggle CME cones'],
@@ -33,9 +32,8 @@ export function installKeyboard(actions: KeyActions): () => void {
     if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
 
     switch (e.key) {
-      case '1': actions.deck(); break;
-      case '2': actions.shieldView(); break;
-      case '3': actions.orbit(); break;
+      case '1': case '2': case '3': case '4': case '5':
+        actions.view(Number(e.key) - 1); break;
       case 's': case 'S': actions.toggleScale(); break;
       case 'm': case 'M': actions.toggleMotion(); break;
       case 'f': case 'F': actions.toggleShield(); break;
@@ -52,7 +50,13 @@ export function installKeyboard(actions: KeyActions): () => void {
   return () => window.removeEventListener('keydown', onKey);
 }
 
+/**
+ * Speak to assistive technology. The live region is `#announce`; this looked
+ * for `#scale-announce`, a name from an earlier draft, so every announcement
+ * the app has ever made went nowhere — silently, because a missing element is
+ * indistinguishable from a screen reader that simply did not read it.
+ */
 export function announce(msg: string): void {
-  const el = document.getElementById('scale-announce');
+  const el = document.getElementById('announce');
   if (el) el.textContent = msg;
 }

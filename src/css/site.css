@@ -183,6 +183,51 @@
       backface-visibility: hidden;
     }
     .hero-images img:first-child { position: absolute; }
+    /* The door to The Viewer, sitting on the artwork.
+       It is a bounded chip rather than a link over the whole image stack. A
+       full-bleed anchor was tried first and the site's own suite caught what it
+       cost: the garden treats anything inside an <a> as interactive and refuses
+       to plant there, so covering the hero disabled click-to-plant across the
+       entire first screen. A door is enough; the wall need not also be one. */
+    .hero-link {
+      position: absolute;
+      right: 22px;
+      top: 22px;
+      z-index: 6;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5em;
+      font-family: 'DM Sans', system-ui, sans-serif;
+      font-size: 0.82rem;
+      letter-spacing: 0.05em;
+      text-decoration: none;
+      color: rgba(240, 230, 208, 0.88);
+      background: rgba(10, 8, 6, 0.5);
+      border: 1px solid rgba(255, 215, 0, 0.4);
+      border-radius: 999px;
+      padding: 9px 17px;
+      backdrop-filter: blur(7px);
+      -webkit-backdrop-filter: blur(7px);
+      transition: color 0.2s, border-color 0.2s, background 0.2s;
+      white-space: nowrap;
+    }
+    .hero-link em {
+      font-style: normal;
+      color: rgba(240, 230, 208, 0.55);
+      text-transform: uppercase;
+      font-size: 0.82em;
+      letter-spacing: 0.1em;
+    }
+    .hero-link:hover, .hero-link:focus-visible {
+      color: #ffd700;
+      border-color: rgba(255, 215, 0, 0.95);
+      background: rgba(10, 8, 6, 0.78);
+    }
+    .hero-link:hover em, .hero-link:focus-visible em { color: rgba(255, 215, 0, 0.72); }
+    .hero-link-arrow { display: inline-block; transition: transform 0.2s; }
+    .hero-link:hover .hero-link-arrow { transform: translate(2px, -2px); }
+    .hero-link:focus-visible { outline: 2px solid #ffd700; outline-offset: 3px; }
+
     .logo-hero {
       position: absolute;
       top: 20px;
@@ -1503,6 +1548,22 @@
   line-height: 1.9;
 }
 .equation-live { color: #ffd700; }
+
+/* The one thing on this page that is live rather than written. */
+.viewer-cta {
+  display: inline-flex; align-items: center; gap: 0.45em;
+  margin-top: 1.1em;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 0.95rem; letter-spacing: 0.04em;
+  color: #ffd700; text-decoration: none;
+  border: 1px solid rgba(255, 215, 0, 0.45);
+  border-radius: 999px; padding: 0.55em 1.15em;
+  transition: background 0.2s, border-color 0.2s;
+}
+.viewer-cta:hover, .viewer-cta:focus-visible {
+  background: rgba(255, 215, 0, 0.12);
+  border-color: rgba(255, 215, 0, 0.85);
+}
 
 .visually-hidden {
   position: absolute;

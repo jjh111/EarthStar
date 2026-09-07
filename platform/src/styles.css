@@ -24,9 +24,16 @@
   --mono: 'Courier New', ui-monospace, monospace;
   --sans: 'DM Sans', system-ui, -apple-system, sans-serif;
   --serif: 'Cormorant Garamond', Georgia, serif;
-  --margin-w: clamp(290px, 25vw, 400px);
-  --header-h: 44px;
+  /* Widened with the type: the column holds prose, and its measure has to
+     keep pace or the same words wrap into more lines than they used to. */
+  --margin-w: clamp(320px, 27vw, 440px);
+  --header-h: 52px;
 }
+
+/* Type runs 10% larger than the browser default. Everything below is in rem,
+   so this is the single lever; the two px-based tokens above were moved with
+   it by hand rather than being left behind. */
+html { font-size: 110%; }
 
 * { box-sizing: border-box; }
 
@@ -59,36 +66,62 @@ html, body {
   height: 100vh;
   display: grid;
   grid-template-columns: 1fr var(--margin-w);
-  grid-template-rows: var(--header-h) 1fr;
+  /* The header row is a minimum, not a fixed height. The controls wrap on a
+     narrow viewport, and a fixed row would clip them — which is the same
+     failure the alerts ticker had. */
+  grid-template-rows: minmax(var(--header-h), auto) 1fr;
   pointer-events: none;
 }
 .shell > * { pointer-events: auto; }
 
-/* ---------- header ---------- */
+/* ---------- header ----------
+   One row carrying identity, every control, and the mark. The identity block
+   stacks title over clock so it uses the row's height instead of its width,
+   which is what leaves room for the controls to be grouped and labelled rather
+   than run together as one undifferentiated strip. */
 header.top {
   grid-column: 1 / -1;
-  display: flex; align-items: center; gap: 0.9rem;
-  padding: 0 0.8rem;
+  display: flex; align-items: center; gap: 0.8rem;
+  padding: 0.3rem 0.7rem;
+  min-height: var(--header-h);
   border-bottom: 1px solid var(--line);
   background: linear-gradient(180deg, rgba(5,7,13,0.95), rgba(5,7,13,0.72));
   backdrop-filter: var(--glass);
   -webkit-backdrop-filter: var(--glass);
 }
+.ident { display: flex; flex-direction: column; justify-content: center; gap: 1px; }
 .brand {
-  font-family: var(--serif); font-size: 1.2rem; font-weight: 600;
-  margin: 0; letter-spacing: 0.01em; white-space: nowrap;
+  font-family: var(--serif); font-size: 1.18rem; font-weight: 600;
+  margin: 0; letter-spacing: 0.01em; white-space: nowrap; line-height: 1.05;
 }
 .clock {
-  margin: 0; font-family: var(--mono); font-size: 0.68rem; color: var(--ink-faint);
-  white-space: nowrap; letter-spacing: 0.02em;
+  margin: 0; font-family: var(--mono); font-size: 0.6rem; color: var(--ink-faint);
+  white-space: nowrap; letter-spacing: 0.02em; line-height: 1;
 }
-.controls { display: flex; gap: 0.5rem; margin-left: auto; flex-wrap: wrap; }
+
+.controls {
+  display: flex; gap: 0.75rem; margin-left: auto; align-items: center;
+  flex-wrap: wrap; justify-content: flex-end;
+}
+/* A cluster is a legend plus its buttons: the legend says what the group is
+   for, which is what three adjacent unlabelled strips could not. */
+.ctl-set { display: flex; align-items: center; gap: 0.34rem; }
+.ctl-legend {
+  font-family: var(--sans); font-size: 0.53rem; letter-spacing: 0.13em;
+  text-transform: uppercase; color: var(--ink-faint); white-space: nowrap;
+}
 .ctl-group { display: flex; gap: 2px; }
 
+/* The Earth Star mark, linking back to the site this is part of. */
+.mark { display: flex; align-items: center; flex: none; opacity: 0.82; }
+.mark:hover, .mark:focus-visible { opacity: 1; }
+.mark img { height: 26px; width: auto; display: block; }
+
 .ctl {
-  font-family: var(--sans); font-size: 0.72rem; line-height: 1;
+  font-family: var(--sans); font-size: 0.68rem; line-height: 1;
   background: var(--bg-panel); color: var(--ink-dim);
-  border: 1px solid var(--line); padding: 0.34rem 0.6rem; cursor: pointer;
+  border: 1px solid var(--line); padding: 0.32rem 0.52rem; cursor: pointer;
+  white-space: nowrap;
   transition: color 0.12s, background 0.12s, border-color 0.12s;
 }
 .ctl-group .ctl:first-child { border-radius: 4px 0 0 4px; }
