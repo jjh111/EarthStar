@@ -27,10 +27,31 @@ const BODIES = {
   Venus: Astronomy.Body.Venus,
   Earth: Astronomy.Body.Earth,
   Mars: Astronomy.Body.Mars,
+  Jupiter: Astronomy.Body.Jupiter,
+  Saturn: Astronomy.Body.Saturn,
+  Uranus: Astronomy.Body.Uranus,
+  Neptune: Astronomy.Body.Neptune,
 } as const;
 
 export type PlanetName = keyof typeof BODIES;
-export const PLANETS: PlanetName[] = ['Mercury', 'Venus', 'Earth', 'Mars'];
+export const PLANETS: PlanetName[] = [
+  'Mercury', 'Venus', 'Earth', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune',
+];
+
+/** The four that matter for space weather; the rest are context. */
+export const INNER_PLANETS: PlanetName[] = ['Mercury', 'Venus', 'Earth', 'Mars'];
+
+/**
+ * A planet's north pole as a unit vector in the scene frame, from the IAU
+ * WGCCRE rotational elements. Used to lay Saturn's rings in its own equatorial
+ * plane rather than in the ecliptic, which is where the 26.7° tilt comes from.
+ */
+export function planetNorth(name: PlanetName, date: Date): Vector3 {
+  const time = Astronomy.MakeTime(date);
+  const axis = Astronomy.RotationAxis(BODIES[name], time);
+  const eqd = Astronomy.RotateVector(Astronomy.Rotation_EQJ_EQD(time), axis.north);
+  return toScene(eqd).normalize();
+}
 
 /** Rotate a J2000-equatorial vector into the equator-of-date frame. */
 function toEQD(v: Astronomy.Vector): Astronomy.Vector {

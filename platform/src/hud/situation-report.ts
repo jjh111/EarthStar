@@ -287,7 +287,7 @@ export function buildSituationReport(
   /* --- The scene itself ------------------------------------------------ */
   const ss = subsolarPoint(now);
   lines.push(
-    `Scene: the Sun at centre, with Mercury, Venus, Earth and Mars at their true ` +
+    `Scene: the Sun at centre, with all eight planets at their true ` +
     `positions for ${at}, computed locally with astronomy-engine [D]. ` +
     `The Sun is currently overhead at ${cardinal(ss.lat, ss.lon)}, and Earth's day/night ` +
     `terminator in the scene is drawn from that point [D]. The Moon is shown at its ` +

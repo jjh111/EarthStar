@@ -17,7 +17,7 @@ import {
 } from './format.js';
 import { INSTRUMENTS } from './instruments.js';
 import {
-  TABS, escapeHtml, renderChecks, renderDetail, renderForecast, renderReport,
+  BODY_PREFIX, TABS, escapeHtml, renderChecks, renderDetail, renderForecast, renderReport,
   renderSources, renderSun, type SunState, type TabId,
 } from './margin.js';
 import type { SceneNarration } from './situation-report.js';
@@ -214,6 +214,9 @@ export class Hud {
     }
     this.renderMargin();
   }
+
+  /** Open a body's detail from a click in the scene. */
+  showBody(name: string): void { this.openDetail(BODY_PREFIX + name); }
 
   private openDetail(id: string): void {
     this.tab = 'detail';

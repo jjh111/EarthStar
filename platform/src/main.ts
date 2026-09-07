@@ -17,6 +17,7 @@ import { announce, installKeyboard } from './a11y/keyboard.js';
 import { runChecks, type CheckResult } from './data/checks.js';
 import { fetchForecast, type ForecastBundle } from './data/forecast.js';
 import { fetchSolarCycle } from './data/solar-cycle.js';
+import { bodyFacts, distanceText, lightTimeText } from './hud/body-facts.js';
 import { LOOPS, fetchLoop, preloadLoop, type ImageLoop } from './data/solar-imagery.js';
 import { scaleLabel, type ScaleMode } from './scene/scales.js';
 import type { ViewName } from './scene/camera-rig.js';
@@ -260,6 +261,37 @@ setWind(true);
 viewer.start();
 store.start();
 void selectLoop(LOOPS[0]!.id);
+
+/* ---------------- picking ---------------- */
+
+const tipEl = document.getElementById('tip') as HTMLElement;
+let tipKey = '';
+
+viewer.onHover = (p) => {
+  if (!p) {
+    tipEl.hidden = true;
+    tipKey = '';
+    return;
+  }
+  const facts = bodyFacts(p.id as never, new Date());
+  // Earth has no distance-from-Earth to quote, so it says where it is instead.
+  const line = p.kind === 'spacecraft'
+    ? `${p.label} · L1 monitor`
+    : facts.auFromEarth !== null
+      ? `${p.label} · ${distanceText(facts.auFromEarth)} · light ${lightTimeText(facts.lightSeconds)}`
+      : facts.auFromSun !== null
+        ? `${p.label} · ${distanceText(facts.auFromSun)} from the Sun`
+        : p.label;
+  // Only touch the text when it changes; the position moves every pointer event.
+  if (line !== tipKey) { tipEl.textContent = line; tipKey = line; }
+  tipEl.hidden = false;
+  tipEl.style.transform = `translate(${p.screen.x + 14}px, ${p.screen.y + 14}px)`;
+};
+
+viewer.onSelect = (p) => {
+  if (p.kind === 'spacecraft') hud.selectTab('sources');
+  else hud.showBody(p.id);
+};
 
 // The render scale adapts on its own; sample it at 1 Hz so the HUD can say so.
 // Reading it per frame would put a DOM write in the animation loop to report on

@@ -23,6 +23,8 @@ import { stripProductHeader } from '../data/forecast.js';
 import type { SolarCycle } from '../data/solar-cycle.js';
 import { tail } from '../data/solar-cycle.js';
 import { INSTRUMENTS } from './instruments.js';
+import { bodyFacts, distanceText, lightTimeText } from './body-facts.js';
+import type { BodyName } from '../scene/scales.js';
 import { buildSituationReport, type SceneNarration } from './situation-report.js';
 
 export type TabId = 'report' | 'forecast' | 'sun' | 'sources' | 'checks' | 'detail';
@@ -527,9 +529,35 @@ function detailSpark(inst: { id: string; series?: string; unit: string }, state:
   );
 }
 
+/** Bodies are addressed as `body:Jupiter` so one detail slot serves both. */
+export const BODY_PREFIX = 'body:';
+
+export function renderBody(name: string, now: Date): string {
+  const f = bodyFacts(name as BodyName, now);
+  const row = (k: string, v: string) => `<tr><td>${k}</td><td class="num">${v}</td></tr>`;
+  return `
+    <h2>${escapeHtml(f.name)}</h2>
+    <table class="prov"><tbody>
+      ${f.auFromSun !== null ? row('From the Sun', distanceText(f.auFromSun)) : ''}
+      ${f.auFromEarth !== null ? row('From Earth', distanceText(f.auFromEarth)) : ''}
+      ${f.lightSeconds !== null
+        ? row('Light travel time', lightTimeText(f.lightSeconds)) : ''}
+      ${row('Radius', `${f.radiusKm.toLocaleString('en-US')} km`)}
+      ${f.arcsecFromEarth !== null
+        ? row('Apparent diameter', `${f.arcsecFromEarth.toFixed(1)}″`) : ''}
+    </tbody></table>
+    <p class="tile-meta"><span class="badge badge-d">D</span> Positions and distances from
+    astronomy-engine at ${hhmmUTC(now.toISOString())} UTC — computed, not tabulated, so they
+    move with the scene.</p>
+    ${f.note ? `<p>${escapeHtml(f.note)}</p>` : ''}
+    <p class="fine">Rendered size and orbital distance are both compressed at Globe scale;
+    the True scale toggle removes the compression and the label says which is in force.</p>`;
+}
+
 export function renderDetail(
   id: string, state: StoreState, now: Date,
 ): string {
+  if (id.startsWith(BODY_PREFIX)) return renderBody(id.slice(BODY_PREFIX.length), now);
   const inst = INSTRUMENTS.find((i) => i.id === id);
   if (!inst) return '<p>Unknown instrument.</p>';
   const env: NowEnvelope | null = state.now;

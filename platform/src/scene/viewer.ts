@@ -28,6 +28,7 @@ import { CmeCones } from './cmes.js';
 import type { SpacecraftPos } from '../data/ephemerides.js';
 import { SpacecraftMarkers } from './spacecraft.js';
 import { calibrateDisk } from './disk-calibration.js';
+import { pickAt, type Candidate, type Pick } from './picking.js';
 import { activeCmes, type Cme } from '../data/cme.js';
 import type { ActiveRegion } from '../data/swpc.js';
 import { magnetopause } from '../models/shue1998.js';
@@ -195,6 +196,11 @@ export class Viewer {
   private readonly spacecraft = new SpacecraftMarkers();
   private spacecraftPos: SpacecraftPos[] = [];
   private sunImageUrl: string | null = null;
+  /** Rebuilt each frame; picking needs current positions, not last second's. */
+  private candidates: Candidate[] = [];
+  private hovered: Pick | null = null;
+  onHover: ((p: Pick | null) => void) | null = null;
+  onSelect: ((p: Pick) => void) | null = null;
   private shieldVisible = true;
   private windVisible = true;
   private sunDirEarthFixed = new Vector3(1, 0, 0);
@@ -275,6 +281,9 @@ export class Viewer {
 
     this.resize();
     window.addEventListener('resize', this.resize);
+    canvas.addEventListener('pointermove', this.onPointerMove);
+    canvas.addEventListener('pointerleave', this.onPointerLeave);
+    canvas.addEventListener('click', this.onClick);
   }
 
   setNow(now: Now | null): void { this.now = now; }
@@ -483,6 +492,28 @@ export class Viewer {
     // Earth's direction from the Sun anchors Stonyhurst longitude 0.
     this.cmeCones.update(activeCmes(this.cmes, date), date, this.mode, earthPos);
 
+    // Picking works off screen-space proximity, so it needs the positions this
+    // frame actually drew rather than a recomputed estimate.
+    this.candidates = [
+      { kind: 'sun', id: 'Sun', label: 'Sun',
+        position: this.sun.group.position.clone(), radius: radiusToScene('Sun', this.mode) },
+      { kind: 'moon', id: 'Moon', label: 'Moon',
+        position: this.moon.mesh.position.clone(), radius: radiusToScene('Moon', this.mode) },
+      ...[...this.planets].map(([name, p]) => ({
+        kind: 'planet' as const, id: name, label: name,
+        position: p.group.position.clone(), radius: radiusToScene(name, this.mode),
+      })),
+      ...this.spacecraft.group.children
+        .filter((c) => c.name.startsWith('l1-') && c.name !== 'sun-earth-line')
+        .map((c) => ({
+          kind: 'spacecraft' as const,
+          id: c.name.slice(3),
+          label: c.name.slice(3),
+          position: c.getWorldPosition(new Vector3()),
+          radius: 0,
+        })),
+    ];
+
     this.rig.followTarget(earthPos);
     this.rig.update();
     const updateDone = performance.now();
@@ -541,6 +572,37 @@ export class Viewer {
     this.updateTimes.length = 0;
   }
 
+  private pointerPick(e: PointerEvent | MouseEvent): Pick | null {
+    const r = this.canvas.getBoundingClientRect();
+    return pickAt(
+      { x: e.clientX - r.left, y: e.clientY - r.top },
+      this.candidates, this.rig.camera,
+      { width: r.width, height: r.height },
+    );
+  }
+
+  private onPointerMove = (e: PointerEvent): void => {
+    // A drag is a camera move, not a hover; OrbitControls owns the button.
+    if (e.buttons !== 0) { this.setHover(null); return; }
+    this.setHover(this.pointerPick(e));
+  };
+
+  private onPointerLeave = (): void => { this.setHover(null); };
+
+  private setHover(p: Pick | null): void {
+    const same = p?.id === this.hovered?.id;
+    this.hovered = p;
+    this.canvas.style.cursor = p ? 'pointer' : '';
+    // The tooltip follows the pointer, so it is re-emitted even for the same
+    // body; the HUD is responsible for not doing DOM work when nothing moved.
+    if (!same || p) this.onHover?.(p);
+  }
+
+  private onClick = (e: MouseEvent): void => {
+    const p = this.pointerPick(e);
+    if (p) this.onSelect?.(p);
+  };
+
   private resize = (): void => {
     const w = this.canvas.clientWidth || window.innerWidth;
     const h = this.canvas.clientHeight || window.innerHeight;
@@ -551,6 +613,9 @@ export class Viewer {
   dispose(): void {
     this.stop();
     window.removeEventListener('resize', this.resize);
+    this.canvas.removeEventListener('pointermove', this.onPointerMove);
+    this.canvas.removeEventListener('pointerleave', this.onPointerLeave);
+    this.canvas.removeEventListener('click', this.onClick);
     this.earth.dispose();
     this.sun.dispose();
     this.fieldLines.dispose();

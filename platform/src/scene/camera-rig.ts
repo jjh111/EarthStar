@@ -77,7 +77,12 @@ export class CameraRig {
         .add(sunDir.clone().multiplyScalar(earthRadius * 3.5))
         .add(new Vector3(0, earthRadius * 2.5, 0));
     } else {
-      pos = new Vector3(0, 4.2, 9.5);
+      // Framed for the whole system, not just the inner four. Globe scale puts
+      // Mercury at 2.6 units and Neptune at 8.3 — a range of 3.2:1 for a true
+      // range of 77:1 — so one frame can hold all of it without the inner
+      // planets collapsing into the Sun. At a 45° field of view this stands off
+      // far enough that Neptune's orbit clears the edge.
+      pos = new Vector3(0, 8.5, 19);
     }
     this.animateTo(pos, target, immediate);
   }
