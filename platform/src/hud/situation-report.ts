@@ -164,6 +164,27 @@ export function buildSituationReport(
       );
     }
 
+    /* --- Ring current --------------------------------------------------- */
+    const ds = stalenessOf(p.dst, now);
+    if (!d.dst || ds.state === 'no-data') {
+      lines.push('Ring current (Dst): no data.');
+    } else {
+      const ahead = d.dst.lead_minutes;
+      lines.push(
+        `Ring current index Dst ${d.dst.value_nt === null ? 'no data' : `${d.dst.value_nt.toFixed(0)} nanotesla`} — ` +
+        `${d.dst.level ?? 'unclassified'}. This is how much a torus of trapped ions ` +
+        `drifting around Earth is subtracting from the surface field; it is the ` +
+        `single number that best tracks the size of a storm. Modelled [D] by NOAA's ` +
+        `Geospace run from the L1 solar wind — not Kyoto's measured index, which has no ` +
+        `route into a browser — for ${hhmmUTC(d.dst.time)} UTC` +
+        `${ds.state === 'stale' ? ' — STALE' : ''}. ` +
+        (ahead !== null && ahead > 0
+          ? `The model runs ${ahead} minutes ahead of that; the value quoted is the newest ` +
+            `one whose time has arrived, not the newest one in the file.`
+          : 'The model has no lead beyond that sample.'),
+      );
+    }
+
     /* --- X-ray --------------------------------------------------------- */
     const xs = stalenessOf(p.xray, now);
     if (!d.xray || xs.state === 'no-data') {

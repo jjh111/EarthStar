@@ -19,6 +19,7 @@ export interface StoreState {
   protonSeries: Series | null;
   electronSeries: Series | null;
   geosyncSeries: Series | null;
+  dstSeries: Series | null;
   /** Its own cadence: ~5-minute product, 141 KB gzipped. */
   aurora: Envelope<AuroraNow | null> | null;
   regions: Envelope<ActiveRegion[]> | null;
@@ -36,7 +37,7 @@ type Listener = (s: StoreState) => void;
 export class NowStore {
   private state: StoreState = {
     now: null, series: null, kpSeries: null, xraySeries: null,
-    protonSeries: null, electronSeries: null, geosyncSeries: null,
+    protonSeries: null, electronSeries: null, geosyncSeries: null, dstSeries: null,
     aurora: null, regions: null, spacecraft: null, cmes: [], lastAttempt: null, lastError: null, loading: true,
   };
   private listeners = new Set<Listener>();
@@ -72,9 +73,11 @@ export class NowStore {
     try {
       const {
         now, series, kpSeries, xraySeries, protonSeries, electronSeries, geosyncSeries,
+        dstSeries,
       } = await this.source.fetchSnapshot(ctl.signal);
       this.emit({
         now, series, kpSeries, xraySeries, protonSeries, electronSeries, geosyncSeries,
+        dstSeries,
         lastAttempt: new Date().toISOString(), lastError: null, loading: false,
       });
     } catch (e) {

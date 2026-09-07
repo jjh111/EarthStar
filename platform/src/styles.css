@@ -399,3 +399,13 @@ text.l1-idle { fill: var(--ink-faint); }
 }
 .fine { font-size: 0.66rem; color: var(--ink-faint); line-height: 1.5; }
 .caption { text-align: center; margin-top: 0; }
+
+/* The ticker trims to what fits and offers the rest; it never clips silently. */
+.ticker.is-expanded { max-height: 40vh; overflow-y: auto; }
+.ticker-more {
+  font: inherit; font-family: var(--sans); font-size: 0.58rem;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--accent); background: none; border: 1px solid var(--line-strong);
+  border-radius: 2px; padding: 0 0.3em; cursor: pointer; white-space: nowrap;
+}
+.ticker-more:hover, .ticker-more:focus-visible { border-color: var(--accent); }

@@ -134,7 +134,26 @@ export interface GeosyncNow {
   arcjet: boolean;
 }
 
+/**
+ * CONTRACT ADDITION (see docs/sources.md §5d). Dst, the ring-current index.
+ * `tier` is `modeled`: this is NOAA's Geospace run driven by the L1 wind, not
+ * Kyoto's measured index. Roughly half of every upstream response lies in the
+ * future, so `value` is the newest sample that has *arrived* and `lead_minutes`
+ * says how far the model's short forecast runs beyond it.
+ */
+export interface DstNowValue {
+  time: string;
+  value_nt: number | null;
+  level: string | null;
+  /** How far ahead the model's own forecast reaches, minutes. */
+  lead_minutes: number | null;
+  /** Deepest value in the response, past or forecast. */
+  min_nt: number | null;
+  min_time: string | null;
+}
+
 export interface Now {
+  dst: DstNowValue | null;
   solar_wind: SolarWindNow | null;
   geosync: GeosyncNow | null;
   particles: ParticlesNow | null;

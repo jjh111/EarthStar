@@ -16,6 +16,7 @@ import { angularSeparationDeg, geomagneticNorthPole } from '../models/igrf14.js'
 import { subsolarPoint } from '../models/ephemeris.js';
 import { GEOSYNC_RE, dipoleFieldAtRe } from './geosync.js';
 import { EPHEM_URL, parseEphemerides } from './ephemerides.js';
+import { DST_URL, parseDst } from './dst.js';
 import { hhmmUTC } from '../contract/types.js';
 
 export interface CheckRow {
@@ -54,7 +55,7 @@ export async function runChecks(signal?: AbortSignal): Promise<CheckResult> {
   const rows: CheckRow[] = [];
   const source = new DirectSource();
 
-  const [env, sumMag, sumSpeed, flares, series, aurora, ephem] = await Promise.all([
+  const [env, sumMag, sumSpeed, flares, series, aurora, ephem, dstRaw] = await Promise.all([
     source.fetchNow(signal),
     j(SWPC_URL.summaryMag, signal) as Promise<Array<Record<string, unknown>>>,
     j(SWPC_URL.summarySpeed, signal) as Promise<Array<Record<string, unknown>>>,
@@ -62,6 +63,7 @@ export async function runChecks(signal?: AbortSignal): Promise<CheckResult> {
     source.fetchSolarWindSeries(signal),
     source.fetchAurora(signal),
     j(EPHEM_URL, signal),
+    j(DST_URL, signal),
   ]);
 
   const d = env.data;
@@ -268,6 +270,41 @@ export async function runChecks(signal?: AbortSignal): Promise<CheckResult> {
         + `${pos.offAxisRe.toFixed(1)} Rₑ off the Sun–Earth line`
       : 'wind/mag feed vs ephemeris feed',
   });
+
+  /**
+   * A model against a measurement, which is rarer here than it sounds.
+   *
+   * NOAA's Dst is *computed from the L1 solar wind*, so comparing it with the
+   * wind proves nothing — it would only be checking arithmetic against its own
+   * input. Estimated Kp comes from a network of ground magnetometers and knows
+   * nothing about L1. So the two disagreeing about whether the ground is quiet
+   * is a statement about the model, not about our parsing.
+   *
+   * The claim is deliberately coarse. Dst and Kp measure different things — one
+   * the ring current's depression of the field, the other the range of
+   * mid-latitude disturbance in three hours — and they are only loosely
+   * correlated storm to storm. What they should never do is contradict each
+   * other about quiet versus disturbed.
+   */
+  const dstParsed = parseDst(dstRaw, new Date());
+  const dstNow = dstParsed.now?.dst ?? null;
+  const kpNow = d.kp?.estimated_kp ?? null;
+  if (dstNow !== null && kpNow !== null) {
+    const dstDisturbed = dstNow <= -30;
+    const kpDisturbed = kpNow >= 4;
+    const aheadCount = dstParsed.ahead.length;
+    rows.push({
+      name: 'Modelled Dst vs measured Kp',
+      ours: `Dst ${dstNow.toFixed(0)} nT → ${dstDisturbed ? 'disturbed' : 'quiet'}`,
+      theirs: `Kp ${kpNow.toFixed(2)} → ${kpDisturbed ? 'disturbed' : 'quiet'}`,
+      ok: dstDisturbed === kpDisturbed,
+      note: `A model driven by the L1 wind against a measurement from ground `
+        + `magnetometers — they share no input. Thresholds are Dst ≤ −30 nT and Kp ≥ 4; `
+        + `the two indices are only loosely correlated, so this checks that they agree on `
+        + `quiet versus disturbed, nothing finer. ${aheadCount} of the feed's samples lie `
+        + `in the future and are excluded from "now".`,
+    });
+  }
 
   return {
     rows,

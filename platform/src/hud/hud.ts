@@ -32,6 +32,8 @@ export interface HudCallbacks {
 export class Hud {
   private instrumentsEl: HTMLElement;
   private tickerEl: HTMLElement;
+  private tickerExpanded = false;
+  private fittingTicker = false;
   private tabsEl: HTMLElement;
   private bodyEl: HTMLElement;
   private statusEl: HTMLElement;
@@ -64,6 +66,11 @@ export class Hud {
   constructor(private cb: HudCallbacks) {
     this.instrumentsEl = document.getElementById('instruments') as HTMLElement;
     this.tickerEl = document.getElementById('ticker') as HTMLElement;
+    // The alert list is variable-length and the viewport is not, so how many
+    // items fit is a measurement, not a constant. Re-fit on resize.
+    if (typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(() => this.fitTicker()).observe(this.tickerEl);
+    }
     this.tabsEl = document.getElementById('tabs') as HTMLElement;
     this.bodyEl = document.getElementById('margin-body') as HTMLElement;
     this.statusEl = document.getElementById('status') as HTMLElement;
@@ -284,6 +291,7 @@ export class Hud {
       ? d.alerts.slice(0, 6).map((a) =>
         `<span class="ticker-item">${hhmmUTC(a.issued)} ${escapeHtml(a.headline || a.product)}</span>`).join('')
       : `<span class="ticker-item">${d ? 'No alerts, watches or warnings in the feed.' : NO_DATA}</span>`;
+    this.fitTicker();
 
     // Status
     if (state.lastError) {
@@ -333,4 +341,67 @@ export class Hud {
     const scrub = document.getElementById('sun-scrub') as HTMLInputElement | null;
     if (scrub && document.activeElement !== scrub) scrub.value = String(this.sun.frameIndex);
   }
+
+  /**
+   * Nothing in the ticker may be hidden without an affordance.
+   *
+   * A fixed max-height silently clipped the last alerts whenever the viewport
+   * was narrow enough that six items needed three lines — which is exactly the
+   * case where the newest alert matters most. This trims to what fits and
+   * offers the remainder behind a button, so the count is always visible even
+   * when the text is not.
+   *
+   * Idempotent, because a ResizeObserver watches the same element it resizes:
+   * expanding must not immediately re-trim, and re-running must not oscillate.
+   */
+  private fitTicker(): void {
+    if (this.fittingTicker) return;
+    this.fittingTicker = true;
+    try {
+      const box = this.tickerEl;
+      const items = box.querySelector('[data-t]') as HTMLElement | null;
+      if (!items) return;
+
+      const all = [...items.querySelectorAll('.ticker-item')] as HTMLElement[];
+      for (const el of all) el.hidden = false;
+      box.querySelector('.ticker-more')?.remove();
+      box.classList.toggle('is-expanded', this.tickerExpanded);
+
+      // Expanded shows everything; it only needs a way back.
+      if (this.tickerExpanded) {
+        if (all.length > 1) items.append(this.tickerMoreButton('show fewer', true));
+        return;
+      }
+
+      if (box.scrollHeight <= box.clientHeight + 1) return;
+
+      const more = this.tickerMoreButton('', false);
+      items.append(more);
+      let hidden = 0;
+      // Hide from the end until it fits, always keeping the newest alert.
+      for (let i = all.length - 1; i >= 1; i--) {
+        all[i]!.hidden = true;
+        hidden++;
+        more.textContent = `+${hidden} more`;
+        if (box.scrollHeight <= box.clientHeight + 1) break;
+      }
+      more.textContent = `+${hidden} more`;
+    } finally {
+      this.fittingTicker = false;
+    }
+  }
+
+  private tickerMoreButton(label: string, expanded: boolean): HTMLButtonElement {
+    const b = document.createElement('button');
+    b.className = 'ticker-more';
+    b.type = 'button';
+    b.textContent = label;
+    b.setAttribute('aria-expanded', String(expanded));
+    b.addEventListener('click', () => {
+      this.tickerExpanded = !this.tickerExpanded;
+      this.fitTicker();
+    });
+    return b;
+  }
+
 }

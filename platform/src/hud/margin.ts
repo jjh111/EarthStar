@@ -383,6 +383,13 @@ function detailSpark(inst: { id: string; series?: string; unit: string }, state:
     return panelSpark(state.kpSeries, { band: [0, 4], unit: 'Kp', format: (v) => v.toFixed(2),
       label: 'Kp history, quiet band shaded' });
   }
+  if (inst.id === 'dst' && state.dstSeries) {
+    return panelSpark(state.dstSeries, { unit: 'nT', format: (v) => v.toFixed(0),
+      // Zero is the meaningful reference for Dst: the ring current only ever
+      // subtracts, so the whole trace hangs below the rule. The band is the
+      // quiet range, above −30 nT.
+      rule: 0, band: [-30, 0], extremes: true });
+  }
   if (inst.id === 'geosync' && state.geosyncSeries) {
     return panelSpark(state.geosyncSeries, { unit: 'nT', format: (v) => v.toFixed(0),
       label: 'total field at geostationary orbit' });

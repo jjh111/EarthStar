@@ -27,7 +27,8 @@ the upstream traps.
 | ✅ | `products/noaa-planetary-k-index-forecast` | 7 KB | 3 h | observed + predicted bars |
 | ◻ | `products/noaa-planetary-k-index` — official 3-hourly | 5 KB | 3 h | the definitive index, lagging |
 | ✅ | `json/goes/primary/magnetometers-6-hour` | 65 KB | 1 min | GOES Hp/He/Hn at geostationary orbit — the only in-situ magnetic measurement, and the one falsifiable check on the modelled shield |
-| ◻ | `json/geospace/geospace_dst_1_hour`, `_7_day` | **1 KB / 78 KB** | 1 min | **Dst — the canonical storm index**, modelled `[D]` by NOAA's Geospace (Univ. Michigan) run. Was believed unavailable; it is not the measured Kyoto index but it is live, CORS-open and 1-minute. |
+| ✅ | `json/geospace/geospace_dst_1_hour` | **1 KB** | 1 min | **Dst — the storm index.** Modelled `[D]` by NOAA's Geospace run, not Kyoto's measured index. Roughly half of every response is in the future; only arrived samples are shown as "now". |
+| ◻ | `json/geospace/geospace_dst_7_day` | 78 KB | 1 min | a week of Dst at 1-minute — the likeliest spine for a 7-day scrubber |
 | ⛔ | Kyoto Dst / SYM-H | — | 1 h | the *measured* index. HTML scrape, no CORS → stage B |
 | ⛔ | `json/geospace/geospace_pred_est_kp_1_hour` | 0.4 KB | — | **dead feed** — newest record is 2024-06-18. Present, well-formed, and two years stale. Anything that trusts a feed because it parses would ship a 2024 Kp as today's. |
 | ⛔ | USGS + INTERMAGNET observatories | — | 1 min | no CORS → stage B |

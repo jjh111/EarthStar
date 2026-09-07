@@ -38,6 +38,8 @@ export interface Snapshot {
   protonSeries: Series;
   electronSeries: Series;
   geosyncSeries: Series;
+  /** Arrived Dst samples only — the model's forecast tail is never plotted here. */
+  dstSeries: Series;
 }
 
 export interface Source {

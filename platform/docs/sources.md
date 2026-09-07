@@ -389,6 +389,39 @@ off `data_time`, which is exactly what saves it here.
 
 ---
 
+## 5d. Dst — `json/geospace/geospace_dst_1_hour`
+
+Verified live 2026-09-07. `access-control-allow-origin: *`. 6 KB raw, **1 KB gzipped**,
+~107 records at 1-minute cadence. The 7-day companion is 78 KB gzipped for 10,131 records.
+
+**It is modelled, and the name hides that.** Kyoto's Dst — the definitive index, derived
+from four low-latitude magnetometers — has no CORS and stays on the stage-B list. This is
+NOAA's Geospace run (University of Michigan BATS-R-US/RCM) *driven by the L1 solar wind*.
+Same name, different quantity. It ships as `[D]` with the model cited, and the Situation
+Report says which one it is not.
+
+That distinction has teeth: because this Dst is computed from the wind, checking it against
+the wind would only be checking arithmetic against its own input. Checking it against
+**estimated Kp** — which comes from ground magnetometers and knows nothing about L1 — is a
+model against a measurement.
+
+**About half of every response is in the future.** The model propagates L1 wind to Earth,
+so it necessarily runs ahead of the clock:
+
+| Fetched | Records | In the future | Furthest ahead |
+|---|---|---|---|
+| 08:01 UTC | 107 | **47** | 47 min |
+
+"Take the newest record" is the correct rule for every other SWPC feed and it is wrong
+here — it publishes a forecast as the present value. `parseDst()` takes the newest sample
+whose time has *arrived*; the remainder is returned separately, plotted in its own series,
+and described as a forecast. The panel says how far ahead the model reaches.
+
+Severity bands are Loewe & Prölss (1997), *J. Geophys. Res.* **102**, 14209: quiet above
+−30 nT, then weak, moderate, intense, severe, great. They are conventional, not physical.
+
+---
+
 ## 6. What the Viewer does with all this
 
 - Selection is **by timestamp and `active` flag**, never by array position.
