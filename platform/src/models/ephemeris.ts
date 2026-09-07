@@ -10,9 +10,6 @@
 import * as Astronomy from 'astronomy-engine';
 import { Vector3 } from 'three';
 
-export const AU_KM = 149_597_870.7;
-export const EARTH_RADIUS_KM = 6371.0;
-
 export interface BodyState {
   /** Heliocentric position, AU, equator-of-date frame. */
   helio: Vector3;

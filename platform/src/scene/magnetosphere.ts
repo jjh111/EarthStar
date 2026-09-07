@@ -10,9 +10,8 @@
  */
 
 import {
-  AdditiveBlending, BufferGeometry, Color, DoubleSide, Float32BufferAttribute,
-  Group, Line, LineBasicMaterial, LineSegments, Mesh, MeshBasicMaterial,
-  ShaderMaterial, Vector3,
+  AdditiveBlending, BufferGeometry, Color, Float32BufferAttribute,
+  Group, Line, LineBasicMaterial, LineSegments, ShaderMaterial, Vector3,
 } from 'three';
 import { EARTH_RADIUS_KM, traceAll, type FieldLine } from '../models/fieldlines.js';
 import { shueRadius, type Magnetopause } from '../models/shue1998.js';
@@ -268,7 +267,6 @@ export class Magnetosphere {
   readonly group = new Group();
   private magnetopause: LineSegments;
   private bowShock: LineSegments;
-  private noseMarker: Mesh;
   private current: { r0: number; alpha: number; bow: number; axis: Vector3 } | null = null;
 
   constructor() {
@@ -291,14 +289,6 @@ export class Magnetosphere {
       }),
     );
     this.bowShock.name = 'bow-shock-farris-russell';
-
-    // A small marker at the subsolar standoff point — the number the HUD shows.
-    this.noseMarker = new Mesh(
-      new BufferGeometry(),
-      new MeshBasicMaterial({
-        color: 0x7fd4c1, transparent: true, opacity: 0.9, side: DoubleSide,
-      }),
-    );
 
     this.group.add(this.magnetopause, this.bowShock);
   }
@@ -348,7 +338,5 @@ export class Magnetosphere {
     (this.magnetopause.material as LineBasicMaterial).dispose();
     this.bowShock.geometry.dispose();
     (this.bowShock.material as LineBasicMaterial).dispose();
-    this.noseMarker.geometry.dispose();
-    (this.noseMarker.material as MeshBasicMaterial).dispose();
   }
 }

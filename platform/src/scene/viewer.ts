@@ -24,6 +24,8 @@ import { moonGeo, planetState, sunGeo, toScene } from '../models/ephemeris.js';
 import { FieldLines, Magnetosphere } from './magnetosphere.js';
 import { SolarWind } from './solar-wind.js';
 import { ActiveRegions } from './active-regions.js';
+import { CmeCones } from './cmes.js';
+import { activeCmes, type Cme } from '../data/cme.js';
 import type { ActiveRegion } from '../data/swpc.js';
 import { magnetopause } from '../models/shue1998.js';
 import { gastDegrees } from '../models/ephemeris.js';
@@ -46,6 +48,8 @@ export class Viewer {
   private magnetosphere = new Magnetosphere();
   private solarWind: SolarWind;
   private activeRegions = new ActiveRegions();
+  private cmeCones = new CmeCones();
+  private cmes: Cme[] = [];
   private regionsObservedAt: string | null = null;
   private shieldVisible = true;
   private windVisible = true;
@@ -77,6 +81,9 @@ export class Viewer {
     this.scene.add(makeStarfield());
     this.scene.add(this.sun.group);
     this.sun.group.add(this.activeRegions.group);
+    // Cones are heliocentric, so they hang off the scene root rather than the
+    // Sun's group, which carries the Sun's own render scale.
+    this.scene.add(this.cmeCones.group);
     this.scene.add(this.earth.group);
     this.scene.add(this.moon.mesh);
     this.scene.add(this.sunLight);
@@ -113,6 +120,14 @@ export class Viewer {
   }
 
   get regionCount(): number { return this.activeRegions.count; }
+
+  setCmes(cmes: Cme[]): void { this.cmes = cmes; }
+
+  setCmesVisible(v: boolean): void { this.cmeCones.setVisible(v); }
+
+  get cmesOn(): boolean { return this.cmeCones.group.visible; }
+
+  get cmeCount(): number { return this.cmeCones.count; }
 
   setAuroraVisible(v: boolean): void { this.auroraVisible = v; }
 
@@ -246,6 +261,9 @@ export class Viewer {
     this.moon.mesh.position.copy(earthPos).add(moonOffset);
     this.moon.mesh.scale.setScalar(radiusToScene('Moon', this.mode));
 
+    // Earth's direction from the Sun anchors Stonyhurst longitude 0.
+    this.cmeCones.update(activeCmes(this.cmes, date), date, this.mode, earthPos);
+
     this.rig.followTarget(earthPos);
     this.rig.update();
     this.renderer.render(this.scene, this.rig.camera);
@@ -276,6 +294,7 @@ export class Viewer {
     this.magnetosphere.dispose();
     this.solarWind.dispose();
     this.activeRegions.dispose();
+    this.cmeCones.dispose();
     this.rig.dispose();
     this.renderer.dispose();
   }

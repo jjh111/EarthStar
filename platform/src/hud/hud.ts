@@ -58,6 +58,7 @@ export class Hud {
   private narration: SceneNarration = {
     mode: 'globe', view: 'deck', reducedMotion: false,
     shield: true, fieldLines: { lines: 0, points: 0 }, aurora: true,
+    cmes: { shown: true, count: 0 },
   };
 
   constructor(private cb: HudCallbacks) {

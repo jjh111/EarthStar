@@ -20,8 +20,6 @@ const WGS84_A = 6378.137;
 const WGS84_F = 1 / 298.257223563;
 const WGS84_E2 = WGS84_F * (2 - WGS84_F);
 
-export const EARTH_MEAN_RADIUS_KM = 6371.2;
-
 /** Fractional year, e.g. 2026.679. */
 export function decimalYear(date: Date): number {
   const y = date.getUTCFullYear();

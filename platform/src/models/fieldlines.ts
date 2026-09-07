@@ -13,6 +13,11 @@
 import { Vector3 } from 'three';
 import { igrfVector } from './igrf14.js';
 
+/**
+ * IGRF's reference radius, 6371.2 km — the sphere the spherical-harmonic
+ * expansion is defined on. Deliberately not the mean radius (6371.0 km): field
+ * geometry must use the model's own reference or the shells come out wrong.
+ */
 export const EARTH_RADIUS_KM = 6371.2;
 
 export interface TraceOptions {
