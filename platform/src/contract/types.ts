@@ -122,8 +122,21 @@ export interface PropagatedNow {
   lead_minutes: number | null;
 }
 
+/** CONTRACT ADDITION: GOES magnetometer at geostationary orbit. */
+export interface GeosyncNow {
+  time: string;
+  satellite: number | null;
+  hp_nt: number | null;
+  total_nt: number | null;
+  /** Dipole expectation at 6.6 Rₑ minus the measurement — the external field. */
+  deficit_nt: number | null;
+  /** True when the thruster was firing and the reading is suspect. */
+  arcjet: boolean;
+}
+
 export interface Now {
   solar_wind: SolarWindNow | null;
+  geosync: GeosyncNow | null;
   particles: ParticlesNow | null;
   propagated: PropagatedNow | null;
   kp: KpNow | null;

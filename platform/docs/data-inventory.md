@@ -26,7 +26,7 @@ the upstream traps.
 | ✅ | `json/planetary_k_index_1m` — estimated Kp | 1.2 KB | 1 min | HUD, sparkline, sentence |
 | ✅ | `products/noaa-planetary-k-index-forecast` | 7 KB | 3 h | observed + predicted bars |
 | ◻ | `products/noaa-planetary-k-index` — official 3-hourly | 5 KB | 3 h | the definitive index, lagging |
-| ◻ | `json/goes/primary/magnetometers-1-day` | 261 KB | 1 min | GOES Hp/He/Hn — the field measured *at geostationary orbit*, which is where the magnetopause crossing would actually be felt |
+| ✅ | `json/goes/primary/magnetometers-6-hour` | 65 KB | 1 min | GOES Hp/He/Hn at geostationary orbit — the only in-situ magnetic measurement, and the one falsifiable check on the modelled shield |
 | ⛔ | Kyoto Dst / SYM-H | — | 1 h | HTML scrape, no CORS → stage B |
 | ⛔ | USGS + INTERMAGNET observatories | — | 1 min | no CORS → stage B |
 
@@ -80,19 +80,23 @@ the upstream traps.
 
 ## What is worth doing next, in order
 
-1. **GOES magnetometer** (§2). The field measured *at geostationary orbit*, which is where
-   a magnetopause crossing would actually be felt. It would turn the modelled standoff into
-   something checkable against a measurement, the way the aurora overlay is checked against
-   the dipole axis today.
-2. **Spacecraft markers** (§6). The Viewer says "measured by SOLAR1 at L1" but draws no L1.
+1. **Spacecraft markers** (§6). The Viewer says "measured by SOLAR1 at L1" but draws no L1.
    `rtsw_ephemerides_1m` gives the real position without needing Horizons.
-3. **Enlil imagery** (§4). NOAA's own heliospheric wind forecast as an animation — the
+2. **Enlil imagery** (§4). NOAA's own heliospheric wind forecast as an animation — the
    proper context for the cone model, and a check on it: Enlil accounts for drag and the
    ambient wind, which our constant-speed propagation does not.
-4. **Ground magnetometers and Dst** (§2, stage B). The canonical storm index is still
+3. **Ground magnetometers and Dst** (§2, stage B). The canonical storm index is still
    missing, and it is why the panel talks about Kp instead.
 
 ## Shipped since
+
+GOES magnetometer. The field at 6.6 Rₑ, and with it the first check that can falsify the
+modelled shield rather than merely corroborate it: Shue's boundary and this magnetometer are
+independent, so if the model puts the magnetopause inside geostationary orbit while GOES is
+still reading a dipole-order field, one of them is wrong. Live now: dipole 103 nT, GOES-19
+reads 81 nT, and the 22 nT deficit is the ring and magnetopause currents.
+
+## Shipped before that
 
 CME cones. DONKI's analysed cone parameters — apex direction, half-angle, and speed at
 21.5 R☉ — propagated radially at constant speed, with Earth-directed cones drawn warm and

@@ -97,6 +97,28 @@ export function buildSituationReport(
       );
     }
 
+    /* --- the one in-situ magnetic measurement --- */
+    const gs = d.geosync;
+    if (gs && gs.total_nt !== null) {
+      const standoff = d.magnetopause?.standoff_re ?? null;
+      lines.push(
+        `GOES-${gs.satellite ?? '?'} measures ${gs.total_nt.toFixed(0)} nT at geostationary ` +
+        `orbit, 6.6 Earth radii out [E], ${hhmmUTC(gs.time)} UTC` +
+        (gs.arcjet ? ' — though its thruster was firing, so the reading is suspect' : '') +
+        `. That is ${gs.deficit_nt !== null && gs.deficit_nt > 0
+          ? `${gs.deficit_nt.toFixed(0)} nT below` : 'about'} the dipole value for that ` +
+        `distance; the difference is the ring current and magnetopause currents subtracting ` +
+        `from Earth's own field. ` +
+        (standoff !== null
+          ? standoff <= 6.6
+            ? 'With the modelled boundary inside 6.6 Rₑ, the spacecraft should be out in ' +
+              'the solar wind — that is a claim this measurement can falsify.'
+            : 'The modelled boundary is outside 6.6 Rₑ, so the spacecraft should be inside ' +
+              'the magnetosphere, which is what this field says.'
+          : ''),
+      );
+    }
+
     /* --- particles: the hazard to people and satellites --- */
     const pt = d.particles;
     if (pt) {

@@ -36,6 +36,7 @@ export interface Snapshot {
   xraySeries: Series;
   protonSeries: Series;
   electronSeries: Series;
+  geosyncSeries: Series;
 }
 
 export interface Source {
