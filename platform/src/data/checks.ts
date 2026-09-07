@@ -13,7 +13,9 @@
 import { DirectSource } from './direct-source.js';
 import { SWPC_URL, auroraAt, parseXrayLatestClass, xrayClass } from './swpc.js';
 import { angularSeparationDeg, geomagneticNorthPole } from '../models/igrf14.js';
+import { subsolarPoint } from '../models/ephemeris.js';
 import { GEOSYNC_RE, dipoleFieldAtRe } from './geosync.js';
+import { EPHEM_URL, parseEphemerides } from './ephemerides.js';
 import { hhmmUTC } from '../contract/types.js';
 
 export interface CheckRow {
@@ -33,6 +35,16 @@ export interface CheckResult {
 const j = async (u: string, signal?: AbortSignal): Promise<unknown> =>
   (await fetch(u, { cache: 'no-store', signal })).json();
 
+/** Initial great-circle bearing from one geographic point to another, degrees. */
+function bearingDeg(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const r = Math.PI / 180;
+  const dLon = (lon2 - lon1) * r;
+  const y = Math.sin(dLon) * Math.cos(lat2 * r);
+  const x = Math.cos(lat1 * r) * Math.sin(lat2 * r)
+    - Math.sin(lat1 * r) * Math.cos(lat2 * r) * Math.cos(dLon);
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
+
 function near(a: number | null, b: number | null, tol: number): boolean {
   if (a === null || b === null || !Number.isFinite(a) || !Number.isFinite(b)) return false;
   return Math.abs(a - b) <= tol;
@@ -42,13 +54,14 @@ export async function runChecks(signal?: AbortSignal): Promise<CheckResult> {
   const rows: CheckRow[] = [];
   const source = new DirectSource();
 
-  const [env, sumMag, sumSpeed, flares, series, aurora] = await Promise.all([
+  const [env, sumMag, sumSpeed, flares, series, aurora, ephem] = await Promise.all([
     source.fetchNow(signal),
     j(SWPC_URL.summaryMag, signal) as Promise<Array<Record<string, unknown>>>,
     j(SWPC_URL.summarySpeed, signal) as Promise<Array<Record<string, unknown>>>,
     j(SWPC_URL.xrayFlares, signal) as Promise<unknown>,
     source.fetchSolarWindSeries(signal),
     source.fetchAurora(signal),
+    j(EPHEM_URL, signal),
   ]);
 
   const d = env.data;
@@ -170,8 +183,17 @@ export async function runChecks(signal?: AbortSignal): Promise<CheckResult> {
 
   /**
    * The auroral oval encircles the geomagnetic (dipole) pole, ~13° from the dip
-   * pole. NOAA's oval and our IGRF-14 dipole axis are computed independently; a
-   * transposed, mirrored or rotated grid would not agree.
+   * pole — but it is not centred on it. The oval brightens on the nightside, so
+   * its brightness-weighted centroid is pulled toward magnetic midnight by an
+   * amount that grows with activity.
+   *
+   * An earlier version of this check asserted centroid ≈ pole within 5°, which
+   * passed only because it was written on a quiet day; it went amber the moment
+   * the nightside brightened, reporting a defect in a grid that was correct.
+   * The invariant is the *direction*: whatever the separation, the centroid
+   * should lie on the anti-sunward side of the pole. A transposed, mirrored or
+   * rotated grid fails that immediately, and it stays true at every activity
+   * level, which is the whole point of a check.
    */
   if (aurora.data) {
     const g = aurora.data.grid;
@@ -194,22 +216,58 @@ export async function runChecks(signal?: AbortSignal): Promise<CheckResult> {
       const cLat = (Math.asin(sz / r) * 180) / Math.PI;
       const cLon = (Math.atan2(sy, sx) * 180) / Math.PI;
       const sep = angularSeparationDeg(cLat, cLon, pole.lat, pole.lon);
+      // Magnetic midnight, near enough: the meridian opposite the sub-solar
+      // point. Computed from the ephemeris, independently of the aurora grid.
+      const sub = subsolarPoint(new Date());
+      const midnightLon = ((sub.lon + 360) % 360) - 180;
+      const toCentroid = bearingDeg(pole.lat, pole.lon, cLat, cLon);
+      const toMidnight = bearingDeg(pole.lat, pole.lon, -sub.lat, midnightLon);
+      const off = Math.abs(((toCentroid - toMidnight + 540) % 360) - 180);
       rows.push({
-        name: 'Aurora oval on the geomagnetic pole',
-        ours: `centroid ${cLat.toFixed(1)}°N ${cLon.toFixed(1)}°E`,
-        theirs: `pole ${pole.lat.toFixed(1)}°N ${pole.lon.toFixed(1)}°E`,
-        ok: sep < 5,
-        note: `${sep.toFixed(2)}° apart. NOAA's OVATION grid and our IGRF-14 dipole axis are `
-          + `independent computations.`,
+        name: 'Aurora oval displaced toward magnetic midnight',
+        ours: `centroid bears ${toCentroid.toFixed(0)}° from the pole`,
+        theirs: `midnight bears ${toMidnight.toFixed(0)}°`,
+        // The claim is deliberately weak, because the centroid is a coarse
+        // statistic: a probability-weighted mean over a 45° latitude band that
+        // includes the dayside cusp. What it can honestly assert is which half
+        // of the sky the oval sits in. Substorm onset is pre-midnight, so a
+        // duskward bias of tens of degrees is expected and is not a defect.
+        ok: off < 90 && sep < 25,
+        note: `${off.toFixed(0)}° apart in bearing — the nightside half — with the centroid `
+          + `${sep.toFixed(1)}° from the pole. NOAA's OVATION grid, our IGRF-14 dipole axis and `
+          + `the sub-solar point are three independent computations; a transposed or mirrored `
+          + `grid puts the oval on the dayside and fails here.`,
       });
     }
   } else {
     rows.push({
-      name: 'Aurora oval on the geomagnetic pole',
+      name: 'Aurora oval displaced toward magnetic midnight',
       ours: 'no data', theirs: '—', ok: false,
       note: 'OVATION grid did not load, so orientation could not be checked',
     });
   }
+
+  /**
+   * Two independent feeds each name the operational L1 spacecraft: the wind and
+   * mag files carry an `active` flag per record, and so does the ephemeris
+   * file. If they ever disagree we are attributing measurements to one craft
+   * and drawing the marker for another, and every "measured by …" line on the
+   * page is wrong. Nothing else on the page would notice.
+   */
+  const craft = parseEphemerides(ephem);
+  const ephemActive = craft.find((c) => c.active)?.source ?? null;
+  const windActive = d.solar_wind?.spacecraft ?? null;
+  const pos = craft.find((c) => c.active);
+  rows.push({
+    name: 'Operational L1 spacecraft',
+    ours: windActive ?? 'no data',
+    theirs: ephemActive ?? 'no data',
+    ok: !!windActive && windActive === ephemActive,
+    note: pos
+      ? `wind/mag feed vs ephemeris feed · ${pos.distanceRe.toFixed(0)} Rₑ upstream, `
+        + `${pos.offAxisRe.toFixed(1)} Rₑ off the Sun–Earth line`
+      : 'wind/mag feed vs ephemeris feed',
+  });
 
   return {
     rows,

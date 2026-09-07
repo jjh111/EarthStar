@@ -69,3 +69,23 @@ export function moonDistanceToScene(au: number, mode: ScaleMode, earthRadiusScen
   if (mode === 'true') return au * TRUE_UNITS_PER_AU;
   return earthRadiusScene * 3.2 * (au / 0.00257);
 }
+
+/**
+ * L1 is 235 Earth radii out — twenty times the bow shock. Drawn at Globe scale,
+ * where Earth is already exaggerated 300×, a truthful L1 marker lands most of
+ * the way to the Sun and leaves the frame the reader is actually looking at.
+ *
+ * So Globe mode compresses it to just outside the bow shock, preserving the
+ * ratio between the spacecraft so their relative positions stay honest, and the
+ * Sources panel carries the real numbers and an inset drawn to scale.
+ *
+ * Argument and result are both in Earth radii; the caller multiplies by the
+ * rendered Earth radius, as the magnetosphere and field lines do.
+ */
+const L1_NOMINAL_RE = 235;
+const L1_GLOBE_RE = 16;
+
+export function l1DistanceToScene(distanceRe: number, mode: ScaleMode): number {
+  if (mode === 'true') return distanceRe;
+  return (distanceRe / L1_NOMINAL_RE) * L1_GLOBE_RE;
+}

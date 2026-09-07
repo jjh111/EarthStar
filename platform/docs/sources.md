@@ -322,10 +322,70 @@ caught exactly this during development:
 | **Geomagnetic pole** | 80.7°N, 72.8°W | The IGRF dipole axis, from g₁⁰, g₁¹, h₁¹ |
 
 They are ~13° apart. **The auroral oval is organised by the dipole geometry**, so the
-geomagnetic pole is the one the OVATION overlay must be checked against. The live verify
-row computes the probability-weighted centroid of the northern oval and compares it with
-our own IGRF-14 dipole axis: two independently computed things, agreeing to within a
-degree or so. A transposed, mirrored or rotated grid would not.
+geomagnetic pole is the one the OVATION overlay must be checked against.
+
+The check on this was rewritten on 2026-09-07, and the reason is worth recording. It
+originally asserted that the oval's brightness-weighted centroid sits within 5° of the
+dipole pole, and it passed — on a quiet day. It went amber as soon as the nightside
+brightened ahead of an incoming CME, reporting a defect in a grid that was correct. The
+oval is *not* centred on the pole: it brightens toward magnetic midnight, by an amount that
+grows with activity, so a fixed separation threshold measures the weather rather than the
+software.
+
+What is invariant is the direction. The centroid lies on the anti-sunward side of the pole
+at every activity level, so that is what the check now asserts, against a sub-solar point
+computed from the ephemeris — a third independent quantity. A transposed, mirrored or
+rotated grid puts the oval on the dayside and fails immediately. The claim is deliberately
+weaker than the old one and, unlike the old one, it is true.
+
+---
+
+## 5b. Spacecraft ephemerides — `json/rtsw/rtsw_ephemerides_1h`
+
+Verified live 2026-09-07. `access-control-allow-origin: *`. 779 KB raw, **70 KB gzipped**,
+2009 records covering 31 days.
+
+**The endpoint name.** It is `_1h`, not `_1m`. Its siblings in the same directory are
+`rtsw_mag_1m` and `rtsw_wind_1m`, so the obvious guess is wrong and returns 404 — which is
+what an earlier probe recorded, and why this feed was written off as unavailable. The
+measurements are per-minute; the positions are hourly.
+
+**Ordering and the `active` flag.** Newest first, with all spacecraft interleaved at each
+timestamp — the same trap as the mag and wind feeds. On 2026-09-07 the file carried ACE,
+IMAP and SOLAR1, and only SOLAR1 was `active: true`.
+
+**Columns.** `x_gse`/`y_gse`/`z_gse` in km are always present. `*_gsm` and every velocity
+column are null for the inactive spacecraft and intermittently for the active one, so GSE
+is the only frame that can be relied on.
+
+**Frame.** GSE is +X sunward, +Z ecliptic north, +Y duskward. The scene works in the true
+equator of date, so the two differ by the obliquity — 23.44°, which is comparable to the
+off-axis excursion being drawn. Getting it wrong would not look wrong. The basis is built
+from astronomy-engine's ecliptic-of-date rotation rather than a hardcoded obliquity, and
+the test pins the resulting tilt at 23.4381° — the *true* obliquity, nutation included.
+
+**What it says.** Positions on 2026-09-07 07:00 UTC:
+
+| Craft | Distance | Off the Sun–Earth line | Angle |
+|---|---|---|---|
+| **SOLAR1** (operational) | 248 Rₑ | **44.5 Rₑ** | 10.3° |
+| ACE | 232 Rₑ | 40.3 Rₑ | 10.0° |
+| IMAP | 245 Rₑ | 32.5 Rₑ | 7.6° |
+
+44.5 Rₑ is about 280,000 km — three quarters of the way to the Moon's orbit, sideways. The
+usual dot-on-the-line diagram is not a simplification of this; it is a different claim.
+
+**A new cross-check.** Two independent feeds each name the operational spacecraft: the
+wind/mag files' per-record `active` flag, and this file's. If they disagree, every
+"measured by …" attribution on the page is wrong and nothing else would notice.
+
+## 5c. Feeds that are present, well-formed, and wrong
+
+`json/geospace/geospace_pred_est_kp_1_hour` parses cleanly, has a sane shape and a
+plausible `k` value. Its newest record is **2024-06-18**. A consumer that trusts a feed
+because it deserializes would publish a two-year-old Kp as the current one. Recorded here
+because the failure mode is silence, not an error: every staleness rule in the Viewer keys
+off `data_time`, which is exactly what saves it here.
 
 ---
 

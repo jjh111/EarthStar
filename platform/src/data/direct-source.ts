@@ -11,6 +11,7 @@
 import type { AuroraNow, Envelope, Now, SolarWindSeries } from '../contract/types.js';
 import { PARTICLE_URL, parseParticles, seriesFor } from './particles.js';
 import { PROPAGATED_URL, parsePropagated } from './geospace.js';
+import { EPHEM_URL, parseEphemerides, type SpacecraftPos } from './ephemerides.js';
 import {
   GEOSYNC_URL, GEOSYNC_RE, dipoleFieldAtRe, geosyncSeries, parseGeosync,
 } from './geosync.js';
@@ -40,6 +41,8 @@ export const STALE_AFTER = {
   // grid is still meaningful, a three-hour-old one is not.
   aurora: 60 * 60,
   regions: 36 * 60 * 60,
+  // Hourly product; two hours without an update is a real outage.
+  spacecraft: 3 * 60 * 60,
 } as const;
 
 const FETCH_TIMEOUT_MS = 15_000;
@@ -279,6 +282,27 @@ export class DirectSource implements Source {
       latency_s: latency(fetched_at, data_time) ?? 0,
       stale_after_s: STALE_AFTER.regions,
       units: { lat: 'deg', lon: 'deg from central meridian', area: 'millionths of hemisphere' },
+      data,
+    };
+  }
+
+  async fetchEphemerides(signal?: AbortSignal): Promise<Envelope<SpacecraftPos[]>> {
+    const res = await getJson<unknown>(EPHEM_URL, signal);
+    const fetched_at = new Date().toISOString();
+    const data = res.json ? parseEphemerides(res.json) : [];
+    // The newest of the per-spacecraft newests: they share a cadence, so this
+    // is the age of the whole set rather than of the luckiest member.
+    const data_time = data.reduce<string | null>(
+      (a, s) => (a === null || s.time > a ? s.time : a), null,
+    ) ?? fetched_at;
+    return {
+      source: `${SWPC} · RTSW ephemerides`,
+      source_url: EPHEM_URL,
+      tier: 'measured', model: null,
+      fetched_at, data_time,
+      latency_s: latency(fetched_at, data_time) ?? 0,
+      stale_after_s: STALE_AFTER.spacecraft,
+      units: { gse: 'km', distanceRe: 'Earth radii', offAxisDeg: 'deg' },
       data,
     };
   }

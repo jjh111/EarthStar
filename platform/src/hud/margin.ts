@@ -10,6 +10,8 @@ import type { Now } from '../contract/types.js';
 import type { NowEnvelope, PartMeta } from '../data/source.js';
 import type { StoreState } from '../data/store.js';
 import type { CheckResult } from '../data/checks.js';
+import { l1Inset } from './l1-inset.js';
+import { SPACECRAFT_NOTE, type SpacecraftPos } from '../data/ephemerides.js';
 import type { ImageLoop } from '../data/solar-imagery.js';
 import { NO_DATA, badgeFor, badgeTitle, formatAge, hhmmUTC, stalenessOf } from './format.js';
 import { panelSpark } from './sparkline.js';
@@ -43,7 +45,9 @@ export function escapeHtml(s: string): string {
 export function renderReport(
   state: StoreState, narration: SceneNarration, now: Date,
 ): string {
-  const lines = buildSituationReport(state.now, narration, now, state.aurora, state.cmes);
+  const lines = buildSituationReport(
+    state.now, narration, now, state.aurora, state.cmes, state.spacecraft?.data ?? [],
+  );
   // The sentence carries its own evidence: each quantity appears as glyph,
   // sparkline and number together. The prose report follows it, and the
   // screen-reader text alternative sits alongside.
@@ -180,12 +184,68 @@ export function renderSources(state: StoreState, checks: CheckResult | null): st
     cited model.<br>
     <span class="badge badge-m">M</span> Ambient — artwork. Parameter-driven, sometimes by real
     values, but never itself a measurement.</p>
+    ${renderMonitors(state.spacecraft?.data ?? [], state.now?.data.solar_wind?.speed ?? null)}
     <h3>Models cited</h3>
     <p>Shue et al. 1998 (doi:10.1029/98JA01103) — magnetopause.<br>
     Farris &amp; Russell 1994 — bow shock.<br>
     IGRF-14 (IAGA, epoch 2025.0) — the geomagnetic field and its lines.<br>
     OVATION Prime (NOAA SWPC) — aurora probability.<br>
     astronomy-engine (VSOP87/Meeus) — every position, and the sub-solar point.</p>`;
+}
+
+/** Earth radii to kilometres, for the panel's plain-language distances. */
+const RE_KM = 6371.2;
+
+/**
+ * The monitors, and what their position costs us. The paragraph exists because
+ * the off-axis number has a consequence: the wind is structured on scales far
+ * smaller than 44 Rₑ, so a spacecraft that far off the line is not guaranteed
+ * to sample the plasma that arrives here.
+ */
+export function renderMonitors(list: SpacecraftPos[], speedKms: number | null): string {
+  if (list.length === 0) return '';
+  const active = list.find((s) => s.active) ?? null;
+
+  const rows = list.map((s) => `<tr${s.active ? ' class="l1-row-active"' : ''}>
+      <td>${escapeHtml(s.source)}${s.active ? ' <span class="tag-live">live</span>' : ''}</td>
+      <td class="num">${s.distanceRe.toFixed(0)}</td>
+      <td class="num">${s.offAxisRe.toFixed(1)}</td>
+      <td class="num">${s.offAxisDeg.toFixed(1)}°</td>
+    </tr>`).join('');
+
+  const notes = list.map((s) => {
+    const n = SPACECRAFT_NOTE[s.source];
+    return n ? `<br><b>${escapeHtml(s.source)}</b> — ${escapeHtml(n)}` : '';
+  }).join('');
+
+  let transit = '';
+  if (active && speedKms && speedKms > 0) {
+    const minutes = (active.distanceRe * RE_KM) / speedKms / 60;
+    transit = ` At the ${speedKms.toFixed(0)} km/s now measured, the wind it is
+      sampling reaches Earth about ${minutes.toFixed(0)} minutes later.`;
+  }
+
+  const offAxis = active
+    ? `<p>${escapeHtml(active.source)} is
+       ${(active.distanceRe * RE_KM / 1e6).toFixed(2)} million km upstream and
+       <b>${active.offAxisRe.toFixed(1)} Rₑ off the Sun–Earth line</b> —
+       ${active.offAxisDeg.toFixed(1)}° away from the direction the wind actually has to
+       travel to reach us.${transit}</p>
+       <p class="fine">The solar wind is structured on scales smaller than that offset, so
+       the monitor does not always sample the plasma that arrives. It is the best warning
+       there is, and it is not the same thing as a measurement taken here.</p>`
+    : '<p>No spacecraft is currently flagged operational in the ephemeris feed.</p>';
+
+  return `<h3>The monitors</h3>
+    ${l1Inset(list)}
+    <p class="fine caption">Looking sunward along the Sun–Earth line. Nothing here is
+    compressed — Earth, the Moon’s orbit and the spacecraft offsets are one scale.</p>
+    <table class="prov l1-table">
+      <thead><tr><th>Craft</th><th>Rₑ out</th><th>Rₑ off</th><th>Angle</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    ${offAxis}
+    <p class="fine">${notes.replace(/^<br>/, '')}</p>`;
 }
 
 function checkSummary(c: CheckResult): string {

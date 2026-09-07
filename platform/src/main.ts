@@ -222,6 +222,7 @@ store.subscribe((state) => {
   viewer.setAurora(state.aurora?.data ?? null);
   viewer.setRegions(state.regions?.data ?? [], state.regions?.data?.[0]?.observed ?? null);
   viewer.setCmes(state.cmes);
+  viewer.setSpacecraft(state.spacecraft?.data ?? []);
   syncNarration();
 });
 

@@ -20,11 +20,13 @@ import { CameraRig, type ViewName } from './camera-rig.js';
 import {
   distanceToScene, moonDistanceToScene, radiusToScene, type ScaleMode,
 } from './scales.js';
-import { moonGeo, planetState, sunGeo, toScene } from '../models/ephemeris.js';
+import { gseBasis, moonGeo, planetState, sunGeo, toScene } from '../models/ephemeris.js';
 import { FieldLines, Magnetosphere } from './magnetosphere.js';
 import { SolarWind } from './solar-wind.js';
 import { ActiveRegions } from './active-regions.js';
 import { CmeCones } from './cmes.js';
+import type { SpacecraftPos } from '../data/ephemerides.js';
+import { SpacecraftMarkers } from './spacecraft.js';
 import { activeCmes, type Cme } from '../data/cme.js';
 import type { ActiveRegion } from '../data/swpc.js';
 import { magnetopause } from '../models/shue1998.js';
@@ -51,6 +53,8 @@ export class Viewer {
   private cmeCones = new CmeCones();
   private cmes: Cme[] = [];
   private regionsObservedAt: string | null = null;
+  private readonly spacecraft = new SpacecraftMarkers();
+  private spacecraftPos: SpacecraftPos[] = [];
   private shieldVisible = true;
   private windVisible = true;
   private sunDirEarthFixed = new Vector3(1, 0, 0);
@@ -91,6 +95,7 @@ export class Viewer {
     // Sun-oriented and must NOT spin, so it hangs off the unrotated group.
     this.earth.spin.add(this.fieldLines.group);
     this.earth.group.add(this.magnetosphere.group);
+    this.earth.group.add(this.spacecraft.group);
     // Mid-range devices choke on a large point cloud; halve it when the GPU
     // reports a modest pixel budget.
     this.solarWind = new SolarWind(window.devicePixelRatio > 1.5 ? 4200 : 2600);
@@ -122,6 +127,10 @@ export class Viewer {
   get regionCount(): number { return this.activeRegions.count; }
 
   setCmes(cmes: Cme[]): void { this.cmes = cmes; }
+
+  setSpacecraft(list: SpacecraftPos[]): void { this.spacecraftPos = list; }
+
+  setSpacecraftVisible(v: boolean): void { this.spacecraft.setVisible(v); }
 
   setCmesVisible(v: boolean): void { this.cmeCones.setVisible(v); }
 
@@ -243,6 +252,16 @@ export class Viewer {
       );
       this.magnetosphere.setScale(earthRadius);
       this.magnetosphere.update(mp, sunDir);
+    }
+
+    // The monitors sit in the same Earth-centred frame as the shield, and are
+    // shown with it: they are the instruments the shield's numbers come from.
+    if (this.shieldVisible && this.spacecraftPos.length > 0) {
+      this.spacecraft.setVisible(true);
+      this.spacecraft.setScale(earthRadius);
+      this.spacecraft.update(this.spacecraftPos, gseBasis(date), this.mode);
+    } else {
+      this.spacecraft.setVisible(false);
     }
 
     if (this.windVisible) {

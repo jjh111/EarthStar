@@ -103,3 +103,43 @@ export function geoToEQD(latDeg: number, lonDeg: number, gastDeg: number): Vecto
     Math.sin(lat),
   );
 }
+
+/**
+ * Geocentric Solar Ecliptic basis, expressed in the scene's world frame.
+ *
+ * GSE is how NOAA reports spacecraft positions: +X to the Sun, +Z to the
+ * ecliptic north pole, +Y completing the right-handed set (duskward, against
+ * Earth's orbital motion). The scene works in the equator of date, so the two
+ * differ by the obliquity — 23.4°, far too large to ignore when the whole point
+ * of drawing the monitors is that their off-axis offset is real.
+ *
+ * The ecliptic pole comes from astronomy-engine's ecliptic-of-date rotation
+ * rather than a hardcoded obliquity, so it precesses correctly and there is one
+ * fewer constant to drift.
+ */
+export function gseBasis(date: Date): { x: Vector3; y: Vector3; z: Vector3 } {
+  const rot = Astronomy.Rotation_ECT_EQD(Astronomy.MakeTime(date));
+  // Ecliptic north is (0,0,1) in the ecliptic frame; rotate it into EQD.
+  const n = Astronomy.RotateVector(rot, new Astronomy.Vector(0, 0, 1, Astronomy.MakeTime(date)));
+  const eclipticNorth = toScene(n).normalize();
+
+  const x = sunGeo(date).dir;
+  const xs = toScene(x).normalize();
+  // Orthogonalise: Z is the part of the ecliptic pole perpendicular to the
+  // Sun line. The two are already within a degree of perpendicular, so this is
+  // a small correction, but doing it keeps the basis exactly orthonormal.
+  const z = eclipticNorth.clone().addScaledVector(xs, -eclipticNorth.dot(xs)).normalize();
+  const y = z.clone().cross(xs);
+  return { x: xs, y, z };
+}
+
+/** A GSE vector (any units) rotated into the scene's world frame. */
+export function gseToScene(
+  v: { x: number; y: number; z: number },
+  basis: { x: Vector3; y: Vector3; z: Vector3 },
+): Vector3 {
+  return new Vector3()
+    .addScaledVector(basis.x, v.x)
+    .addScaledVector(basis.y, v.y)
+    .addScaledVector(basis.z, v.z);
+}
