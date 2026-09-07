@@ -39,6 +39,7 @@ export const SWPC_URL = {
   xrays1d: `${SWPC_BASE}/json/goes/primary/xrays-1-day.json`,
   scales: `${SWPC_BASE}/products/noaa-scales.json`,
   aurora: `${SWPC_BASE}/json/ovation_aurora_latest.json`,
+  regions: `${SWPC_BASE}/json/solar_regions.json`,
   alerts: `${SWPC_BASE}/products/alerts.json`,
   summaryMag: `${SWPC_BASE}/products/summary/solar-wind-mag-field.json`,
   summarySpeed: `${SWPC_BASE}/products/summary/solar-wind-speed.json`,
@@ -381,4 +382,70 @@ export function downsample(s: Series, target: number): Series {
     value.push(best);
   }
   return { time, value };
+}
+
+
+/* ---------------------------------------------------------------- *
+ * Active regions
+ * ---------------------------------------------------------------- */
+
+export interface ActiveRegion {
+  region: number;
+  observed: string;
+  /** Heliographic latitude, degrees north. */
+  lat: number;
+  /** Heliographic longitude from central meridian, degrees east. */
+  lon: number;
+  /** Sunspot area, millionths of the solar hemisphere. */
+  area: number | null;
+  spots: number | null;
+  spotClass: string | null;
+  magClass: string | null;
+  /** NOAA's own flare odds for this region, per cent. */
+  cProb: number | null;
+  mProb: number | null;
+  xProb: number | null;
+}
+
+/**
+ * Today's numbered active regions with their reported heliographic positions.
+ *
+ * The feed is newest-first and carries a month of history, with one row per
+ * region per day. Only the most recent observation of each region is kept, and
+ * only for the latest observed date — a region seen three days ago has rotated
+ * since, and drawing it at its old longitude would be a fabrication.
+ */
+export function parseRegions(json: unknown): ActiveRegion[] {
+  const rows = asArray(json);
+  if (rows.length === 0) return [];
+
+  let latest = '';
+  for (const r of rows) {
+    const d = String(r['observed_date'] ?? '');
+    if (d > latest) latest = d;
+  }
+  if (!latest) return [];
+
+  const seen = new Set<number>();
+  const out: ActiveRegion[] = [];
+  for (const r of rows) {
+    if (String(r['observed_date']) !== latest) continue;
+    const region = num(r['region']);
+    const lat = num(r['latitude']);
+    const lon = num(r['longitude']);
+    if (region === null || lat === null || lon === null) continue;
+    if (seen.has(region)) continue;
+    seen.add(region);
+    out.push({
+      region, observed: `${latest}T00:00:00.000Z`,
+      lat, lon,
+      area: num(r['area']), spots: num(r['number_spots']),
+      spotClass: (r['spot_class'] as string) ?? null,
+      magClass: (r['mag_class'] as string) ?? null,
+      cProb: num(r['c_flare_probability']),
+      mProb: num(r['m_flare_probability']),
+      xProb: num(r['x_flare_probability']),
+    });
+  }
+  return out.sort((a, b) => (b.area ?? 0) - (a.area ?? 0));
 }

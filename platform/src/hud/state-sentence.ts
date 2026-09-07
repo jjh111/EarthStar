@@ -20,6 +20,8 @@ import { inlineSpark } from './sparkline.js';
  * the same thing on every platform.
  */
 const GLYPH: Record<string, string> = {
+  // Radiation: a nucleus with tracks leaving it.
+  particle: '<svg class="glyph" viewBox="0 0 16 12"><circle cx="8" cy="6" r="1.6"/><path d="M2 2l3.2 2.6M14 2l-3.2 2.6M2 10l3.2-2.6M14 10l-3.2-2.6"/></svg>',
   // Wind: three strokes leaning downstream.
   wind: '<svg class="glyph" viewBox="0 0 16 12"><path d="M1 3h8a2 2 0 1 0-2-2M1 6h11a2 2 0 1 1-2 2M1 9h6a1.6 1.6 0 1 1-1.6 1.6"/></svg>',
   // Field: a dipole loop.
@@ -94,6 +96,20 @@ export function stateSentence(state: StoreState): string {
     `${state.kpSeries ? inlineSpark(state.kpSeries, { band: [0, 4], extremes: true, label: 'Kp over the last 6 hours, quiet band shaded' }) : ''} ` +
     `${num(kp, 2, 'Kp')}.`,
   );
+
+  /* --- particle radiation --- */
+  const pt = d?.particles ?? null;
+  if (pt) {
+    const s10 = pt.proton_10mev;
+    out.push(
+      `${GLYPH['particle']} Radiation is at ` +
+      `<b class="sentence-num">S${pt.s_scale ?? 0}</b>` +
+      `${state.protonSeries ? ` ${inlineSpark(state.protonSeries, { log: true, extremes: true, label: 'proton flux above 10 MeV, last 6 hours, logarithmic' })}` : ''} ` +
+      `${num(s10, 2, 'pfu')}` +
+      (pt.s_scale !== null && pt.s_scale >= 1
+        ? ' &mdash; a storm is under way' : ' &mdash; nothing to worry about') + '.',
+    );
+  }
 
   /* --- the Sun, and what it may do to us --- */
   const xr = d?.xray ?? null;

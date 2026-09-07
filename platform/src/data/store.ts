@@ -6,7 +6,7 @@
 
 import type { NowEnvelope, Source } from './source.js';
 import type { AuroraNow, Envelope, SolarWindSeries } from '../contract/types.js';
-import type { Series } from './swpc.js';
+import type { ActiveRegion, Series } from './swpc.js';
 
 export interface StoreState {
   now: NowEnvelope | null;
@@ -14,8 +14,11 @@ export interface StoreState {
   series: Envelope<SolarWindSeries> | null;
   kpSeries: Series | null;
   xraySeries: Series | null;
+  protonSeries: Series | null;
+  electronSeries: Series | null;
   /** Its own cadence: ~5-minute product, 141 KB gzipped. */
   aurora: Envelope<AuroraNow | null> | null;
+  regions: Envelope<ActiveRegion[]> | null;
   /** Last refresh attempt, whether or not it succeeded. */
   lastAttempt: string | null;
   lastError: string | null;
@@ -27,7 +30,8 @@ type Listener = (s: StoreState) => void;
 export class NowStore {
   private state: StoreState = {
     now: null, series: null, kpSeries: null, xraySeries: null,
-    aurora: null, lastAttempt: null, lastError: null, loading: true,
+    protonSeries: null, electronSeries: null,
+    aurora: null, regions: null, lastAttempt: null, lastError: null, loading: true,
   };
   private listeners = new Set<Listener>();
   private timer: number | null = null;
@@ -60,9 +64,10 @@ export class NowStore {
     this.inflight = ctl;
     this.emit({ loading: true });
     try {
-      const { now, series, kpSeries, xraySeries } = await this.source.fetchSnapshot(ctl.signal);
+      const { now, series, kpSeries, xraySeries, protonSeries, electronSeries } =
+        await this.source.fetchSnapshot(ctl.signal);
       this.emit({
-        now, series, kpSeries, xraySeries,
+        now, series, kpSeries, xraySeries, protonSeries, electronSeries,
         lastAttempt: new Date().toISOString(), lastError: null, loading: false,
       });
     } catch (e) {
@@ -85,6 +90,11 @@ export class NowStore {
     } catch {
       // Keep the previous grid; it ages and the HUD says so.
     }
+    try {
+      // A daily product, fetched alongside the aurora rather than on a timer
+      // of its own — there is no third cadence worth maintaining.
+      this.emit({ regions: await this.source.fetchRegions() });
+    } catch { /* keep the previous list */ }
   }
 
   start(): void {

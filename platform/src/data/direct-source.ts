@@ -9,13 +9,16 @@
  */
 
 import type { AuroraNow, Envelope, Now, SolarWindSeries } from '../contract/types.js';
+import { PARTICLE_URL, parseParticles, seriesFor } from './particles.js';
+import { PROPAGATED_URL, parsePropagated } from './geospace.js';
 import type { NowEnvelope, PartMeta, Snapshot, Source } from './source.js';
 import { magnetopause } from '../models/shue1998.js';
 import {
   SWPC_URL, parseAlerts, parseKpNow, parseScalesNow, parseSolarWindNow,
   parseSolarWindSeries, parseXrayFromSeries, parseAurora,
-  parseKpSeries, parseXraySeries, downsample,
+  parseKpSeries, parseXraySeries, downsample, parseRegions,
 } from './swpc.js';
+import type { ActiveRegion } from './swpc.js';
 
 const SWPC = 'NOAA SWPC';
 
@@ -27,9 +30,12 @@ export const STALE_AFTER = {
   scales: 6 * 60 * 60,
   alerts: 7 * 24 * 60 * 60,
   magnetopause: 20 * 60,
+  particles: 30 * 60,
+  propagated: 30 * 60,
   // OVATION publishes a ~30-90 minute forecast every ~5 minutes; an hour-old
   // grid is still meaningful, a three-hour-old one is not.
   aurora: 60 * 60,
+  regions: 36 * 60 * 60,
 } as const;
 
 const FETCH_TIMEOUT_MS = 15_000;
@@ -79,13 +85,16 @@ export class DirectSource implements Source {
   }
 
   async fetchSnapshot(signal?: AbortSignal): Promise<Snapshot> {
-    const [mag, wind, kp, xray, scales, alerts] = await Promise.all([
+    const [mag, wind, kp, xray, scales, alerts, protons, electrons, prop] = await Promise.all([
       getJson<unknown>(SWPC_URL.mag, signal),
       getJson<unknown>(SWPC_URL.wind, signal),
       getJson<unknown>(SWPC_URL.kp1m, signal),
       getJson<unknown>(SWPC_URL.xrays6h, signal),
       getJson<unknown>(SWPC_URL.scales, signal),
       getJson<unknown>(SWPC_URL.alerts, signal),
+      getJson<unknown>(PARTICLE_URL.protons, signal),
+      getJson<unknown>(PARTICLE_URL.electrons, signal),
+      getJson<unknown>(PROPAGATED_URL, signal),
     ]);
     const fetched_at = new Date().toISOString();
 
@@ -95,9 +104,22 @@ export class DirectSource implements Source {
     const scalesNow = scales.json ? parseScalesNow(scales.json) : null;
     const alertList = alerts.json ? parseAlerts(alerts.json) : [];
 
+    const particles = protons.json || electrons.json
+      ? parseParticles(protons.json, electrons.json) : null;
+    const propagated = prop.json ? parsePropagated(prop.json) : null;
+    const arriving = propagated?.arrivingNow ?? null;
+
     // Modeled from the measured wind — null in, null out. Never a default.
+    /**
+     * Computed from the PROPAGATED wind where NOAA provides it: the boundary
+     * responds to plasma that has arrived, not to plasma still an hour out at
+     * L1. Falls back to the L1 reading when the propagation feed is down, and
+     * the Situation Report says which was used.
+     */
     const mp = magnetopause(
-      solar_wind?.bz_gsm ?? null, solar_wind?.density ?? null, solar_wind?.speed ?? null,
+      arriving?.bz ?? solar_wind?.bz_gsm ?? null,
+      arriving?.density ?? solar_wind?.density ?? null,
+      arriving?.speed ?? solar_wind?.speed ?? null,
     );
 
     const windErr = mag.error ?? wind.error;
@@ -113,13 +135,38 @@ export class DirectSource implements Source {
         'modeled', { name: 'NOAA G/S/R scales' }),
       alerts: meta(fetched_at, alertList[0]?.issued ?? null, STALE_AFTER.alerts,
         `${SWPC} · alerts, watches & warnings`, SWPC_URL.alerts, alerts.error),
-      magnetopause: meta(fetched_at, solar_wind?.time ?? null, STALE_AFTER.magnetopause,
-        'Earth Star (from SWPC solar wind)', SWPC_URL.mag, windErr, 'modeled',
+      magnetopause: meta(fetched_at,
+        arriving?.arrivesAt ?? solar_wind?.time ?? null, STALE_AFTER.magnetopause,
+        arriving ? 'Earth Star (from SWPC wind propagated to Earth)'
+          : 'Earth Star (from SWPC solar wind at L1)',
+        arriving ? PROPAGATED_URL : SWPC_URL.mag, windErr, 'modeled',
         { name: 'Shue et al. 1998', ref: 'doi:10.1029/98JA01103' }),
+      particles: meta(fetched_at, particles?.time ?? null, STALE_AFTER.particles,
+        `${SWPC} · GOES particle detectors`, PARTICLE_URL.protons,
+        protons.error ?? electrons.error),
+      propagated: meta(fetched_at, arriving?.arrivesAt ?? null, STALE_AFTER.propagated,
+        `${SWPC} · solar wind propagated to the bow shock nose`, PROPAGATED_URL,
+        prop.error, 'modeled', { name: 'NOAA SWPC propagation' }),
     };
 
     const data: Now = {
       solar_wind, kp: kpNow, xray: xrayNow, scales: scalesNow, alerts: alertList,
+      particles: particles
+        ? {
+          time: particles.time,
+          proton_10mev: particles.proton10, proton_100mev: particles.proton100,
+          electron_2mev: particles.electron2, satellite: particles.satellite,
+          s_scale: particles.s?.scale ?? null, s_text: particles.s?.text ?? null,
+        }
+        : null,
+      propagated: arriving
+        ? {
+          observed_at: arriving.observedAt, arrives_at: arriving.arrivesAt,
+          speed: arriving.speed, density: arriving.density,
+          bz: arriving.bz, bt: arriving.bt,
+          lead_minutes: propagated?.leadMinutes ?? null,
+        }
+        : null,
       magnetopause: mp
         ? {
           standoff_re: mp.r0Re, alpha: mp.alpha,
@@ -148,6 +195,7 @@ export class DirectSource implements Source {
         speed: 'km/s', density: 'cm^-3', temperature: 'K',
         estimated_kp: 'Kp', flux_long: 'W/m^2', flux_short: 'W/m^2',
         standoff_re: 'Re', bow_shock_re: 'Re', dyn_pressure_npa: 'nPa',
+        proton_10mev: 'pfu', proton_100mev: 'pfu', electron_2mev: 'pfu',
       },
       data, parts,
     };
@@ -174,6 +222,8 @@ export class DirectSource implements Source {
       now, series,
       kpSeries: downsample(parseKpSeries(kp.json), 120),
       xraySeries: downsample(parseXraySeries(xray.json), 120),
+      protonSeries: downsample(seriesFor(protons.json, '>=10 MeV'), 120),
+      electronSeries: downsample(seriesFor(electrons.json, '>=2 MeV'), 120),
     };
   }
 
@@ -193,6 +243,23 @@ export class DirectSource implements Source {
       latency_s: latency(fetched_at, data_time) ?? 0,
       stale_after_s: STALE_AFTER.aurora,
       units: { values: '% probability of visible aurora' },
+      data,
+    };
+  }
+
+  async fetchRegions(signal?: AbortSignal): Promise<Envelope<ActiveRegion[]>> {
+    const res = await getJson<unknown>(SWPC_URL.regions, signal);
+    const fetched_at = new Date().toISOString();
+    const data = res.json ? parseRegions(res.json) : [];
+    const data_time = data[0]?.observed ?? fetched_at;
+    return {
+      source: `${SWPC} · solar region summary`,
+      source_url: SWPC_URL.regions,
+      tier: 'measured', model: null,
+      fetched_at, data_time,
+      latency_s: latency(fetched_at, data_time) ?? 0,
+      stale_after_s: STALE_AFTER.regions,
+      units: { lat: 'deg', lon: 'deg from central meridian', area: 'millionths of hemisphere' },
       data,
     };
   }

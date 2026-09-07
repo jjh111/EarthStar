@@ -30,6 +30,10 @@ export interface ImageLoop {
   spanHours: number;
   /** Bytes for one frame, measured. Null when the probe failed. */
   frameBytes: number | null;
+  /** Index of the newest frame that is not a dropout. */
+  newestGood: number;
+  /** How many dropout frames were skipped to reach it. */
+  skippedDropouts: number;
   sourceUrl: string;
 }
 
@@ -121,11 +125,13 @@ export async function fetchLoop(spec: LoopSpec, signal?: AbortSignal): Promise<I
         (_, i) => frames[Math.round(i * step)]!);
     }
 
+    const good = await newestGoodIndex(sampled, signal);
     return {
       id: spec.id, label: spec.label, describes: spec.describes,
       instrument: spec.instrument, frames: sampled,
       totalAvailable: frames.length, spanHours,
-      frameBytes: await frameSize(sampled[sampled.length - 1]!.url, signal),
+      frameBytes: good.bytes,
+      newestGood: good.index, skippedDropouts: good.skipped,
       sourceUrl,
     };
   } catch {
@@ -142,6 +148,38 @@ async function frameSize(url: string, signal?: AbortSignal): Promise<number | nu
   } catch {
     return null;
   }
+}
+
+/**
+ * Upstream sometimes publishes a near-empty frame — a data dropout, a
+ * calibration exposure, an eclipse of the spacecraft. They arrive as valid PNGs
+ * of a few tens of kilobytes against a normal frame's megabyte, and rendering
+ * one produces a black square that looks like our bug rather than their gap.
+ *
+ * Sizes of the newest few frames are compared against their median; anything
+ * far below it is skipped, and the panel says which frame it settled on. The
+ * frame is never silently substituted without the timestamp changing to match.
+ */
+async function newestGoodIndex(
+  frames: ImageFrame[], signal?: AbortSignal,
+): Promise<{ index: number; skipped: number; bytes: number | null }> {
+  const last = frames.length - 1;
+  const probe = Math.min(6, frames.length);
+  const sizes = await Promise.all(
+    Array.from({ length: probe }, (_, k) => frameSize(frames[last - k]!.url, signal)),
+  );
+  const known = sizes.filter((n): n is number => n !== null && n > 0).sort((a, b) => a - b);
+  if (known.length === 0) return { index: last, skipped: 0, bytes: null };
+  const median = known[Math.floor(known.length / 2)]!;
+
+  for (let k = 0; k < probe; k++) {
+    const n = sizes[k] ?? null;
+    if (n !== null && n >= median * 0.4) {
+      return { index: last - k, skipped: k, bytes: n };
+    }
+  }
+  // All of them look like dropouts; show the newest and let the size speak.
+  return { index: last, skipped: 0, bytes: sizes[0] ?? null };
 }
 
 /**

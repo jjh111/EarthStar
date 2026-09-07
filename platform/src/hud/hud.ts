@@ -8,6 +8,7 @@ import type { PartMeta } from '../data/source.js';
 import type { StoreState } from '../data/store.js';
 import type { CheckResult } from '../data/checks.js';
 import type { ForecastBundle } from '../data/forecast.js';
+import type { SolarCycle } from '../data/solar-cycle.js';
 import { LOOPS, type ImageLoop } from '../data/solar-imagery.js';
 import {
   NO_DATA, badgeFor, badgeTitle, formatAge, hhmmUTC, stalenessOf,
@@ -25,6 +26,7 @@ export interface HudCallbacks {
   onToggleSunPlay(): void;
   onScrubSun(index: number): void;
   onRunChecks(): void;
+  onLoadCycle(): void;
 }
 
 export class Hud {
@@ -46,6 +48,9 @@ export class Hud {
   private forecast: ForecastBundle | null = null;
   private forecastLoading = false;
   private forecastRequested = false;
+  private cycle: SolarCycle | null = null;
+  private cycleLoading = false;
+  private cycleRequested = false;
   private sun: SunState = {
     loop: null, loopId: LOOPS[0]!.id, frameIndex: 0,
     playing: false, loading: true, preloaded: 0, preloading: false,
@@ -72,14 +77,19 @@ export class Hud {
     this.checks = c; this.checksRunning = running; this.renderMargin();
   }
 
+  setCycle(c: SolarCycle | null, loading: boolean): void {
+    this.cycle = c; this.cycleLoading = loading; this.renderMargin();
+  }
+
   setForecast(f: ForecastBundle | null, loading: boolean): void {
     this.forecast = f; this.forecastLoading = loading; this.renderMargin();
   }
   setSunLoop(loop: ImageLoop | null, loading: boolean): void {
     this.sun.loop = loop;
     this.sun.loading = loading;
-    // Open on the newest frame — the current Sun, not yesterday's — and still.
-    this.sun.frameIndex = loop ? loop.frames.length - 1 : 0;
+    // Open on the newest usable frame — the current Sun, not yesterday's, and
+    // not a dropout that would render as a black square.
+    this.sun.frameIndex = loop ? loop.newestGood : 0;
     this.sun.playing = false;
     this.sun.preloaded = 0;
     this.sun.preloading = false;
@@ -175,6 +185,11 @@ export class Hud {
     if (tab === 'checks' && !this.checksRequested) {
       this.checksRequested = true;
       this.cb.onRunChecks();
+    }
+    // 35 KB of monthly history, fetched once, only if the panel is opened.
+    if (tab === 'sun' && !this.cycleRequested) {
+      this.cycleRequested = true;
+      this.cb.onLoadCycle();
     }
     if (tab === 'forecast' && !this.forecastRequested) {
       this.forecastRequested = true;
@@ -293,7 +308,8 @@ export class Hud {
       case 'report': this.bodyEl.innerHTML = renderReport(state, this.narration, now); break;
       case 'forecast':
         this.bodyEl.innerHTML = renderForecast(this.forecast, this.forecastLoading); break;
-      case 'sun': this.bodyEl.innerHTML = renderSun(this.sun, LOOPS); break;
+      case 'sun':
+        this.bodyEl.innerHTML = renderSun(this.sun, LOOPS, this.cycle, this.cycleLoading); break;
       case 'sources': this.bodyEl.innerHTML = renderSources(state, this.checks); break;
       case 'checks': this.bodyEl.innerHTML = renderChecks(this.checks, this.checksRunning); break;
       case 'detail':
