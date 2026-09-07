@@ -8,6 +8,7 @@
  */
 
 import { swpcTime, SWPC_BASE } from './swpc.js';
+import { fetchEnlil, type EnlilRun } from './enlil.js';
 
 export const FORECAST_URL = {
   kp: `${SWPC_BASE}/products/noaa-planetary-k-index-forecast.json`,
@@ -49,6 +50,8 @@ export interface ForecastBundle {
   discussion: string | null;
   flares: FlareEvent[];
   f107: { value: number | null; time: string | null };
+  /** WSA-Enlil at Earth — 212 KB, so it rides the on-demand Ahead fetch. */
+  enlil: EnlilRun | null;
   fetchedAt: string;
 }
 
@@ -129,13 +132,14 @@ export function stripProductHeader(text: string): { issued: string | null; body:
 }
 
 export async function fetchForecast(signal?: AbortSignal): Promise<ForecastBundle> {
-  const [kpJ, oddsJ, threeDay, discussion, flaresJ, f107J] = await Promise.all([
+  const [kpJ, oddsJ, threeDay, discussion, flaresJ, f107J, enlil] = await Promise.all([
     json(FORECAST_URL.kp, signal),
     json(FORECAST_URL.probabilities, signal),
     txt(FORECAST_URL.threeDay, signal),
     txt(FORECAST_URL.discussion, signal),
     json(FORECAST_URL.flares7, signal),
     json(FORECAST_URL.f107, signal),
+    fetchEnlil(signal),
   ]);
 
   const f107row = Array.isArray(f107J) ? (f107J[0] as Record<string, unknown> | undefined) : undefined;
@@ -149,6 +153,7 @@ export async function fetchForecast(signal?: AbortSignal): Promise<ForecastBundl
       value: f107row && Number.isFinite(Number(f107row['flux'])) ? Number(f107row['flux']) : null,
       time: f107row ? swpcTime(f107row['time_tag'] as string) : null,
     },
+    enlil,
     fetchedAt: new Date().toISOString(),
   };
 }

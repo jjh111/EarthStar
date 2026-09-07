@@ -17,6 +17,7 @@ import { subsolarPoint } from '../models/ephemeris.js';
 import { GEOSYNC_RE, dipoleFieldAtRe } from './geosync.js';
 import { EPHEM_URL, parseEphemerides } from './ephemerides.js';
 import { DST_URL, parseDst } from './dst.js';
+import { enlilAt, fetchEnlil } from './enlil.js';
 import { hhmmUTC } from '../contract/types.js';
 
 export interface CheckRow {
@@ -55,7 +56,8 @@ export async function runChecks(signal?: AbortSignal): Promise<CheckResult> {
   const rows: CheckRow[] = [];
   const source = new DirectSource();
 
-  const [env, sumMag, sumSpeed, flares, series, aurora, ephem, dstRaw] = await Promise.all([
+  const [env, sumMag, sumSpeed, flares, series, aurora, ephem, dstRaw, enlil] =
+    await Promise.all([
     source.fetchNow(signal),
     j(SWPC_URL.summaryMag, signal) as Promise<Array<Record<string, unknown>>>,
     j(SWPC_URL.summarySpeed, signal) as Promise<Array<Record<string, unknown>>>,
@@ -64,6 +66,8 @@ export async function runChecks(signal?: AbortSignal): Promise<CheckResult> {
     source.fetchAurora(signal),
     j(EPHEM_URL, signal),
     j(DST_URL, signal),
+    // 212 KB, and the only row that can say anything about a model's skill.
+    fetchEnlil(signal),
   ]);
 
   const d = env.data;
@@ -304,6 +308,41 @@ export async function runChecks(signal?: AbortSignal): Promise<CheckResult> {
         + `quiet versus disturbed, nothing finer. ${aheadCount} of the feed's samples lie `
         + `in the future and are excluded from "now".`,
     });
+  }
+
+  /**
+   * A model's forecast against a measurement of the same quantity.
+   *
+   * Every other row here checks a parse. This one checks WSA-Enlil. The model
+   * is initialised from solar magnetograms and analysed CME cones and never
+   * sees L1, so its output for a moment that has already happened can be set
+   * against the wind NOAA measured and propagated to Earth for that same
+   * moment — two independent numbers for one physical quantity.
+   *
+   * The threshold is loose because the row is an instrument, not a verdict on
+   * the forecast: a good heliospheric model is routinely tens of km/s out, and
+   * that is not a defect in either the model or our code. What a 200 km/s
+   * disagreement would mean is that we are reading the wrong column or
+   * aligning the wrong times, which is what this is here to catch.
+   */
+  const arriving = d.propagated;
+  if (enlil && arriving?.speed != null && arriving.arrives_at) {
+    const at = enlilAt(enlil, new Date(arriving.arrives_at));
+    if (at?.speed != null) {
+      const delta = at.speed - arriving.speed;
+      const pct = (delta / arriving.speed) * 100;
+      rows.push({
+        name: 'WSA-Enlil hindcast vs measured wind',
+        ours: `measured ${arriving.speed.toFixed(0)} km/s`,
+        theirs: `Enlil ${at.speed.toFixed(0)} km/s`,
+        ok: Math.abs(delta) <= 200,
+        note: `${delta >= 0 ? '+' : ''}${delta.toFixed(0)} km/s (${pct.toFixed(0)}%) at `
+          + `${hhmmUTC(arriving.arrives_at)} UTC. Enlil is driven by solar magnetograms and `
+          + `CME cone fits and never sees L1, so this is a model against a measurement of `
+          + `the same quantity. The tolerance is ±200 km/s: it catches a misread column or `
+          + `a time misalignment, not ordinary forecast error.`,
+      });
+    }
   }
 
   return {

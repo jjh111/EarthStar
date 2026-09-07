@@ -125,3 +125,26 @@ describe('downsampling', () => {
     expect(out.value.every((v) => v === null)).toBe(true);
   });
 });
+
+describe('panelSpark direction', () => {
+  const future: Series = {
+    time: ['2026-09-07T12:00:00Z', '2026-09-08T12:00:00Z', '2026-09-09T12:00:00Z'],
+    value: [340, 560, 759],
+  };
+
+  it('captions a forecast as ahead, never "over the last"', () => {
+    const html = panelSpark(future, { unit: 'km/s', direction: 'future' });
+    expect(html).toContain('over the next');
+    expect(html).not.toContain('over the last');
+    // The final point of a forecast has not happened; calling it "now" is a
+    // claim about the present made from a model's far end.
+    expect(html).not.toContain('</span> now');
+    expect(html).toContain('end of run');
+  });
+
+  it('still captions a history as history by default', () => {
+    const html = panelSpark(future, { unit: 'km/s' });
+    expect(html).toContain('over the last');
+    expect(html).toContain('</span> now');
+  });
+});

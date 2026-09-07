@@ -316,7 +316,7 @@ export class Hud {
     switch (this.tab) {
       case 'report': this.bodyEl.innerHTML = renderReport(state, this.narration, now); break;
       case 'forecast':
-        this.bodyEl.innerHTML = renderForecast(this.forecast, this.forecastLoading); break;
+        this.bodyEl.innerHTML = renderForecast(this.forecast, this.forecastLoading, state?.cmes ?? []); break;
       case 'sun':
         this.bodyEl.innerHTML = renderSun(this.sun, LOOPS, this.cycle, this.cycleLoading); break;
       case 'sources': this.bodyEl.innerHTML = renderSources(state, this.checks); break;

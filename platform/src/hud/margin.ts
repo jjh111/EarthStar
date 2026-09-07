@@ -11,6 +11,8 @@ import type { NowEnvelope, PartMeta } from '../data/source.js';
 import type { StoreState } from '../data/store.js';
 import type { CheckResult } from '../data/checks.js';
 import { l1Inset } from './l1-inset.js';
+import { CLOUD_ARRIVAL, enlilSeries, type EnlilRun } from '../data/enlil.js';
+import type { Cme } from '../data/cme.js';
 import { SPACECRAFT_NOTE, type SpacecraftPos } from '../data/ephemerides.js';
 import type { ImageLoop } from '../data/solar-imagery.js';
 import { NO_DATA, badgeFor, badgeTitle, formatAge, hhmmUTC, stalenessOf } from './format.js';
@@ -87,7 +89,9 @@ function kpBars(f: ForecastBundle): string {
       <span class="key-pred">▮</span> predicted · rule at Kp 5, the storm threshold</p>`;
 }
 
-export function renderForecast(f: ForecastBundle | null, loading: boolean): string {
+export function renderForecast(
+  f: ForecastBundle | null, loading: boolean, cmes: Cme[] = [],
+): string {
   if (!f) {
     return `<h2>Ahead</h2><p>${loading ? 'Loading NOAA forecasts…' : 'Forecasts have not loaded.'}</p>`;
   }
@@ -128,6 +132,8 @@ export function renderForecast(f: ForecastBundle | null, loading: boolean): stri
     proxy for solar activity and the driver of upper-atmosphere density, so it sets how fast
     satellites in low orbit decay.</p>` : ''}
 
+    ${enlilSection(f.enlil, cmes)}
+
     ${three ? `<h3>NOAA 3-day forecast</h3>
     <pre class="product">${escapeHtml(three.body)}</pre>
     ${three.issued ? `<p class="tile-meta">Issued ${escapeHtml(three.issued)}.
@@ -136,6 +142,101 @@ export function renderForecast(f: ForecastBundle | null, loading: boolean): stri
     ${disc ? `<h3>Forecaster discussion</h3>
     <pre class="product">${escapeHtml(disc.body)}</pre>
     ${disc.issued ? `<p class="tile-meta">Issued ${escapeHtml(disc.issued)}.</p>` : ''}` : ''}`;
+}
+
+/**
+ * WSA-Enlil at Earth. This is the only physics-based forecast on the panel —
+ * everything else in this tab is NOAA's prose or a probability table — so the
+ * section leads with what the model expects and then says plainly what kind of
+ * claim that is.
+ */
+function enlilSection(run: EnlilRun | null, cmes: Cme[] = []): string {
+  if (!run || run.ahead.length === 0) return '';
+
+  const peak = run.peakSpeed;
+  const arrival = run.cloudArrival;
+  const nowSpeed = run.past[run.past.length - 1]?.speed ?? null;
+
+  const speedSpark = panelSpark(enlilSeries(run.ahead, 'speed'), {
+    unit: 'km/s', format: (v) => v.toFixed(0), extremes: true, direction: 'future',
+  });
+  const cloudSpark = panelSpark(enlilSeries(run.ahead, 'cloud'), {
+    unit: '', format: (v) => v.toFixed(2), rule: CLOUD_ARRIVAL, direction: 'future',
+  });
+
+  const hours = (t: string): string => {
+    const h = (Date.parse(t) - Date.now()) / 3_600_000;
+    return h < 1 ? 'within the hour' : `in about ${Math.round(h)} h`;
+  };
+
+  return `<h3>WSA-Enlil — the wind at Earth, forecast</h3>
+    <p>A magnetohydrodynamic simulation of the inner heliosphere sampled at Earth
+    <span class="badge badge-d">D</span>, run by NOAA from solar magnetograms and the
+    analysed CME cones. It is the only forecast here that solves the physics rather than
+    extrapolating, and unlike our own cone propagation it accounts for drag.</p>
+
+    <p>Radial speed over the next
+    ${Math.round((Date.parse(run.lastTime!) - Date.now()) / 3_600_000)} hours${
+      nowSpeed !== null ? `, from <b class="sentence-num">${nowSpeed.toFixed(0)}</b> km/s now` : ''}:</p>
+    ${speedSpark}
+    ${peak?.speed != null ? `<p>Peaks at <b class="sentence-num">${peak.speed.toFixed(0)}</b> km/s
+      ${hours(peak.time)} — ${hhmmUTC(peak.time)} UTC on
+      ${new Date(peak.time).toUTCString().slice(0, 11)}.</p>` : ''}
+
+    <h3>Ejecta at Earth</h3>
+    <p class="fine">The model carries a passive tracer that marks CME plasma. It is a mixing
+    fraction, not a density and not a probability — it says where the ejection is in the
+    simulation, and the simulation can be wrong about that.</p>
+    ${cloudSpark}
+    ${arrival
+      ? `<p>The tracer crosses ${CLOUD_ARRIVAL} at <b class="sentence-num">${hhmmUTC(arrival.time)}</b> UTC
+         on ${new Date(arrival.time).toUTCString().slice(0, 11)}, ${hours(arrival.time)} —
+         the model's arrival for the ejection now in flight.</p>
+         ${coneVsEnlil(arrival.time, cmes)}`
+      : `<p>The tracer stays below ${CLOUD_ARRIVAL} throughout the run: no ejecta reach Earth
+         in the model's window.${cmes.some((c) => c.earthDirected && c.arrival
+           && Date.parse(c.arrival.time) > Date.now())
+           ? ' Our cone propagation does put one here — the two disagree, and Enlil is the '
+             + 'one that solves the physics.' : ''}</p>`}
+    <p class="fine">Model output covers ${hhmmUTC(run.firstTime!)} UTC onward, ${run.past.length}
+    samples already elapsed and ${run.ahead.length} ahead. Its hindcast half is checked
+    against the measured wind in the Checks panel.</p>`;
+}
+
+/**
+ * Our constant-speed cone arrival against Enlil's. This is the comparison the
+ * cone panel has been promising since it shipped: the cone ignores drag, so it
+ * should run *early* against a model that includes it, and by how much is worth
+ * seeing rather than asserting.
+ */
+export function coneVsEnlil(enlilTime: string, cmes: Cme[]): string {
+  const inbound = cmes
+    .filter((c) => c.earthDirected && c.arrival && Date.parse(c.arrival.time) > Date.now())
+    .sort((a, b) => Date.parse(a.arrival!.time) - Date.parse(b.arrival!.time));
+  const c = inbound[0];
+  if (!c?.arrival) {
+    return `<p class="fine">No Earth-directed cone of ours has an arrival still ahead, so
+      there is nothing to compare this against.</p>`;
+  }
+  // DONKI sometimes supplies its own Enlil-derived arrival; comparing that
+  // against Enlil would be comparing the model with itself.
+  if (c.arrivalFromEnlil) {
+    return `<p class="fine">The arrival in the CME panel is NOAA and NASA's own Enlil
+      figure, so it is the same model and not an independent comparison.</p>`;
+  }
+  const deltaH = (Date.parse(enlilTime) - Date.parse(c.arrival.time)) / 3_600_000;
+  const early = deltaH > 0;
+  return `<p>Our cone puts it at <b class="sentence-num">${hhmmUTC(c.arrival.time)}</b> UTC,
+    <b class="sentence-num">${Math.abs(deltaH).toFixed(0)} h</b>
+    ${early ? 'earlier' : 'later'} than Enlil.
+    ${early
+      ? 'That is the expected direction: the cone carries the ejection at the constant speed '
+        + 'DONKI measured near the Sun, and real ejections decelerate toward the ambient wind. '
+        + 'Enlil is the better number; ours is the geometry.'
+      : 'That is the wrong direction for the usual reason — constant-speed propagation should '
+        + 'run early against a model that includes drag — so either the cone speed is below the '
+        + 'ambient wind, in which case the ejection accelerates, or the two are tracking '
+        + 'different structures.'}</p>`;
 }
 
 const FORECAST_LINK = {

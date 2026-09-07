@@ -422,6 +422,45 @@ Severity bands are Loewe & Prölss (1997), *J. Geophys. Res.* **102**, 14209: qu
 
 ---
 
+## 5e. WSA-Enlil at Earth — `json/enlil_time_series.json`
+
+Verified live 2026-09-07. `access-control-allow-origin: *`. 1.6 MB raw, **212 KB gzipped**,
+4416 records. Newest-first. Fetched on demand with the Ahead panel, never on the load path.
+
+The heliospheric forecast as *numbers*, which the inventory had listed only as imagery.
+Columns: `v_r` (radial speed at Earth, km/s), `earth_particles_per_cm3`, `temperature`,
+`b_r`/`b_theta`/`b_phi`, `polarity`, and `cloud` — a passive tracer marking CME plasma.
+
+**Span and cadence.** Three days of elapsed model time and four ahead, at the model's own
+~137-second timestep. Half the file has already happened, which is what makes it checkable.
+
+**The tracer is not a probability.** `cloud` ranged from 7.1e-37 to 1.15 in a single
+response. It is a mixing fraction; any "is a CME here" test on it needs a threshold well
+clear of the numerical floor, and the Viewer uses 0.1. A nonzero test would report ejecta at
+Earth continuously.
+
+**What it is worth.** Enlil is initialised from solar magnetograms and analysed CME cones
+and never sees L1, so its elapsed half can be set against the wind NOAA measured and
+propagated to Earth for the same moment — a model against a measurement of one physical
+quantity. Sampled on 2026-09-07 across an hour of propagated wind:
+
+| Time | Measured | Enlil | Δ |
+|---|---|---|---|
+| 07:57 | 364 km/s | 346 | −19 (−5%) |
+| 08:20 | 370 km/s | 347 | −23 (−6%) |
+| 08:45 | 368 km/s | 349 | −19 (−5%) |
+
+Mean absolute error 22 km/s. Density 12.4 modelled against 11–15 measured. The check row
+carries a ±200 km/s tolerance, which is deliberately far looser than that: it exists to
+catch a misread column or a time misalignment, not to grade the forecast.
+
+**And it makes our own cone model falsifiable.** Constant-speed propagation ignores drag,
+so it should run *early* against Enlil. On 2026-09-07 it did, by 4 hours on a 21-hour
+forecast — the right direction and a plausible magnitude. The panel states which direction
+it found rather than asserting the expected one, and says so when the sign is wrong.
+
+---
+
 ## 6. What the Viewer does with all this
 
 - Selection is **by timestamp and `active` flag**, never by array position.

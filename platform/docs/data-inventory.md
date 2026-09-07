@@ -60,7 +60,7 @@ the upstream traps.
 | ✅ | `products/noaa-scales` | 0.2 KB | R/S/G now and +3 days |
 | ✅ | `products/alerts` | 5 KB | watches, warnings, alerts |
 | ◻ | `text/3-day-geomag-forecast.txt` | 0.9 KB | Kp table in prose form |
-| ◻ | `json/enlil_time_series.json` | 212 KB | **the WSA-Enlil forecast at Earth as numbers, not pictures** — v_r, density, temperature, B, polarity and a CME `cloud` tracer, ~137 s cadence, 3 days of hindcast and 4 of forecast. An independent physics-based arrival time to check the constant-speed cone model against, and the hindcast half is directly comparable with what we measured. |
+| ✅ | `json/enlil_time_series.json` | 212 KB | **the WSA-Enlil forecast at Earth as numbers, not pictures** — v_r, density, temperature, B, polarity and a CME `cloud` tracer, ~137 s cadence, 3 days of hindcast and 4 of forecast. An independent physics-based arrival time to check the constant-speed cone model against, and the hindcast half is directly comparable with what we measured. |
 | ◻ | `images/animations/enlil/` | — | the same model as imagery — lower value now the numbers are in reach |
 
 ## 5. Aurora
@@ -127,6 +127,19 @@ The hunt also turned up three things the previous inventory had wrong: **Dst is 
 **Enlil is available as numbers**, not just imagery; and `geospace_pred_est_kp_1_hour` is a
 **dead feed serving 2024 data** that parses perfectly.
 
+## Also in this pass: the storm index and the forecast, as numbers
+
+**Dst** — modelled `[D]` by NOAA's Geospace run, not Kyoto's measured index. About half of
+every response lies in the future, because the model propagates L1 wind to Earth; only
+arrived samples are shown as "now". Its check is a model against a measurement: this Dst is
+computed from the wind, so checking it against the wind proves nothing, while checking it
+against ground-measured Kp is real.
+
+**WSA-Enlil** — the heliospheric forecast at Earth as numbers rather than imagery. Its
+elapsed half agrees with the measured wind to 22 km/s, and it makes our own cone
+propagation falsifiable for the first time: constant speed ignores drag, so the cone should
+run early against Enlil, and on 2026-09-07 it did, by 4 hours on a 21-hour forecast.
+
 ## What shipped in the pass before
 
 Propagated wind, proton and electron flux, active regions, and the solar cycle — the first,
@@ -144,9 +157,10 @@ anything currently shipped, and NOAA's modelled Dst now covers the gap that matt
 
 ## Next, in order
 
-1. **Dst and the Enlil forecast.** Both are in hand and both bear on the same thing: an
-   Earth-directed CME is in the forecast window as this is written. Enlil is the more
-   interesting of the two, because its hindcast half is directly comparable with what we
-   measured — a model check rather than a parse check.
-2. **STEREO-A**, on demand. A second vantage point five days around the Sun from us.
-3. **Ground magnetometers**, stage B — the measured counterpart to the modelled Dst.
+1. **STEREO-A**, on demand. A second vantage point five days around the Sun from us,
+   with `lead_lag_time_days` in the feed. 2.9 MB, so it needs the same on-demand treatment
+   Enlil got.
+2. **Ground magnetometers**, stage B — the measured counterpart to the modelled Dst, and
+   the last major gap in the "what is happening at the ground" story.
+3. **The 7-day scrubber**, still without a source. `geospace_dst_7_day` is a week at
+   1-minute and is the likeliest spine for it.
