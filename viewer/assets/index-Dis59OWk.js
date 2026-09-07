@@ -4066,7 +4066,7 @@ void main() {
       <text class="l1-label ${h}" x="${(c+7).toFixed(1)}" y="${(u+3.5).toFixed(1)}">${kt(l.source)}</text>`}).join("");return`<svg class="l1-inset" viewBox="0 0 192 184" role="img"
       aria-label="Cross-section looking along the Sun–Earth line: the L1 monitors plotted at their true distance from the line, against the Moon's orbit for scale.">
     <circle class="l1-moon" cx="${r}" cy="${a}" r="${(Qa*s).toFixed(1)}" />
-    <text class="l1-tick" x="${r}" y="${(a-Qa*s-4).toFixed(1)}">Moon’s orbit</text>
+    <text class="l1-tick" x="${r}" y="${(a+Qa*s+10).toFixed(1)}">Moon’s orbit</text>
     <line class="l1-cross" x1="${r-i}" y1="${a}" x2="${r+i}" y2="${a}" />
     <line class="l1-cross" x1="${r}" y1="${a-i}" x2="${r}" y2="${a+i}" />
     <circle class="l1-earth" cx="${r}" cy="${a}" r="${Math.max(1.1,s).toFixed(2)}" />

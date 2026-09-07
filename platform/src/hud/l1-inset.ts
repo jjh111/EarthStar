@@ -39,7 +39,7 @@ export function l1Inset(list: SpacecraftPos[]): string {
   return `<svg class="l1-inset" viewBox="0 0 192 184" role="img"
       aria-label="Cross-section looking along the Sun–Earth line: the L1 monitors plotted at their true distance from the line, against the Moon's orbit for scale.">
     <circle class="l1-moon" cx="${cx}" cy="${cy}" r="${(MOON_ORBIT_RE * k).toFixed(1)}" />
-    <text class="l1-tick" x="${cx}" y="${(cy - MOON_ORBIT_RE * k - 4).toFixed(1)}">Moon’s orbit</text>
+    <text class="l1-tick" x="${cx}" y="${(cy + MOON_ORBIT_RE * k + 10).toFixed(1)}">Moon’s orbit</text>
     <line class="l1-cross" x1="${cx - R}" y1="${cy}" x2="${cx + R}" y2="${cy}" />
     <line class="l1-cross" x1="${cx}" y1="${cy - R}" x2="${cx}" y2="${cy + R}" />
     <circle class="l1-earth" cx="${cx}" cy="${cy}" r="${Math.max(1.1, k).toFixed(2)}" />
