@@ -20,8 +20,15 @@ export const BODY_RADIUS_KM = {
   Venus: 6051.8,
   Earth: 6371.0,
   Mars: 3389.5,
+  Jupiter: 69_911,
+  Saturn: 58_232,
+  Uranus: 25_362,
+  Neptune: 24_622,
   Moon: 1737.4,
 } as const;
+
+/** Saturn's rings, in Saturn radii: inner edge of the C ring to outer A. */
+export const SATURN_RING_RADII = { inner: 1.24, outer: 2.27 } as const;
 
 export type BodyName = keyof typeof BODY_RADIUS_KM;
 
@@ -47,8 +54,12 @@ export function radiusToScene(body: BodyName, mode: ScaleMode): number {
   // Chosen so the rendered Sun is ~3.6x Earth's rendered size (the true ratio
   // is 109x) and the whole inner system stays in one frame. The compression is
   // stated in the HUD and the Situation Report; it is never implied to be real.
+  // Chosen so the rendered order still follows the true order while the whole
+  // range stays legible: the true span from Mercury to the Sun is 285:1, and at
+  // these factors it renders as about 7:1. The compression is stated in the HUD.
   const exaggeration: Record<BodyName, number> = {
     Sun: 10, Mercury: 380, Venus: 265, Earth: 300, Mars: 360, Moon: 320,
+    Jupiter: 54, Saturn: 58, Uranus: 103, Neptune: 103,
   };
   return trueAu * TRUE_UNITS_PER_AU * exaggeration[body];
 }
@@ -68,4 +79,24 @@ export function scaleLabel(mode: ScaleMode): string {
 export function moonDistanceToScene(au: number, mode: ScaleMode, earthRadiusScene: number): number {
   if (mode === 'true') return au * TRUE_UNITS_PER_AU;
   return earthRadiusScene * 3.2 * (au / 0.00257);
+}
+
+/**
+ * L1 is 235 Earth radii out — twenty times the bow shock. Drawn at Globe scale,
+ * where Earth is already exaggerated 300×, a truthful L1 marker lands most of
+ * the way to the Sun and leaves the frame the reader is actually looking at.
+ *
+ * So Globe mode compresses it to just outside the bow shock, preserving the
+ * ratio between the spacecraft so their relative positions stay honest, and the
+ * Sources panel carries the real numbers and an inset drawn to scale.
+ *
+ * Argument and result are both in Earth radii; the caller multiplies by the
+ * rendered Earth radius, as the magnetosphere and field lines do.
+ */
+const L1_NOMINAL_RE = 235;
+const L1_GLOBE_RE = 16;
+
+export function l1DistanceToScene(distanceRe: number, mode: ScaleMode): number {
+  if (mode === 'true') return distanceRe;
+  return (distanceRe / L1_NOMINAL_RE) * L1_GLOBE_RE;
 }

@@ -271,6 +271,7 @@ header.top {
   background: #000; border: 1px solid var(--line); border-radius: 4px;
   overflow: hidden; margin-bottom: 0.4rem;
 }
+.sun-slot { position: absolute; inset: 0; }
 .sun-frame img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .sun-stamp {
   /* Top, not bottom: SUVI and LASCO burn their own caption into the bottom of
@@ -367,4 +368,94 @@ header.top {
   border: 1px solid var(--line); border-radius: 3px;
   padding: 0.5rem; margin: 0.3rem 0 0.5rem;
   white-space: pre-wrap; word-break: break-word; overflow-x: auto;
+}
+
+/* --- L1 monitors ------------------------------------------------------- */
+
+.l1-inset {
+  width: 100%; max-width: 240px; height: auto; display: block;
+  margin: 0.5rem auto 0.2rem;
+}
+.l1-moon { fill: none; stroke: var(--line-strong); stroke-width: 0.8; stroke-dasharray: 3 3; }
+.l1-cross { stroke: var(--line); stroke-width: 0.7; }
+.l1-earth { fill: var(--badge-d); }
+.l1-active { fill: var(--accent); }
+.l1-idle { fill: var(--ink-faint); }
+.l1-label {
+  font-family: var(--mono); font-size: 7px; letter-spacing: 0.04em;
+}
+text.l1-active { fill: var(--accent); }
+text.l1-idle { fill: var(--ink-faint); }
+.l1-tick, .l1-axis {
+  font-family: var(--sans); font-size: 6.5px; fill: var(--ink-faint);
+  text-anchor: middle; letter-spacing: 0.06em; text-transform: uppercase;
+}
+.l1-table { margin-top: 0.4rem; }
+.l1-row-active td { color: var(--ink); }
+.tag-live {
+  font-family: var(--sans); font-size: 0.5rem; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--accent);
+  border: 1px solid var(--line-strong); border-radius: 2px; padding: 0 0.22em;
+  vertical-align: 1px;
+}
+.fine { font-size: 0.66rem; color: var(--ink-faint); line-height: 1.5; }
+.caption { text-align: center; margin-top: 0; }
+
+/* The ticker trims to what fits and offers the rest; it never clips silently. */
+.ticker.is-expanded { max-height: 40vh; overflow-y: auto; }
+.ticker-more {
+  font: inherit; font-family: var(--sans); font-size: 0.58rem;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--accent); background: none; border: 1px solid var(--line-strong);
+  border-radius: 2px; padding: 0 0.3em; cursor: pointer; white-space: nowrap;
+}
+.ticker-more:hover, .ticker-more:focus-visible { border-color: var(--accent); }
+
+.perf {
+  margin: 0; padding: 0.3rem 0.7rem 0.5rem;
+  font-size: 0.6rem; line-height: 1.45; color: var(--ink-faint);
+  border-top: 1px solid var(--line);
+}
+
+/* A check that ran but could not settle the question is neither pass nor fail. */
+.verdict-none { color: var(--ink-faint); font-family: var(--mono); font-size: 0.6rem; }
+
+/* Hover label for bodies in the scene. Follows the pointer; never blocks it. */
+.tip {
+  position: absolute; left: 0; top: 0; pointer-events: none; z-index: 5;
+  font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.02em;
+  color: var(--ink); background: var(--bg-panel);
+  backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
+  border: 1px solid var(--line-strong); border-radius: 3px;
+  padding: 0.22rem 0.42rem; white-space: nowrap;
+}
+
+.margin-actions {
+  display: flex; gap: 0.35rem; padding: 0.4rem 0.7rem 0;
+  border-top: 1px solid var(--line);
+}
+.ctl-sm {
+  font-size: 0.6rem; padding: 0.18rem 0.45rem; letter-spacing: 0.04em;
+}
+
+/* Collapsible panel sections. The panel re-renders often, so the open state
+   lives in the HUD rather than in the DOM it rebuilds. */
+.sect { border-top: 1px solid var(--line); margin: 0.5rem 0 0; }
+.sect > summary {
+  cursor: pointer; list-style: none;
+  font-family: var(--sans); font-size: 0.62rem; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ink-dim);
+  padding: 0.5rem 0 0.35rem; display: flex; align-items: center; gap: 0.4rem;
+}
+.sect > summary::-webkit-details-marker { display: none; }
+.sect > summary::before {
+  content: '›'; display: inline-block; transition: transform 0.15s ease;
+  color: var(--ink-faint); font-size: 0.8rem; line-height: 1;
+}
+.sect[open] > summary::before { transform: rotate(90deg); }
+.sect > summary:hover, .sect > summary:focus-visible { color: var(--ink); }
+.sect-body { padding-bottom: 0.3rem; }
+.sect-body h4 {
+  font-family: var(--sans); font-size: 0.6rem; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ink-dim); margin: 0.7rem 0 0.2rem;
 }

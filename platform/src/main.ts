@@ -17,6 +17,7 @@ import { announce, installKeyboard } from './a11y/keyboard.js';
 import { runChecks, type CheckResult } from './data/checks.js';
 import { fetchForecast, type ForecastBundle } from './data/forecast.js';
 import { fetchSolarCycle } from './data/solar-cycle.js';
+import { bodyFacts, distanceText, lightTimeText } from './hud/body-facts.js';
 import { LOOPS, fetchLoop, preloadLoop, type ImageLoop } from './data/solar-imagery.js';
 import { scaleLabel, type ScaleMode } from './scene/scales.js';
 import type { ViewName } from './scene/camera-rig.js';
@@ -35,13 +36,37 @@ async function selectLoop(id: string): Promise<void> {
   const spec = LOOPS.find((l) => l.id === id) ?? LOOPS[0]!;
   hud.sunState.loopId = spec.id;
   if (loopCache.has(spec.id)) {
-    hud.setSunLoop(loopCache.get(spec.id) ?? null, false);
+    const cached = loopCache.get(spec.id) ?? null;
+    hud.setSunLoop(cached, false);
+    sunTexture(cached);
     return;
   }
   hud.setSunLoop(null, true);
   const loop = await fetchLoop(spec);
   loopCache.set(spec.id, loop);
-  if (hud.sunState.loopId === spec.id) hud.setSunLoop(loop, false);
+  if (hud.sunState.loopId === spec.id) {
+    hud.setSunLoop(loop, false);
+    sunTexture(loop);
+  }
+}
+
+/**
+ * Put the newest usable frame on the Sun in the scene.
+ *
+ * Driven from the loop rather than from the panel: the sphere should carry the
+ * live Sun whether or not anyone has opened the Sun tab, and it is the first
+ * thing visible on load. Once the panel is open its own frame takes over, so
+ * scrubbing the loop scrubs the Sun too.
+ *
+ * Coronagraph loops are skipped. LASCO occults the disk — projecting it back
+ * onto the sphere would paint the Sun with a picture of the Sun being hidden.
+ */
+function sunTexture(loop: ImageLoop | null): void {
+  const f = loop?.frames[loop.newestGood];
+  if (!f || !loop!.id.startsWith('suvi')) { viewer.setSunImage(null); return; }
+  const img = hud.images.acquire(f.url);
+  if (img.complete && img.naturalWidth > 0) viewer.setSunImage(img);
+  else img.addEventListener('load', () => viewer.setSunImage(img), { once: true });
 }
 
 function stepSun(): void {
@@ -75,14 +100,14 @@ let checkResult: CheckResult | null = null;
 async function doChecks(): Promise<void> {
   hud.setChecks(null, true);
   try {
-    checkResult = await runChecks();
+    checkResult = await runChecks(undefined, viewer.sunProjection());
   } catch (e) {
     checkResult = {
       rows: [{
         name: 'Checks could not run', ours: 'error', theirs: '—', ok: false,
         note: e instanceof Error ? e.message : String(e),
       }],
-      ranAt: new Date().toISOString(), passed: 0,
+      ranAt: new Date().toISOString(), passed: 0, inconclusive: 0,
     };
   }
   hud.setChecks(checkResult, false);
@@ -111,6 +136,7 @@ const hud = new Hud({
   onToggleSunPlay: () => void toggleSunPlay(),
   onScrubSun: (i) => { hud.setSunPlaying(false); hud.setSunFrame(i); },
   onRunChecks: () => void doChecks(),
+  onSunFrame: (img) => viewer.setSunImage(img),
 });
 
 /* ---------------- controls ---------------- */
@@ -222,6 +248,7 @@ store.subscribe((state) => {
   viewer.setAurora(state.aurora?.data ?? null);
   viewer.setRegions(state.regions?.data ?? [], state.regions?.data?.[0]?.observed ?? null);
   viewer.setCmes(state.cmes);
+  viewer.setSpacecraft(state.spacecraft?.data ?? []);
   syncNarration();
 });
 
@@ -235,8 +262,45 @@ viewer.start();
 store.start();
 void selectLoop(LOOPS[0]!.id);
 
+/* ---------------- picking ---------------- */
+
+const tipEl = document.getElementById('tip') as HTMLElement;
+let tipKey = '';
+
+viewer.onHover = (p) => {
+  if (!p) {
+    tipEl.hidden = true;
+    tipKey = '';
+    return;
+  }
+  const facts = bodyFacts(p.id as never, new Date());
+  // Earth has no distance-from-Earth to quote, so it says where it is instead.
+  const line = p.kind === 'spacecraft'
+    ? `${p.label} · L1 monitor`
+    : facts.auFromEarth !== null
+      ? `${p.label} · ${distanceText(facts.auFromEarth)} · light ${lightTimeText(facts.lightSeconds)}`
+      : facts.auFromSun !== null
+        ? `${p.label} · ${distanceText(facts.auFromSun)} from the Sun`
+        : p.label;
+  // Only touch the text when it changes; the position moves every pointer event.
+  if (line !== tipKey) { tipEl.textContent = line; tipKey = line; }
+  tipEl.hidden = false;
+  tipEl.style.transform = `translate(${p.screen.x + 14}px, ${p.screen.y + 14}px)`;
+};
+
+viewer.onSelect = (p) => {
+  if (p.kind === 'spacecraft') hud.selectTab('sources');
+  else hud.showBody(p.id);
+};
+
+// The render scale adapts on its own; sample it at 1 Hz so the HUD can say so.
+// Reading it per frame would put a DOM write in the animation loop to report on
+// the cost of the animation loop.
+window.setInterval(() => hud.setStats(viewer.stats), 1000);
+
 Object.assign(window as unknown as Record<string, unknown>, {
   __viewer: viewer,
+  __hud: hud,
   __stats: () => viewer.stats,
   __sunTimer: sunTimer,
 });

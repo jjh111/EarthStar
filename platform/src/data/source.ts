@@ -7,6 +7,7 @@
 
 import type { AuroraNow, Envelope, ModelRef, Now, SolarWindSeries, Tier } from '../contract/types.js';
 import type { ActiveRegion, Series } from './swpc.js';
+import type { SpacecraftPos } from './ephemerides.js';
 
 /**
  * Per-sub-object provenance for a `tier: 'mixed'` envelope.
@@ -37,6 +38,8 @@ export interface Snapshot {
   protonSeries: Series;
   electronSeries: Series;
   geosyncSeries: Series;
+  /** Arrived Dst samples only — the model's forecast tail is never plotted here. */
+  dstSeries: Series;
 }
 
 export interface Source {
@@ -51,4 +54,6 @@ export interface Source {
   fetchSolarWindSeries(signal?: AbortSignal): Promise<Envelope<SolarWindSeries>>;
   fetchAurora(signal?: AbortSignal): Promise<Envelope<AuroraNow | null>>;
   fetchRegions(signal?: AbortSignal): Promise<Envelope<ActiveRegion[]>>;
+  /** Hourly, and 70 KB gzipped — fetched on the slow lane, not with /now. */
+  fetchEphemerides(signal?: AbortSignal): Promise<Envelope<SpacecraftPos[]>>;
 }

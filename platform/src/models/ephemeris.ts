@@ -27,10 +27,31 @@ const BODIES = {
   Venus: Astronomy.Body.Venus,
   Earth: Astronomy.Body.Earth,
   Mars: Astronomy.Body.Mars,
+  Jupiter: Astronomy.Body.Jupiter,
+  Saturn: Astronomy.Body.Saturn,
+  Uranus: Astronomy.Body.Uranus,
+  Neptune: Astronomy.Body.Neptune,
 } as const;
 
 export type PlanetName = keyof typeof BODIES;
-export const PLANETS: PlanetName[] = ['Mercury', 'Venus', 'Earth', 'Mars'];
+export const PLANETS: PlanetName[] = [
+  'Mercury', 'Venus', 'Earth', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune',
+];
+
+/** The four that matter for space weather; the rest are context. */
+export const INNER_PLANETS: PlanetName[] = ['Mercury', 'Venus', 'Earth', 'Mars'];
+
+/**
+ * A planet's north pole as a unit vector in the scene frame, from the IAU
+ * WGCCRE rotational elements. Used to lay Saturn's rings in its own equatorial
+ * plane rather than in the ecliptic, which is where the 26.7° tilt comes from.
+ */
+export function planetNorth(name: PlanetName, date: Date): Vector3 {
+  const time = Astronomy.MakeTime(date);
+  const axis = Astronomy.RotationAxis(BODIES[name], time);
+  const eqd = Astronomy.RotateVector(Astronomy.Rotation_EQJ_EQD(time), axis.north);
+  return toScene(eqd).normalize();
+}
 
 /** Rotate a J2000-equatorial vector into the equator-of-date frame. */
 function toEQD(v: Astronomy.Vector): Astronomy.Vector {
@@ -102,4 +123,69 @@ export function geoToEQD(latDeg: number, lonDeg: number, gastDeg: number): Vecto
     Math.cos(lat) * Math.sin(ra),
     Math.sin(lat),
   );
+}
+
+/**
+ * Geocentric Solar Ecliptic basis, expressed in the scene's world frame.
+ *
+ * GSE is how NOAA reports spacecraft positions: +X to the Sun, +Z to the
+ * ecliptic north pole, +Y completing the right-handed set (duskward, against
+ * Earth's orbital motion). The scene works in the equator of date, so the two
+ * differ by the obliquity — 23.4°, far too large to ignore when the whole point
+ * of drawing the monitors is that their off-axis offset is real.
+ *
+ * The ecliptic pole comes from astronomy-engine's ecliptic-of-date rotation
+ * rather than a hardcoded obliquity, so it precesses correctly and there is one
+ * fewer constant to drift.
+ */
+export function gseBasis(date: Date): { x: Vector3; y: Vector3; z: Vector3 } {
+  const rot = Astronomy.Rotation_ECT_EQD(Astronomy.MakeTime(date));
+  // Ecliptic north is (0,0,1) in the ecliptic frame; rotate it into EQD.
+  const n = Astronomy.RotateVector(rot, new Astronomy.Vector(0, 0, 1, Astronomy.MakeTime(date)));
+  const eclipticNorth = toScene(n).normalize();
+
+  const x = sunGeo(date).dir;
+  const xs = toScene(x).normalize();
+  // Orthogonalise: Z is the part of the ecliptic pole perpendicular to the
+  // Sun line. The two are already within a degree of perpendicular, so this is
+  // a small correction, but doing it keeps the basis exactly orthonormal.
+  const z = eclipticNorth.clone().addScaledVector(xs, -eclipticNorth.dot(xs)).normalize();
+  const y = z.clone().cross(xs);
+  return { x: xs, y, z };
+}
+
+/** A GSE vector (any units) rotated into the scene's world frame. */
+export function gseToScene(
+  v: { x: number; y: number; z: number },
+  basis: { x: Vector3; y: Vector3; z: Vector3 },
+): Vector3 {
+  return new Vector3()
+    .addScaledVector(basis.x, v.x)
+    .addScaledVector(basis.y, v.y)
+    .addScaledVector(basis.z, v.z);
+}
+
+/**
+ * The Sun's rotation axis as a unit vector in the scene frame.
+ *
+ * Needed because solar imagery is published with solar north up, so projecting
+ * a frame back onto the sphere requires knowing which way that is. The solar
+ * equator's ascending node on the ecliptic is Ω and its inclination i = 7.25°
+ * (Meeus ch. 29, the same elements `subEarthLatitude` uses), which puts the
+ * pole at ecliptic longitude Ω − 90° and latitude 90° − i.
+ */
+export function solarNorth(date: Date): Vector3 {
+  const time = Astronomy.MakeTime(date);
+  const omega = 73.6667 + (1.3958333 * (time.tt - 15020.0)) / 36525;
+  const lon = ((omega - 90) * Math.PI) / 180;
+  const lat = ((90 - 7.25) * Math.PI) / 180;
+  // Ecliptic-of-date Cartesian, then into the equator of date and the scene.
+  const ecl = new Astronomy.Vector(
+    Math.cos(lat) * Math.cos(lon),
+    Math.cos(lat) * Math.sin(lon),
+    Math.sin(lat),
+    time,
+  );
+  const eqd = Astronomy.RotateVector(Astronomy.Rotation_ECT_EQD(time), ecl);
+  return toScene(eqd).normalize();
 }

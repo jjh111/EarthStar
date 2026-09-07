@@ -10,6 +10,10 @@ import type { Now } from '../contract/types.js';
 import type { NowEnvelope, PartMeta } from '../data/source.js';
 import type { StoreState } from '../data/store.js';
 import type { CheckResult } from '../data/checks.js';
+import { l1Inset } from './l1-inset.js';
+import { CLOUD_ARRIVAL, enlilSeries, type EnlilRun } from '../data/enlil.js';
+import type { Cme } from '../data/cme.js';
+import { SPACECRAFT_NOTE, type SpacecraftPos } from '../data/ephemerides.js';
 import type { ImageLoop } from '../data/solar-imagery.js';
 import { NO_DATA, badgeFor, badgeTitle, formatAge, hhmmUTC, stalenessOf } from './format.js';
 import { panelSpark } from './sparkline.js';
@@ -19,6 +23,8 @@ import { stripProductHeader } from '../data/forecast.js';
 import type { SolarCycle } from '../data/solar-cycle.js';
 import { tail } from '../data/solar-cycle.js';
 import { INSTRUMENTS } from './instruments.js';
+import { bodyFacts, distanceText, lightTimeText } from './body-facts.js';
+import type { BodyName } from '../scene/scales.js';
 import { buildSituationReport, type SceneNarration } from './situation-report.js';
 
 export type TabId = 'report' | 'forecast' | 'sun' | 'sources' | 'checks' | 'detail';
@@ -40,10 +46,39 @@ export function escapeHtml(s: string): string {
  * Panels
  * ------------------------------------------------------------------ */
 
+/**
+ * A collapsible section.
+ *
+ * The panel had grown into one long scroll per tab — provenance ran a table,
+ * three prose blocks, an inset and a model list before it ended — and a reader
+ * looking for one thing had to travel past everything else to reach it. These
+ * are `<details>`, so the browser gives keyboard and screen-reader behaviour for
+ * free, and the open state is remembered per section: a reader who does not care
+ * about model citations should not have to close them again every minute when
+ * the store ticks.
+ *
+ * `openByDefault` is the first impression, not a preference — a remembered
+ * choice always wins over it.
+ */
+export function section(
+  id: string, title: string, body: string, openByDefault = true,
+  remembered?: (id: string) => boolean | undefined,
+): string {
+  if (!body.trim()) return '';
+  const saved = remembered?.(id);
+  const open = saved === undefined ? openByDefault : saved;
+  return `<details class="sect" data-sect="${escapeHtml(id)}"${open ? ' open' : ''}>
+    <summary>${escapeHtml(title)}</summary>
+    <div class="sect-body">${body}</div>
+  </details>`;
+}
+
 export function renderReport(
   state: StoreState, narration: SceneNarration, now: Date,
 ): string {
-  const lines = buildSituationReport(state.now, narration, now, state.aurora, state.cmes);
+  const lines = buildSituationReport(
+    state.now, narration, now, state.aurora, state.cmes, state.spacecraft?.data ?? [],
+  );
   // The sentence carries its own evidence: each quantity appears as glyph,
   // sparkline and number together. The prose report follows it, and the
   // screen-reader text alternative sits alongside.
@@ -83,7 +118,10 @@ function kpBars(f: ForecastBundle): string {
       <span class="key-pred">▮</span> predicted · rule at Kp 5, the storm threshold</p>`;
 }
 
-export function renderForecast(f: ForecastBundle | null, loading: boolean): string {
+export function renderForecast(
+  f: ForecastBundle | null, loading: boolean, cmes: Cme[] = [],
+  remembered?: (id: string) => boolean | undefined,
+): string {
   if (!f) {
     return `<h2>Ahead</h2><p>${loading ? 'Loading NOAA forecasts…' : 'Forecasts have not loaded.'}</p>`;
   }
@@ -124,14 +162,117 @@ export function renderForecast(f: ForecastBundle | null, loading: boolean): stri
     proxy for solar activity and the driver of upper-atmosphere density, so it sets how fast
     satellites in low orbit decay.</p>` : ''}
 
-    ${three ? `<h3>NOAA 3-day forecast</h3>
-    <pre class="product">${escapeHtml(three.body)}</pre>
-    ${three.issued ? `<p class="tile-meta">Issued ${escapeHtml(three.issued)}.
-      <a href="${FORECAST_LINK.threeDay}" rel="noreferrer noopener" target="_blank">Source</a>.</p>` : ''}` : ''}
+    ${enlilSection(f.enlil, cmes, remembered)}
 
-    ${disc ? `<h3>Forecaster discussion</h3>
-    <pre class="product">${escapeHtml(disc.body)}</pre>
-    ${disc.issued ? `<p class="tile-meta">Issued ${escapeHtml(disc.issued)}.</p>` : ''}` : ''}`;
+    ${section('fc-3day', 'NOAA 3-day forecast', three ? `
+      <pre class="product">${escapeHtml(three.body)}</pre>
+      ${three.issued ? `<p class="tile-meta">Issued ${escapeHtml(three.issued)}.
+        <a href="${FORECAST_LINK.threeDay}" rel="noreferrer noopener" target="_blank">Source</a>.</p>` : ''}
+    ` : '', false, remembered)}
+
+    ${section('fc-discussion', 'Forecaster discussion', disc ? `
+      <pre class="product">${escapeHtml(disc.body)}</pre>
+      ${disc.issued ? `<p class="tile-meta">Issued ${escapeHtml(disc.issued)}.</p>` : ''}
+    ` : '', false, remembered)}`;
+}
+
+/**
+ * WSA-Enlil at Earth. This is the only physics-based forecast on the panel —
+ * everything else in this tab is NOAA's prose or a probability table — so the
+ * section leads with what the model expects and then says plainly what kind of
+ * claim that is.
+ */
+function enlilSection(
+  run: EnlilRun | null, cmes: Cme[] = [],
+  remembered?: (id: string) => boolean | undefined,
+): string {
+  if (!run || run.ahead.length === 0) return '';
+
+  const peak = run.peakSpeed;
+  const arrival = run.cloudArrival;
+  const nowSpeed = run.past[run.past.length - 1]?.speed ?? null;
+
+  const speedSpark = panelSpark(enlilSeries(run.ahead, 'speed'), {
+    unit: 'km/s', format: (v) => v.toFixed(0), extremes: true, direction: 'future',
+  });
+  const cloudSpark = panelSpark(enlilSeries(run.ahead, 'cloud'), {
+    unit: '', format: (v) => v.toFixed(2), rule: CLOUD_ARRIVAL, direction: 'future',
+  });
+
+  const hours = (t: string): string => {
+    const h = (Date.parse(t) - Date.now()) / 3_600_000;
+    return h < 1 ? 'within the hour' : `in about ${Math.round(h)} h`;
+  };
+
+  return section('fc-enlil', 'WSA-Enlil — the wind at Earth', `
+    <p>A magnetohydrodynamic simulation of the inner heliosphere sampled at Earth
+    <span class="badge badge-d">D</span>, run by NOAA from solar magnetograms and the
+    analysed CME cones. It is the only forecast here that solves the physics rather than
+    extrapolating, and unlike our own cone propagation it accounts for drag.</p>
+
+    <p>Radial speed over the next
+    ${Math.round((Date.parse(run.lastTime!) - Date.now()) / 3_600_000)} hours${
+      nowSpeed !== null ? `, from <b class="sentence-num">${nowSpeed.toFixed(0)}</b> km/s now` : ''}:</p>
+    ${speedSpark}
+    ${peak?.speed != null ? `<p>Peaks at <b class="sentence-num">${peak.speed.toFixed(0)}</b> km/s
+      ${hours(peak.time)} — ${hhmmUTC(peak.time)} UTC on
+      ${new Date(peak.time).toUTCString().slice(0, 11)}.</p>` : ''}
+
+    <h4>Ejecta at Earth</h4>
+    <p class="fine">The model carries a passive tracer that marks CME plasma. It is a mixing
+    fraction, not a density and not a probability — it says where the ejection is in the
+    simulation, and the simulation can be wrong about that.</p>
+    ${cloudSpark}
+    ${arrival
+      ? `<p>The tracer crosses ${CLOUD_ARRIVAL} at <b class="sentence-num">${hhmmUTC(arrival.time)}</b> UTC
+         on ${new Date(arrival.time).toUTCString().slice(0, 11)}, ${hours(arrival.time)} —
+         the model's arrival for the ejection now in flight.</p>
+         ${coneVsEnlil(arrival.time, cmes)}`
+      : `<p>The tracer stays below ${CLOUD_ARRIVAL} throughout the run: no ejecta reach Earth
+         in the model's window.${cmes.some((c) => c.earthDirected && c.arrival
+           && Date.parse(c.arrival.time) > Date.now())
+           ? ' Our cone propagation does put one here — the two disagree, and Enlil is the '
+             + 'one that solves the physics.' : ''}</p>`}
+    <p class="fine">Model output starts ${new Date(run.firstTime!).toUTCString().slice(0, 11)}
+    at ${hhmmUTC(run.firstTime!)} UTC — ${run.past.length}
+    samples already elapsed and ${run.ahead.length} still ahead. The elapsed half is checked
+    against the measured wind in the Checks panel.</p>`, true, remembered);
+}
+
+/**
+ * Our constant-speed cone arrival against Enlil's. This is the comparison the
+ * cone panel has been promising since it shipped: the cone ignores drag, so it
+ * should run *early* against a model that includes it, and by how much is worth
+ * seeing rather than asserting.
+ */
+export function coneVsEnlil(enlilTime: string, cmes: Cme[]): string {
+  const inbound = cmes
+    .filter((c) => c.earthDirected && c.arrival && Date.parse(c.arrival.time) > Date.now())
+    .sort((a, b) => Date.parse(a.arrival!.time) - Date.parse(b.arrival!.time));
+  const c = inbound[0];
+  if (!c?.arrival) {
+    return `<p class="fine">No Earth-directed cone of ours has an arrival still ahead, so
+      there is nothing to compare this against.</p>`;
+  }
+  // DONKI sometimes supplies its own Enlil-derived arrival; comparing that
+  // against Enlil would be comparing the model with itself.
+  if (c.arrivalFromEnlil) {
+    return `<p class="fine">The arrival in the CME panel is NOAA and NASA's own Enlil
+      figure, so it is the same model and not an independent comparison.</p>`;
+  }
+  const deltaH = (Date.parse(enlilTime) - Date.parse(c.arrival.time)) / 3_600_000;
+  const early = deltaH > 0;
+  return `<p>Our cone puts it at <b class="sentence-num">${hhmmUTC(c.arrival.time)}</b> UTC,
+    <b class="sentence-num">${Math.abs(deltaH).toFixed(0)} h</b>
+    ${early ? 'earlier' : 'later'} than Enlil.
+    ${early
+      ? 'That is the expected direction: the cone carries the ejection at the constant speed '
+        + 'DONKI measured near the Sun, and real ejections decelerate toward the ambient wind. '
+        + 'Enlil is the better number; ours is the geometry.'
+      : 'That is the wrong direction for the usual reason — constant-speed propagation should '
+        + 'run early against a model that includes drag — so either the cone speed is below the '
+        + 'ambient wind, in which case the ejection accelerates, or the two are tracking '
+        + 'different structures.'}</p>`;
 }
 
 const FORECAST_LINK = {
@@ -151,7 +292,10 @@ function metaRow(key: string, m: PartMeta): string {
   </tr>`;
 }
 
-export function renderSources(state: StoreState, checks: CheckResult | null): string {
+export function renderSources(
+  state: StoreState, checks: CheckResult | null,
+  remembered?: (id: string) => boolean | undefined,
+): string {
   const env = state.now;
   if (!env) return '<h2>Provenance</h2><p>No envelope loaded yet.</p>';
 
@@ -165,32 +309,100 @@ export function renderSources(state: StoreState, checks: CheckResult | null): st
     <td class="num">${au.data ? `${au.latency_s}s` : NO_DATA}</td>
   </tr>` : '';
 
+  const monitors = renderMonitors(
+    state.spacecraft?.data ?? [], state.now?.data.solar_wind?.speed ?? null,
+  );
+
   return `
     <h2>Provenance</h2>
     <p>Every element on screen, its evidence tier, where it came from and how old it is.</p>
     ${checks ? checkSummary(checks) : ''}
-    <table class="prov">
-      <thead><tr><th>Element</th><th>Tier</th><th>Source</th><th>Time</th><th>Lat.</th></tr></thead>
-      <tbody>${Object.entries(env.parts).map(([k, m]) => metaRow(k, m)).join('')}${auRow}</tbody>
+    ${section('prov-table', 'Every element', `
+      <table class="prov">
+        <thead><tr><th>Element</th><th>Tier</th><th>Source</th><th>Time</th><th>Lat.</th></tr></thead>
+        <tbody>${Object.entries(env.parts).map(([k, m]) => metaRow(k, m)).join('')}${auRow}</tbody>
+      </table>`, true, remembered)}
+    ${section('prov-monitors', 'The monitors', monitors, false, remembered)}
+    ${section('prov-tiers', 'What the tiers mean', `
+      <p><span class="badge badge-e">E</span> Measured — read from an instrument, shown with its
+      timestamp and latency.<br>
+      <span class="badge badge-d">D</span> Modelled — computed from measured inputs by a named,
+      cited model.<br>
+      <span class="badge badge-m">M</span> Ambient — artwork. Parameter-driven, sometimes by real
+      values, but never itself a measurement.</p>`, false, remembered)}
+    ${section('prov-models', 'Models cited', `
+      <p>Shue et al. 1998 (doi:10.1029/98JA01103) — magnetopause.<br>
+      Farris &amp; Russell 1994 — bow shock.<br>
+      IGRF-14 (IAGA, epoch 2025.0) — the geomagnetic field and its lines.<br>
+      OVATION Prime (NOAA SWPC) — aurora probability.<br>
+      NOAA Geospace (Univ. Michigan BATS-R-US/RCM) — Dst.<br>
+      WSA-Enlil (NOAA SWPC) — the heliospheric wind forecast.<br>
+      astronomy-engine (VSOP87/Meeus) — every position, the sub-solar point, and the
+      solar rotation axis the imagery is projected about.</p>`, false, remembered)}`;
+}
+
+/** Earth radii to kilometres, for the panel's plain-language distances. */
+const RE_KM = 6371.2;
+
+/**
+ * The monitors, and what their position costs us. The paragraph exists because
+ * the off-axis number has a consequence: the wind is structured on scales far
+ * smaller than 44 Rₑ, so a spacecraft that far off the line is not guaranteed
+ * to sample the plasma that arrives here.
+ */
+export function renderMonitors(list: SpacecraftPos[], speedKms: number | null): string {
+  if (list.length === 0) return '';
+  const active = list.find((s) => s.active) ?? null;
+
+  const rows = list.map((s) => `<tr${s.active ? ' class="l1-row-active"' : ''}>
+      <td>${escapeHtml(s.source)}${s.active ? ' <span class="tag-live">live</span>' : ''}</td>
+      <td class="num">${s.distanceRe.toFixed(0)}</td>
+      <td class="num">${s.offAxisRe.toFixed(1)}</td>
+      <td class="num">${s.offAxisDeg.toFixed(1)}°</td>
+    </tr>`).join('');
+
+  const notes = list.map((s) => {
+    const n = SPACECRAFT_NOTE[s.source];
+    return n ? `<br><b>${escapeHtml(s.source)}</b> — ${escapeHtml(n)}` : '';
+  }).join('');
+
+  let transit = '';
+  if (active && speedKms && speedKms > 0) {
+    const minutes = (active.distanceRe * RE_KM) / speedKms / 60;
+    transit = ` At the ${speedKms.toFixed(0)} km/s now measured, the wind it is
+      sampling reaches Earth about ${minutes.toFixed(0)} minutes later.`;
+  }
+
+  const offAxis = active
+    ? `<p>${escapeHtml(active.source)} is
+       ${(active.distanceRe * RE_KM / 1e6).toFixed(2)} million km upstream and
+       <b>${active.offAxisRe.toFixed(1)} Rₑ off the Sun–Earth line</b> —
+       ${active.offAxisDeg.toFixed(1)}° away from the direction the wind actually has to
+       travel to reach us.${transit}</p>
+       <p class="fine">The solar wind is structured on scales smaller than that offset, so
+       the monitor does not always sample the plasma that arrives. It is the best warning
+       there is, and it is not the same thing as a measurement taken here.</p>`
+    : '<p>No spacecraft is currently flagged operational in the ephemeris feed.</p>';
+
+  return `
+    ${l1Inset(list)}
+    <p class="fine caption">Looking sunward along the Sun–Earth line. Nothing here is
+    compressed — Earth, the Moon’s orbit and the spacecraft offsets are one scale.</p>
+    <table class="prov l1-table">
+      <thead><tr><th>Craft</th><th>Rₑ out</th><th>Rₑ off</th><th>Angle</th></tr></thead>
+      <tbody>${rows}</tbody>
     </table>
-    <h3>Tiers</h3>
-    <p><span class="badge badge-e">E</span> Measured — read from an instrument, shown with its
-    timestamp and latency.<br>
-    <span class="badge badge-d">D</span> Modelled — computed from measured inputs by a named,
-    cited model.<br>
-    <span class="badge badge-m">M</span> Ambient — artwork. Parameter-driven, sometimes by real
-    values, but never itself a measurement.</p>
-    <h3>Models cited</h3>
-    <p>Shue et al. 1998 (doi:10.1029/98JA01103) — magnetopause.<br>
-    Farris &amp; Russell 1994 — bow shock.<br>
-    IGRF-14 (IAGA, epoch 2025.0) — the geomagnetic field and its lines.<br>
-    OVATION Prime (NOAA SWPC) — aurora probability.<br>
-    astronomy-engine (VSOP87/Meeus) — every position, and the sub-solar point.</p>`;
+    ${offAxis}
+    <p class="fine">${notes.replace(/^<br>/, '')}</p>`;
 }
 
 function checkSummary(c: CheckResult): string {
-  const all = c.passed === c.rows.length;
-  return `<p><span class="summary-pill ${all ? 'ok' : 'bad'}">${c.passed} / ${c.rows.length} checks pass</span></p>`;
+  const decisive = c.rows.length - c.inconclusive;
+  const all = c.passed === decisive;
+  return `<p><span class="summary-pill ${all ? 'ok' : 'bad'}">${c.passed} / ${decisive} checks pass</span>${
+    c.inconclusive > 0
+      ? ` <span class="tile-meta">${c.inconclusive} could not be settled on today's data</span>`
+      : ''}</p>`;
 }
 
 export function renderChecks(checks: CheckResult | null, running: boolean): string {
@@ -209,7 +421,8 @@ export function renderChecks(checks: CheckResult | null, running: boolean): stri
         ${checks.rows.map((r) => `
           <tr class="check-row">
             <td colspan="2"><strong>${escapeHtml(r.name)}</strong></td>
-            <td class="${r.ok ? 'verdict-ok' : 'verdict-bad'}">${r.ok ? 'pass' : 'DRIFT'}</td>
+            <td class="${r.inconclusive ? 'verdict-none' : r.ok ? 'verdict-ok' : 'verdict-bad'}">${
+              r.inconclusive ? 'no signal' : r.ok ? 'pass' : 'DRIFT'}</td>
           </tr>
           <tr class="check-row">
             <td class="num">${escapeHtml(r.ours)}</td>
@@ -302,7 +515,11 @@ export function renderSun(
     <h2>The Sun</h2>
     <div class="sun-picker">${picker}</div>
     <div class="sun-frame">
-      <img id="sun-img" src="${f.url}" alt="${escapeHtml(L.instrument)} image of the Sun at ${hhmmUTC(f.time)} UTC" />
+      <!-- The image element is not written here. It is owned by the image
+           cache and moved into this slot after render, so that rebuilding the
+           panel does not throw away a decode that costs 380 ms. -->
+      <div class="sun-slot" id="sun-slot" data-frame="${escapeHtml(f.url)}"
+           data-alt="${escapeHtml(L.instrument)} image of the Sun at ${hhmmUTC(f.time)} UTC"></div>
       <div class="sun-stamp"><span>${hhmmUTC(f.time)} UTC</span><span>${ageMin} min ago</span></div>
     </div>
     <div class="sun-transport">${transport}</div>
@@ -322,6 +539,13 @@ function detailSpark(inst: { id: string; series?: string; unit: string }, state:
   if (inst.id === 'kp' && state.kpSeries) {
     return panelSpark(state.kpSeries, { band: [0, 4], unit: 'Kp', format: (v) => v.toFixed(2),
       label: 'Kp history, quiet band shaded' });
+  }
+  if (inst.id === 'dst' && state.dstSeries) {
+    return panelSpark(state.dstSeries, { unit: 'nT', format: (v) => v.toFixed(0),
+      // Zero is the meaningful reference for Dst: the ring current only ever
+      // subtracts, so the whole trace hangs below the rule. The band is the
+      // quiet range, above −30 nT.
+      rule: 0, band: [-30, 0], extremes: true });
   }
   if (inst.id === 'geosync' && state.geosyncSeries) {
     return panelSpark(state.geosyncSeries, { unit: 'nT', format: (v) => v.toFixed(0),
@@ -349,9 +573,35 @@ function detailSpark(inst: { id: string; series?: string; unit: string }, state:
   );
 }
 
+/** Bodies are addressed as `body:Jupiter` so one detail slot serves both. */
+export const BODY_PREFIX = 'body:';
+
+export function renderBody(name: string, now: Date): string {
+  const f = bodyFacts(name as BodyName, now);
+  const row = (k: string, v: string) => `<tr><td>${k}</td><td class="num">${v}</td></tr>`;
+  return `
+    <h2>${escapeHtml(f.name)}</h2>
+    <table class="prov"><tbody>
+      ${f.auFromSun !== null ? row('From the Sun', distanceText(f.auFromSun)) : ''}
+      ${f.auFromEarth !== null ? row('From Earth', distanceText(f.auFromEarth)) : ''}
+      ${f.lightSeconds !== null
+        ? row('Light travel time', lightTimeText(f.lightSeconds)) : ''}
+      ${row('Radius', `${f.radiusKm.toLocaleString('en-US')} km`)}
+      ${f.arcsecFromEarth !== null
+        ? row('Apparent diameter', `${f.arcsecFromEarth.toFixed(1)}″`) : ''}
+    </tbody></table>
+    <p class="tile-meta"><span class="badge badge-d">D</span> Positions and distances from
+    astronomy-engine at ${hhmmUTC(now.toISOString())} UTC — computed, not tabulated, so they
+    move with the scene.</p>
+    ${f.note ? `<p>${escapeHtml(f.note)}</p>` : ''}
+    <p class="fine">Rendered size and orbital distance are both compressed at Globe scale;
+    the True scale toggle removes the compression and the label says which is in force.</p>`;
+}
+
 export function renderDetail(
   id: string, state: StoreState, now: Date,
 ): string {
+  if (id.startsWith(BODY_PREFIX)) return renderBody(id.slice(BODY_PREFIX.length), now);
   const inst = INSTRUMENTS.find((i) => i.id === id);
   if (!inst) return '<p>Unknown instrument.</p>';
   const env: NowEnvelope | null = state.now;

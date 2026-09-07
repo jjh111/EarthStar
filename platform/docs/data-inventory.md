@@ -17,7 +17,7 @@ the upstream traps.
 | ✅ | `json/rtsw/rtsw_wind_1m` — speed, density, temperature | 95 KB | 1 min | speed, density, sparklines |
 | ✅ | `products/summary/solar-wind-mag-field`, `-speed` | 61 B | 1 min | independent cross-check |
 | ✅ | `products/geospace/propagated-solar-wind-1-hour` | 6 KB | 1 min | **wind propagated to the bow shock nose.** Drives the magnetopause and the wind stream, so the scene shows what is arriving rather than what is still an hour out at L1. Arrays-of-arrays with a header row — the only feed we have found in that format. |
-| ◻ | `json/rtsw/rtsw_ephemerides_1m` | — | 1 min | actual spacecraft position, for a truthful L1 marker |
+| ✅ | `json/rtsw/rtsw_ephemerides_1h` | 70 KB | **1 h** | **where the monitors actually are.** Not `_1m` — that name 404s; the ephemeris is hourly while the measurements are per-minute. Drives the L1 markers, the cross-section inset, and the identity cross-check. |
 
 ## 2. Geomagnetic response at the ground
 
@@ -27,7 +27,10 @@ the upstream traps.
 | ✅ | `products/noaa-planetary-k-index-forecast` | 7 KB | 3 h | observed + predicted bars |
 | ◻ | `products/noaa-planetary-k-index` — official 3-hourly | 5 KB | 3 h | the definitive index, lagging |
 | ✅ | `json/goes/primary/magnetometers-6-hour` | 65 KB | 1 min | GOES Hp/He/Hn at geostationary orbit — the only in-situ magnetic measurement, and the one falsifiable check on the modelled shield |
-| ⛔ | Kyoto Dst / SYM-H | — | 1 h | HTML scrape, no CORS → stage B |
+| ✅ | `json/geospace/geospace_dst_1_hour` | **1 KB** | 1 min | **Dst — the storm index.** Modelled `[D]` by NOAA's Geospace run, not Kyoto's measured index. Roughly half of every response is in the future; only arrived samples are shown as "now". |
+| ◻ | `json/geospace/geospace_dst_7_day` | 78 KB | 1 min | a week of Dst at 1-minute — the likeliest spine for a 7-day scrubber |
+| ⛔ | Kyoto Dst / SYM-H | — | 1 h | the *measured* index. HTML scrape, no CORS → stage B |
+| ⛔ | `json/geospace/geospace_pred_est_kp_1_hour` | 0.4 KB | — | **dead feed** — newest record is 2024-06-18. Present, well-formed, and two years stale. Anything that trusts a feed because it parses would ship a 2024 Kp as today's. |
 | ⛔ | USGS + INTERMAGNET observatories | — | 1 min | no CORS → stage B |
 
 ## 3. The Sun — X-rays, particles, imagery
@@ -57,7 +60,8 @@ the upstream traps.
 | ✅ | `products/noaa-scales` | 0.2 KB | R/S/G now and +3 days |
 | ✅ | `products/alerts` | 5 KB | watches, warnings, alerts |
 | ◻ | `text/3-day-geomag-forecast.txt` | 0.9 KB | Kp table in prose form |
-| ◻ | `images/animations/enlil/` | — | WSA-Enlil heliosphere animation — the full solar-wind forecast, as imagery |
+| ✅ | `json/enlil_time_series.json` | 212 KB | **the WSA-Enlil forecast at Earth as numbers, not pictures** — v_r, density, temperature, B, polarity and a CME `cloud` tracer, ~137 s cadence, 3 days of hindcast and 4 of forecast. An independent physics-based arrival time to check the constant-speed cone model against, and the hindcast half is directly comparable with what we measured. |
+| ◻ | `images/animations/enlil/` | — | the same model as imagery — lower value now the numbers are in reach |
 
 ## 5. Aurora
 
@@ -74,7 +78,8 @@ the upstream traps.
 | ✅ | IGRF-14, vendored | field lines, both magnetic poles |
 | ✅ | DONKI `CMEAnalysis` (CCMC, **CORS, no key**) | cone parameters propagated and drawn; arrival estimated client-side with a stated window |
 | ◻ | DONKI `FLR`, `GST`, `notifications` | flare/storm event history with NASA's analysis |
-| ⛔ | JPL Horizons | no CORS → stage B. Needed for real DSCOVR/PSP/Solar Orbiter markers |
+| ◻ | `json/stereo/stereo_a_1m` | **2.9 MB** | STEREO-A: wind, field and particles from a second vantage point, with `lead_lag_time_days` (−4.9 d today). Too large for the load path; worth a panel that fetches on demand. |
+| ⛔ | JPL Horizons | no CORS → stage B. Still the only route to PSP/Solar Orbiter |
 
 ---
 
@@ -105,6 +110,36 @@ seasonal swing of Earth's heliographic latitude; ignoring it would misjudge marg
 The constant-speed limit is stated in the panel: real ejections decelerate toward the
 ambient wind, so the arrival carries a window that widens with speed rather than a time.
 
+## What shipped in this pass
+
+The L1 monitors. `rtsw_ephemerides_1h` reports where the three spacecraft at L1 actually
+are, and the answer is not "on the Sun–Earth line": the operational one, SOLAR1, sits
+**44.5 Rₑ off it** — 10.3° away from the direction the wind has to travel to reach us. That
+is drawn three ways: markers in the scene with a perpendicular dropped to the Sun–Earth
+axis, an exact-scale cross-section in the Sources panel with the Moon's orbit for a ruler,
+and a sentence in the Situation Report that now quotes a measured distance instead of a
+nominal one. The consequence is stated rather than left implied — the wind is structured on
+scales smaller than that offset, so the monitor does not always sample the plasma that
+arrives.
+
+The hunt also turned up three things the previous inventory had wrong: **Dst is available**
+(modelled, not Kyoto's measured index, but live and CORS-open) where it was marked blocked;
+**Enlil is available as numbers**, not just imagery; and `geospace_pred_est_kp_1_hour` is a
+**dead feed serving 2024 data** that parses perfectly.
+
+## Also in this pass: the storm index and the forecast, as numbers
+
+**Dst** — modelled `[D]` by NOAA's Geospace run, not Kyoto's measured index. About half of
+every response lies in the future, because the model propagates L1 wind to Earth; only
+arrived samples are shown as "now". Its check is a model against a measurement: this Dst is
+computed from the wind, so checking it against the wind proves nothing, while checking it
+against ground-measured Kp is real.
+
+**WSA-Enlil** — the heliospheric forecast at Earth as numbers rather than imagery. Its
+elapsed half agrees with the measured wind to 22 km/s, and it makes our own cone
+propagation falsifiable for the first time: constant speed ignores drag, so the cone should
+run early against Enlil, and on 2026-09-07 it did, by 4 hours on a 21-hour forecast.
+
 ## What shipped in the pass before
 
 Propagated wind, proton and electron flux, active regions, and the solar cycle — the first,
@@ -116,7 +151,16 @@ instead, and the Situation Report names which one it used.
 
 ## What is blocked, and on what
 
-Everything in stage B needs the Actions pipeline from plan §5.2: Kyoto Dst, ground
-magnetometers, JPL Horizons ephemerides, and the Helioviewer API. None of it blocks
-anything currently shipped. Dst is the most missed — it is the canonical storm index, and
-its absence is why the panel talks about Kp instead.
+Everything in stage B needs the Actions pipeline from plan §5.2: Kyoto's *measured* Dst,
+ground magnetometers, JPL Horizons ephemerides, and the Helioviewer API. None of it blocks
+anything currently shipped, and NOAA's modelled Dst now covers the gap that mattered most.
+
+## Next, in order
+
+1. **STEREO-A**, on demand. A second vantage point five days around the Sun from us,
+   with `lead_lag_time_days` in the feed. 2.9 MB, so it needs the same on-demand treatment
+   Enlil got.
+2. **Ground magnetometers**, stage B — the measured counterpart to the modelled Dst, and
+   the last major gap in the "what is happening at the ground" story.
+3. **The 7-day scrubber**, still without a source. `geospace_dst_7_day` is a week at
+   1-minute and is the likeliest spine for it.

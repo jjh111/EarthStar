@@ -126,8 +126,20 @@ export function inlineSpark(s: Series, opts: SparkOptions = {}): string {
 }
 
 /** The larger form used in the detail panel, with its range stated beneath. */
+/**
+ * `direction` exists because a forecast is not a history and must not be
+ * captioned as one. The default caption reads "over the last 5 days" and marks
+ * the final point "now", which is exactly wrong for a series that runs into the
+ * future — the last point is the far end of the forecast, and nothing in it has
+ * happened yet.
+ */
 export function panelSpark(
-  s: Series, opts: SparkOptions & { unit?: string; format?: (v: number) => string } = {},
+  s: Series,
+  opts: SparkOptions & {
+    unit?: string;
+    format?: (v: number) => string;
+    direction?: 'past' | 'future';
+  } = {},
 ): string {
   const o = { width: 268, height: 46, extremes: true, ...opts };
   const p = prepare(s, { ...o, width: o.width, height: o.height });
@@ -139,9 +151,11 @@ export function panelSpark(
     ? Date.parse(s.time[s.time.length - 1]!) - Date.parse(s.time[0]!)
     : 0;
 
-  return `${inlineSpark(s, { ...o, label: o.label ?? 'history' })}
+  const future = o.direction === 'future';
+  return `${inlineSpark(s, { ...o, label: o.label ?? (future ? 'forecast' : 'history') })}
     <p class="tile-meta">${fmt(inv(p.lo!.v))} to ${fmt(inv(p.hi!.v))}${o.unit ? ` ${o.unit}` : ''}
-    over the last ${humanSpan(ms)} · <span class="spark-key-last">●</span> now
+    ${future ? `over the next ${humanSpan(ms)} · <span class="spark-key-last">●</span> end of run`
+      : `over the last ${humanSpan(ms)} · <span class="spark-key-last">●</span> now`}
     <span class="spark-key-ex">●</span> range</p>`;
 }
 

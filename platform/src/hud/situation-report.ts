@@ -7,6 +7,7 @@
  */
 
 import type { NowEnvelope } from '../data/source.js';
+import type { SpacecraftPos } from '../data/ephemerides.js';
 import { hhmmUTC, formatAge } from '../contract/types.js';
 import type { AuroraNow, Envelope } from '../contract/types.js';
 import type { Cme } from '../data/cme.js';
@@ -46,6 +47,7 @@ export function buildSituationReport(
   env: NowEnvelope | null, scene: SceneNarration, now = new Date(),
   aurora: Envelope<AuroraNow | null> | null = null,
   cmes: Cme[] = [],
+  spacecraft: SpacecraftPos[] = [],
 ): string[] {
   const lines: string[] = [];
   const at = `${hhmmUTC(now.toISOString())} UTC`;
@@ -83,8 +85,17 @@ export function buildSituationReport(
     /* --- propagation: how much warning is left --- */
     if (d.propagated) {
       const lead = d.propagated.lead_minutes;
+      // The distance and the offset are measured now, not assumed: the
+      // ephemeris feed reports where the spacecraft actually is, and the
+      // off-axis part is the bit a nominal "1.5 million km sunward" hides.
+      const craft = spacecraft.find((c) => c.active) ?? null;
+      const where = craft
+        ? `at L1, ${(craft.distanceRe * 6371.2 / 1e6).toFixed(2)} million kilometres `
+          + `sunward and ${craft.offAxisRe.toFixed(0)} Earth radii off the Sun–Earth line `
+          + `(${craft.offAxisDeg.toFixed(1)}°) [E]`
+        : 'at L1, about 1.5 million kilometres sunward';
       lines.push(
-        `That wind was measured at L1, about 1.5 million kilometres sunward, and takes ` +
+        `That wind was measured ${where}, and takes ` +
         `roughly an hour to arrive. NOAA propagates it to the bow shock nose [D · NOAA]: ` +
         `what is reaching Earth right now was observed at ` +
         `${hhmmUTC(d.propagated.observed_at)} UTC, with Bz ` +
@@ -150,6 +161,27 @@ export function buildSituationReport(
         `Planetary K index ${d.kp.estimated_kp === null ? 'no data' : d.kp.estimated_kp.toFixed(2)} — ` +
         `geomagnetic conditions are ${kpWord(d.kp.estimated_kp)}. Measured [E], ` +
         `${hhmmUTC(d.kp.time)} UTC${ks.state === 'stale' ? ' — STALE' : ''}.`,
+      );
+    }
+
+    /* --- Ring current --------------------------------------------------- */
+    const ds = stalenessOf(p.dst, now);
+    if (!d.dst || ds.state === 'no-data') {
+      lines.push('Ring current (Dst): no data.');
+    } else {
+      const ahead = d.dst.lead_minutes;
+      lines.push(
+        `Ring current index Dst ${d.dst.value_nt === null ? 'no data' : `${d.dst.value_nt.toFixed(0)} nanotesla`} — ` +
+        `${d.dst.level ?? 'unclassified'}. This is how much a torus of trapped ions ` +
+        `drifting around Earth is subtracting from the surface field; it is the ` +
+        `single number that best tracks the size of a storm. Modelled [D] by NOAA's ` +
+        `Geospace run from the L1 solar wind — not Kyoto's measured index, which has no ` +
+        `route into a browser — for ${hhmmUTC(d.dst.time)} UTC` +
+        `${ds.state === 'stale' ? ' — STALE' : ''}. ` +
+        (ahead !== null && ahead > 0
+          ? `The model runs ${ahead} minutes ahead of that; the value quoted is the newest ` +
+            `one whose time has arrived, not the newest one in the file.`
+          : 'The model has no lead beyond that sample.'),
       );
     }
 
@@ -255,7 +287,7 @@ export function buildSituationReport(
   /* --- The scene itself ------------------------------------------------ */
   const ss = subsolarPoint(now);
   lines.push(
-    `Scene: the Sun at centre, with Mercury, Venus, Earth and Mars at their true ` +
+    `Scene: the Sun at centre, with all eight planets at their true ` +
     `positions for ${at}, computed locally with astronomy-engine [D]. ` +
     `The Sun is currently overhead at ${cardinal(ss.lat, ss.lon)}, and Earth's day/night ` +
     `terminator in the scene is drawn from that point [D]. The Moon is shown at its ` +

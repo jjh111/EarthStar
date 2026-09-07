@@ -11,6 +11,8 @@
 import type { AuroraNow, Envelope, Now, SolarWindSeries } from '../contract/types.js';
 import { PARTICLE_URL, parseParticles, seriesFor } from './particles.js';
 import { PROPAGATED_URL, parsePropagated } from './geospace.js';
+import { EPHEM_URL, parseEphemerides, type SpacecraftPos } from './ephemerides.js';
+import { DST_URL, DST_LEVEL_TEXT, dstLevel, dstSeries, parseDst } from './dst.js';
 import {
   GEOSYNC_URL, GEOSYNC_RE, dipoleFieldAtRe, geosyncSeries, parseGeosync,
 } from './geosync.js';
@@ -36,10 +38,15 @@ export const STALE_AFTER = {
   particles: 30 * 60,
   propagated: 30 * 60,
   geosync: 30 * 60,
+  // 1-minute cadence; the model runs ahead, so an arrived sample older than
+  // 20 minutes means the pipeline has stopped, not that the wind is quiet.
+  dst: 20 * 60,
   // OVATION publishes a ~30-90 minute forecast every ~5 minutes; an hour-old
   // grid is still meaningful, a three-hour-old one is not.
   aurora: 60 * 60,
   regions: 36 * 60 * 60,
+  // Hourly product; two hours without an update is a real outage.
+  spacecraft: 3 * 60 * 60,
 } as const;
 
 const FETCH_TIMEOUT_MS = 15_000;
@@ -89,7 +96,8 @@ export class DirectSource implements Source {
   }
 
   async fetchSnapshot(signal?: AbortSignal): Promise<Snapshot> {
-    const [mag, wind, kp, xray, scales, alerts, protons, electrons, prop, geo] = await Promise.all([
+    const [mag, wind, kp, xray, scales, alerts, protons, electrons, prop, geo, dstRaw] =
+      await Promise.all([
       getJson<unknown>(SWPC_URL.mag, signal),
       getJson<unknown>(SWPC_URL.wind, signal),
       getJson<unknown>(SWPC_URL.kp1m, signal),
@@ -100,6 +108,7 @@ export class DirectSource implements Source {
       getJson<unknown>(PARTICLE_URL.electrons, signal),
       getJson<unknown>(PROPAGATED_URL, signal),
       getJson<unknown>(GEOSYNC_URL, signal),
+      getJson<unknown>(DST_URL, signal),
     ]);
     const fetched_at = new Date().toISOString();
 
@@ -113,6 +122,9 @@ export class DirectSource implements Source {
       ? parseParticles(protons.json, electrons.json) : null;
     const propagated = prop.json ? parsePropagated(prop.json) : null;
     const geosync = geo.json ? parseGeosync(geo.json) : null;
+    // Half of this response is the model's own short forecast; `parseDst` takes
+    // the newest sample that has actually arrived and keeps the rest separate.
+    const dst = dstRaw.json ? parseDst(dstRaw.json, new Date(fetched_at)) : null;
     const arriving = propagated?.arrivingNow ?? null;
 
     // Modeled from the measured wind — null in, null out. Never a default.
@@ -155,10 +167,26 @@ export class DirectSource implements Source {
       propagated: meta(fetched_at, arriving?.arrivesAt ?? null, STALE_AFTER.propagated,
         `${SWPC} · solar wind propagated to the bow shock nose`, PROPAGATED_URL,
         prop.error, 'modeled', { name: 'NOAA SWPC propagation' }),
+      dst: meta(fetched_at, dst?.now?.time ?? null, STALE_AFTER.dst,
+        `${SWPC} · Dst from the Geospace model`, DST_URL, dstRaw.error, 'modeled',
+        { name: 'NOAA Geospace (Univ. Michigan BATS-R-US/RCM)' }),
     };
 
+    const lastAhead = dst?.ahead[dst.ahead.length - 1] ?? null;
     const data: Now = {
       solar_wind, kp: kpNow, xray: xrayNow, scales: scalesNow, alerts: alertList,
+      dst: dst?.now
+        ? {
+          time: dst.now.time,
+          value_nt: dst.now.dst,
+          level: dstLevel(dst.now.dst) === null
+            ? null : DST_LEVEL_TEXT[dstLevel(dst.now.dst)!],
+          lead_minutes: lastAhead === null ? null
+            : Math.round((Date.parse(lastAhead.time) - Date.parse(dst.now.time)) / 60000),
+          min_nt: dst.minimum?.dst ?? null,
+          min_time: dst.minimum?.time ?? null,
+        }
+        : null,
       geosync: geosync
         ? {
           time: geosync.time, satellite: geosync.satellite,
@@ -242,6 +270,7 @@ export class DirectSource implements Source {
       xraySeries: downsample(parseXraySeries(xray.json), 120),
       protonSeries: downsample(seriesFor(protons.json, '>=10 MeV'), 120),
       geosyncSeries: downsample(geosyncSeries(geo.json, 'total'), 120),
+      dstSeries: dstSeries(dstRaw.json, new Date(fetched_at)),
       electronSeries: downsample(seriesFor(electrons.json, '>=2 MeV'), 120),
     };
   }
@@ -279,6 +308,27 @@ export class DirectSource implements Source {
       latency_s: latency(fetched_at, data_time) ?? 0,
       stale_after_s: STALE_AFTER.regions,
       units: { lat: 'deg', lon: 'deg from central meridian', area: 'millionths of hemisphere' },
+      data,
+    };
+  }
+
+  async fetchEphemerides(signal?: AbortSignal): Promise<Envelope<SpacecraftPos[]>> {
+    const res = await getJson<unknown>(EPHEM_URL, signal);
+    const fetched_at = new Date().toISOString();
+    const data = res.json ? parseEphemerides(res.json) : [];
+    // The newest of the per-spacecraft newests: they share a cadence, so this
+    // is the age of the whole set rather than of the luckiest member.
+    const data_time = data.reduce<string | null>(
+      (a, s) => (a === null || s.time > a ? s.time : a), null,
+    ) ?? fetched_at;
+    return {
+      source: `${SWPC} · RTSW ephemerides`,
+      source_url: EPHEM_URL,
+      tier: 'measured', model: null,
+      fetched_at, data_time,
+      latency_s: latency(fetched_at, data_time) ?? 0,
+      stale_after_s: STALE_AFTER.spacecraft,
+      units: { gse: 'km', distanceRe: 'Earth radii', offAxisDeg: 'deg' },
       data,
     };
   }

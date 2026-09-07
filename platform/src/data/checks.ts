@@ -13,7 +13,14 @@
 import { DirectSource } from './direct-source.js';
 import { SWPC_URL, auroraAt, parseXrayLatestClass, xrayClass } from './swpc.js';
 import { angularSeparationDeg, geomagneticNorthPole } from '../models/igrf14.js';
+import { subsolarPoint } from '../models/ephemeris.js';
 import { GEOSYNC_RE, dipoleFieldAtRe } from './geosync.js';
+import { EPHEM_URL, parseEphemerides } from './ephemerides.js';
+import { DST_URL, parseDst } from './dst.js';
+import { enlilAt, fetchEnlil } from './enlil.js';
+import { regionAgreement } from '../scene/region-agreement.js';
+import type { DiskCalibration } from '../scene/disk-calibration.js';
+import type { Vector3 } from 'three';
 import { hhmmUTC } from '../contract/types.js';
 
 export interface CheckRow {
@@ -22,33 +29,89 @@ export interface CheckRow {
   theirs: string;
   ok: boolean;
   note: string;
+  /**
+   * The measurement ran but the data cannot settle the question today. Not a
+   * pass and not a failure: a check that reports a defect whenever its evidence
+   * is weak is a check that will be ignored.
+   */
+  inconclusive?: boolean;
 }
 
 export interface CheckResult {
   rows: CheckRow[];
   ranAt: string;
   passed: number;
+  /** Rows that ran but could not settle the question on today's data. */
+  inconclusive: number;
 }
 
 const j = async (u: string, signal?: AbortSignal): Promise<unknown> =>
   (await fetch(u, { cache: 'no-store', signal })).json();
+
+/** Initial great-circle bearing from one geographic point to another, degrees. */
+function bearingDeg(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const r = Math.PI / 180;
+  const dLon = (lon2 - lon1) * r;
+  const y = Math.sin(dLon) * Math.cos(lat2 * r);
+  const x = Math.cos(lat1 * r) * Math.sin(lat2 * r)
+    - Math.sin(lat1 * r) * Math.cos(lat2 * r) * Math.cos(dLon);
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
 
 function near(a: number | null, b: number | null, tol: number): boolean {
   if (a === null || b === null || !Number.isFinite(a) || !Number.isFinite(b)) return false;
   return Math.abs(a - b) <= tol;
 }
 
-export async function runChecks(signal?: AbortSignal): Promise<CheckResult> {
+/**
+ * The live solar projection, supplied by the scene. Optional: the checks run
+ * without a browser scene in tests, and a missing projection means one fewer
+ * row rather than a failure.
+ */
+export interface SunProjection {
+  image: HTMLImageElement;
+  calibration: DiskCalibration;
+  north: Vector3;
+  earthDir: Vector3;
+}
+
+/** Luminance of a drawable, at `n`x`n`. Null when the canvas cannot be read. */
+function luminanceOf(source: CanvasImageSource, n: number): Float32Array | null {
+  const c = document.createElement('canvas');
+  c.width = n; c.height = n;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return null;
+  try {
+    ctx.drawImage(source, 0, 0, n, n);
+    const d = ctx.getImageData(0, 0, n, n).data;
+    const out = new Float32Array(n * n);
+    for (let i = 0; i < n * n; i++) {
+      out[i] = 0.299 * d[i * 4]! + 0.587 * d[i * 4 + 1]! + 0.114 * d[i * 4 + 2]!;
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+export async function runChecks(
+  signal?: AbortSignal, sun?: SunProjection | null,
+): Promise<CheckResult> {
   const rows: CheckRow[] = [];
   const source = new DirectSource();
 
-  const [env, sumMag, sumSpeed, flares, series, aurora] = await Promise.all([
+  const [env, sumMag, sumSpeed, flares, series, aurora, ephem, dstRaw, enlil] =
+    await Promise.all([
     source.fetchNow(signal),
     j(SWPC_URL.summaryMag, signal) as Promise<Array<Record<string, unknown>>>,
     j(SWPC_URL.summarySpeed, signal) as Promise<Array<Record<string, unknown>>>,
     j(SWPC_URL.xrayFlares, signal) as Promise<unknown>,
     source.fetchSolarWindSeries(signal),
     source.fetchAurora(signal),
+    j(EPHEM_URL, signal),
+    j(DST_URL, signal),
+    // 212 KB, and the only row that can say anything about a model's skill.
+    fetchEnlil(signal),
   ]);
 
   const d = env.data;
@@ -170,8 +233,17 @@ export async function runChecks(signal?: AbortSignal): Promise<CheckResult> {
 
   /**
    * The auroral oval encircles the geomagnetic (dipole) pole, ~13° from the dip
-   * pole. NOAA's oval and our IGRF-14 dipole axis are computed independently; a
-   * transposed, mirrored or rotated grid would not agree.
+   * pole — but it is not centred on it. The oval brightens on the nightside, so
+   * its brightness-weighted centroid is pulled toward magnetic midnight by an
+   * amount that grows with activity.
+   *
+   * An earlier version of this check asserted centroid ≈ pole within 5°, which
+   * passed only because it was written on a quiet day; it went amber the moment
+   * the nightside brightened, reporting a defect in a grid that was correct.
+   * The invariant is the *direction*: whatever the separation, the centroid
+   * should lie on the anti-sunward side of the pole. A transposed, mirrored or
+   * rotated grid fails that immediately, and it stays true at every activity
+   * level, which is the whole point of a check.
    */
   if (aurora.data) {
     const g = aurora.data.grid;
@@ -194,26 +266,201 @@ export async function runChecks(signal?: AbortSignal): Promise<CheckResult> {
       const cLat = (Math.asin(sz / r) * 180) / Math.PI;
       const cLon = (Math.atan2(sy, sx) * 180) / Math.PI;
       const sep = angularSeparationDeg(cLat, cLon, pole.lat, pole.lon);
+      // Magnetic midnight, near enough: the meridian opposite the sub-solar
+      // point. Computed from the ephemeris, independently of the aurora grid.
+      const sub = subsolarPoint(new Date());
+      const midnightLon = ((sub.lon + 360) % 360) - 180;
+      const toCentroid = bearingDeg(pole.lat, pole.lon, cLat, cLon);
+      const toMidnight = bearingDeg(pole.lat, pole.lon, -sub.lat, midnightLon);
+      const off = Math.abs(((toCentroid - toMidnight + 540) % 360) - 180);
       rows.push({
-        name: 'Aurora oval on the geomagnetic pole',
-        ours: `centroid ${cLat.toFixed(1)}°N ${cLon.toFixed(1)}°E`,
-        theirs: `pole ${pole.lat.toFixed(1)}°N ${pole.lon.toFixed(1)}°E`,
-        ok: sep < 5,
-        note: `${sep.toFixed(2)}° apart. NOAA's OVATION grid and our IGRF-14 dipole axis are `
-          + `independent computations.`,
+        name: 'Aurora oval displaced toward magnetic midnight',
+        ours: `centroid bears ${toCentroid.toFixed(0)}° from the pole`,
+        theirs: `midnight bears ${toMidnight.toFixed(0)}°`,
+        // The claim is deliberately weak, because the centroid is a coarse
+        // statistic: a probability-weighted mean over a 45° latitude band that
+        // includes the dayside cusp. What it can honestly assert is which half
+        // of the sky the oval sits in. Substorm onset is pre-midnight, so a
+        // duskward bias of tens of degrees is expected and is not a defect.
+        ok: off < 90 && sep < 25,
+        note: `${off.toFixed(0)}° apart in bearing — the nightside half — with the centroid `
+          + `${sep.toFixed(1)}° from the pole. NOAA's OVATION grid, our IGRF-14 dipole axis and `
+          + `the sub-solar point are three independent computations; a transposed or mirrored `
+          + `grid puts the oval on the dayside and fails here.`,
       });
     }
   } else {
     rows.push({
-      name: 'Aurora oval on the geomagnetic pole',
+      name: 'Aurora oval displaced toward magnetic midnight',
       ours: 'no data', theirs: '—', ok: false,
       note: 'OVATION grid did not load, so orientation could not be checked',
     });
   }
 
+  /**
+   * Two independent feeds each name the operational L1 spacecraft: the wind and
+   * mag files carry an `active` flag per record, and so does the ephemeris
+   * file. If they ever disagree we are attributing measurements to one craft
+   * and drawing the marker for another, and every "measured by …" line on the
+   * page is wrong. Nothing else on the page would notice.
+   */
+  const craft = parseEphemerides(ephem);
+  const ephemActive = craft.find((c) => c.active)?.source ?? null;
+  const windActive = d.solar_wind?.spacecraft ?? null;
+  const pos = craft.find((c) => c.active);
+  rows.push({
+    name: 'Operational L1 spacecraft',
+    ours: windActive ?? 'no data',
+    theirs: ephemActive ?? 'no data',
+    ok: !!windActive && windActive === ephemActive,
+    note: pos
+      ? `wind/mag feed vs ephemeris feed · ${pos.distanceRe.toFixed(0)} Rₑ upstream, `
+        + `${pos.offAxisRe.toFixed(1)} Rₑ off the Sun–Earth line`
+      : 'wind/mag feed vs ephemeris feed',
+  });
+
+  /**
+   * A model against a measurement, which is rarer here than it sounds.
+   *
+   * NOAA's Dst is *computed from the L1 solar wind*, so comparing it with the
+   * wind proves nothing — it would only be checking arithmetic against its own
+   * input. Estimated Kp comes from a network of ground magnetometers and knows
+   * nothing about L1. So the two disagreeing is a statement about the model,
+   * not about our parsing.
+   *
+   * The test is coarse, and deliberately coarser than it first was. Dst and Kp
+   * measure different things — the ring current's depression of the field
+   * against the range of mid-latitude disturbance over three hours — and the
+   * ring current responds first. At storm onset Dst routinely crosses −30 nT
+   * while Kp is still 3, which the first version of this row reported as a
+   * defect. It is not one; it is what a storm beginning looks like.
+   *
+   * So each index is placed in a band, and only a two-band contradiction counts
+   * — one saying severe while the other says quiet. Anything closer is reported
+   * as unsettled, with both numbers shown.
+   */
+  const dstParsed = parseDst(dstRaw, new Date());
+  const dstNow = dstParsed.now?.dst ?? null;
+  const kpNow = d.kp?.estimated_kp ?? null;
+  if (dstNow !== null && kpNow !== null) {
+    const dstBand = dstNow <= -100 ? 2 : dstNow <= -30 ? 1 : 0;
+    const kpBand = kpNow >= 6 ? 2 : kpNow >= 4 ? 1 : 0;
+    const gap = Math.abs(dstBand - kpBand);
+    const word = ['quiet', 'disturbed', 'severe'];
+    rows.push({
+      name: 'Modelled Dst vs measured Kp',
+      ours: `Dst ${dstNow.toFixed(0)} nT → ${word[dstBand]}`,
+      theirs: `Kp ${kpNow.toFixed(2)} → ${word[kpBand]}`,
+      ok: gap === 0,
+      inconclusive: gap === 1,
+      note: gap >= 2
+        ? `Two bands apart, which the difference between the indices cannot explain. `
+          + `A model driven by the L1 wind against a measurement from ground magnetometers; `
+          + `they share no input, so one of them is wrong.`
+        : gap === 1
+          ? `One band apart, which is what a storm beginning looks like: the ring current `
+            + `responds before the mid-latitude range does, so Dst crosses its threshold `
+            + `first. Not a contradiction, and not evidence of agreement either. `
+            + `${dstParsed.ahead.length} of the Dst feed's samples lie in the future and are `
+            + `excluded from "now".`
+          : `A model driven by the L1 wind against a measurement from ground magnetometers `
+            + `— they share no input. Bands are Dst −30 and −100 nT, Kp 4 and 6. `
+            + `${dstParsed.ahead.length} of the feed's samples lie in the future and are `
+            + `excluded from "now".`,
+    });
+  }
+
+  /**
+   * A model's forecast against a measurement of the same quantity.
+   *
+   * Every other row here checks a parse. This one checks WSA-Enlil. The model
+   * is initialised from solar magnetograms and analysed CME cones and never
+   * sees L1, so its output for a moment that has already happened can be set
+   * against the wind NOAA measured and propagated to Earth for that same
+   * moment — two independent numbers for one physical quantity.
+   *
+   * The threshold is loose because the row is an instrument, not a verdict on
+   * the forecast: a good heliospheric model is routinely tens of km/s out, and
+   * that is not a defect in either the model or our code. What a 200 km/s
+   * disagreement would mean is that we are reading the wrong column or
+   * aligning the wrong times, which is what this is here to catch.
+   */
+  const arriving = d.propagated;
+  if (enlil && arriving?.speed != null && arriving.arrives_at) {
+    const at = enlilAt(enlil, new Date(arriving.arrives_at));
+    if (at?.speed != null) {
+      const delta = at.speed - arriving.speed;
+      const pct = (delta / arriving.speed) * 100;
+      rows.push({
+        name: 'WSA-Enlil hindcast vs measured wind',
+        ours: `measured ${arriving.speed.toFixed(0)} km/s`,
+        theirs: `Enlil ${at.speed.toFixed(0)} km/s`,
+        ok: Math.abs(delta) <= 200,
+        note: `${delta >= 0 ? '+' : ''}${delta.toFixed(0)} km/s (${pct.toFixed(0)}%) at `
+          + `${hhmmUTC(arriving.arrives_at)} UTC. Enlil is driven by solar magnetograms and `
+          + `CME cone fits and never sees L1, so this is a model against a measurement of `
+          + `the same quantity. The tolerance is ±200 km/s: it catches a misread column or `
+          + `a time misalignment, not ordinary forecast error.`,
+      });
+    }
+  }
+
+  /**
+   * The picture against the numbers.
+   *
+   * The Sun in the scene carries a SUVI frame projected back onto the sphere,
+   * which depends on the solar rotation axis, the disk's measured centre and
+   * radius, the orthographic mapping and the direction NOAA's longitudes run.
+   * Get any of them wrong and the result is a convincing Sun with its active
+   * regions in the wrong places.
+   *
+   * NOAA publishes those regions as numbers, from a different pipeline than the
+   * imagery, and active regions are bright in every SUVI passband. So this asks
+   * whether the reported positions land on bright pixels. A wrong projection
+   * scatters them onto ordinary disk and the contrast collapses.
+   */
+  if (sun) {
+    const N = 384;
+    const lum = luminanceOf(sun.image, N);
+    const regions = (await source.fetchRegions(signal)).data;
+    const observed = regions[0]?.observed;
+    const hours = observed ? (Date.now() - Date.parse(observed)) / 3_600_000 : 0;
+    const agree = lum
+      ? regionAgreement(lum, N, regions, sun.north, sun.earthDir, sun.calibration, hours)
+      : null;
+    if (agree) {
+      // Comparative, not absolute: the published positions against the same
+      // positions mirrored east–west. A day of small regions on a bright
+      // chromosphere gives both a similar score, and that is a statement about
+      // the day rather than about the projection.
+      const margin = agree.mirroredRatio > 0 ? agree.ratio / agree.mirroredRatio : 0;
+      const decisive = Math.abs(margin - 1) >= 0.06;
+      rows.push({
+        name: 'Solar imagery lines up with the region list',
+        ours: `${agree.ratio.toFixed(2)}x disk mean at ${agree.tested} reported positions`,
+        theirs: `${agree.mirroredRatio.toFixed(2)}x mirrored east–west`,
+        ok: decisive && margin > 1,
+        inconclusive: !decisive,
+        note: decisive
+          ? `The imagery and the region list come from different pipelines, so this tests `
+            + `our projection — the rotation axis, the measured disk centre and radius, and `
+            + `the longitude convention — rather than either of theirs. Longitudes rotated `
+            + `${hours.toFixed(0)} h forward at the Carrington rate.`
+          : `Too close to call today: the published positions and their mirror image score `
+            + `within ${(Math.abs(margin - 1) * 100).toFixed(0)}% of each other, so the `
+            + `picture cannot settle the projection. That happens when the regions are `
+            + `small — ${agree.tested} tested here — against a bright chromosphere. `
+            + `Reporting a defect on this evidence would be crying wolf.`,
+      });
+    }
+  }
+
   return {
     rows,
     ranAt: new Date().toISOString(),
+    // An inconclusive row is not counted against the total: it did not fail,
+    // and pretending it passed would be as wrong as pretending it failed.
     passed: rows.filter((r) => r.ok).length,
+    inconclusive: rows.filter((r) => r.inconclusive).length,
   };
 }

@@ -6,6 +6,8 @@
 
 import type { PartMeta } from '../data/source.js';
 import type { StoreState } from '../data/store.js';
+import type { FrameStats } from '../scene/viewer.js';
+import { ImageCache } from './image-cache.js';
 import type { CheckResult } from '../data/checks.js';
 import type { ForecastBundle } from '../data/forecast.js';
 import type { SolarCycle } from '../data/solar-cycle.js';
@@ -15,10 +17,11 @@ import {
 } from './format.js';
 import { INSTRUMENTS } from './instruments.js';
 import {
-  TABS, escapeHtml, renderChecks, renderDetail, renderForecast, renderReport,
+  BODY_PREFIX, TABS, escapeHtml, renderChecks, renderDetail, renderForecast, renderReport,
   renderSources, renderSun, type SunState, type TabId,
 } from './margin.js';
-import type { SceneNarration } from './situation-report.js';
+import { buildSituationReport, type SceneNarration } from './situation-report.js';
+import { briefingFilename, buildBriefing } from './briefing.js';
 
 export interface HudCallbacks {
   onSelectLoop(id: string): void;
@@ -26,15 +29,31 @@ export interface HudCallbacks {
   onToggleSunPlay(): void;
   onScrubSun(index: number): void;
   onRunChecks(): void;
+  /** The solar frame now on screen, for the Sun in the scene. */
+  onSunFrame?(image: HTMLImageElement): void;
   onLoadCycle(): void;
 }
 
 export class Hud {
   private instrumentsEl: HTMLElement;
   private tickerEl: HTMLElement;
+  private tickerExpanded = false;
+  private fittingTicker = false;
   private tabsEl: HTMLElement;
   private bodyEl: HTMLElement;
   private statusEl: HTMLElement;
+  private perfEl: HTMLElement;
+  private copyEl: HTMLButtonElement;
+  private downloadEl: HTMLButtonElement;
+  private perfKey = '';
+  /**
+   * Which collapsible sections the reader has opened or closed. Held in memory
+   * and mirrored to localStorage, because the panel re-renders on every store
+   * tick and a section that snapped shut once a minute would be unusable.
+   */
+  private sectionState = new Map<string, boolean>();
+  /** Owns the solar frame elements so panel re-renders never cost a decode. */
+  readonly images = new ImageCache();
   private clockEl: HTMLElement;
 
   private tiles = new Map<string, HTMLElement>();
@@ -64,9 +83,22 @@ export class Hud {
   constructor(private cb: HudCallbacks) {
     this.instrumentsEl = document.getElementById('instruments') as HTMLElement;
     this.tickerEl = document.getElementById('ticker') as HTMLElement;
+    // The alert list is variable-length and the viewport is not, so how many
+    // items fit is a measurement, not a constant. Re-fit on resize.
+    if (typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(() => this.fitTicker()).observe(this.tickerEl);
+    }
     this.tabsEl = document.getElementById('tabs') as HTMLElement;
     this.bodyEl = document.getElementById('margin-body') as HTMLElement;
     this.statusEl = document.getElementById('status') as HTMLElement;
+    this.perfEl = document.getElementById('perf') as HTMLElement;
+    this.copyEl = document.getElementById('brief-copy') as HTMLButtonElement;
+    this.downloadEl = document.getElementById('brief-download') as HTMLButtonElement;
+    this.copyEl.addEventListener('click', () => void this.copyBriefing());
+    this.loadSectionState();
+    // `toggle` does not bubble, so it is captured rather than delegated.
+    this.bodyEl.addEventListener('toggle', this.onSectionToggle, true);
+    this.downloadEl.addEventListener('click', () => this.downloadBriefing());
     this.clockEl = document.getElementById('clock') as HTMLElement;
     this.buildTiles();
     this.buildTabs();
@@ -199,6 +231,61 @@ export class Hud {
     this.renderMargin();
   }
 
+  /**
+   * The whole panel as Markdown, for pasting somewhere the timestamps and
+   * tiers survive. Built from the same state the panel renders, so the two
+   * cannot drift apart.
+   */
+  briefing(now = new Date()): string {
+    if (!this.state) return '';
+    return buildBriefing({
+      state: this.state,
+      narration: buildSituationReport(
+        this.state.now, this.narration, now, this.state.aurora, this.state.cmes,
+        this.state.spacecraft?.data ?? [],
+      ),
+      checks: this.checks,
+      forecast: this.forecast,
+      now,
+      origin: `${location.origin}${location.pathname}`,
+    });
+  }
+
+  private async copyBriefing(): Promise<void> {
+    const text = this.briefing();
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      this.flash(this.copyEl, 'Copied');
+    } catch {
+      // Clipboard access can be refused; the download still works and says so.
+      this.flash(this.copyEl, 'Blocked — use .md');
+    }
+  }
+
+  private downloadBriefing(): void {
+    const text = this.briefing();
+    if (!text) return;
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = briefingFilename();
+    a.click();
+    URL.revokeObjectURL(url);
+    this.flash(this.downloadEl, 'Saved');
+  }
+
+  /** Confirm an action on its own button, so no layout moves. */
+  private flash(el: HTMLElement, text: string): void {
+    const original = el.dataset['label'] ?? el.textContent ?? '';
+    el.dataset['label'] = original;
+    el.textContent = text;
+    window.setTimeout(() => { el.textContent = el.dataset['label'] ?? original; }, 1600);
+  }
+
+  /** Open a body's detail from a click in the scene. */
+  showBody(name: string): void { this.openDetail(BODY_PREFIX + name); }
+
   private openDetail(id: string): void {
     this.tab = 'detail';
     this.detailId = id;
@@ -284,6 +371,7 @@ export class Hud {
       ? d.alerts.slice(0, 6).map((a) =>
         `<span class="ticker-item">${hhmmUTC(a.issued)} ${escapeHtml(a.headline || a.product)}</span>`).join('')
       : `<span class="ticker-item">${d ? 'No alerts, watches or warnings in the feed.' : NO_DATA}</span>`;
+    this.fitTicker();
 
     // Status
     if (state.lastError) {
@@ -301,6 +389,52 @@ export class Hud {
     this.renderMargin();
   }
 
+/**
+   * The renderer trades resolution for frame rate on its own. Doing that
+   * silently would be the same kind of dishonesty as quietly degrading data, so
+   * it is said out loud — but only while it is happening, because a permanent
+   * frame-rate counter is noise the rest of the time.
+   */
+  setStats(s: FrameStats): void {
+    const reduced = s.pixelRatio < s.maxPixelRatio;
+    const key = reduced ? `${s.pixelRatio}/${s.maxPixelRatio}/${Math.round(s.fps)}` : '';
+    if (key === this.perfKey) return;
+    this.perfKey = key;
+    this.perfEl.hidden = !reduced;
+    if (!reduced) return;
+    this.perfEl.textContent =
+      `Rendering at ${s.pixelRatio}x rather than ${s.maxPixelRatio}x `
+      + `(${s.megapixels.toFixed(1)} MP) to hold the frame rate — `
+      + `${Math.round(s.fps)} fps. Geometry and data are unaffected.`;
+  }
+
+  private readonly SECTION_KEY = 'viewer.sections';
+
+  private loadSectionState(): void {
+    try {
+      const raw = localStorage.getItem(this.SECTION_KEY);
+      if (!raw) return;
+      const o = JSON.parse(raw) as Record<string, boolean>;
+      for (const [k, v] of Object.entries(o)) this.sectionState.set(k, !!v);
+    } catch {
+      // A blocked or corrupt store is not a reason to fail; defaults apply.
+    }
+  }
+
+  private onSectionToggle = (e: Event): void => {
+    const el = e.target as HTMLDetailsElement;
+    const id = el.dataset?.['sect'];
+    if (!id) return;
+    this.sectionState.set(id, el.open);
+    try {
+      localStorage.setItem(
+        this.SECTION_KEY, JSON.stringify(Object.fromEntries(this.sectionState)),
+      );
+    } catch { /* private browsing; the in-memory map still works this session */ }
+  };
+
+  private remembered = (id: string): boolean | undefined => this.sectionState.get(id);
+
   private renderMargin(): void {
     const state = this.state;
     if (!state) return;
@@ -308,10 +442,17 @@ export class Hud {
     switch (this.tab) {
       case 'report': this.bodyEl.innerHTML = renderReport(state, this.narration, now); break;
       case 'forecast':
-        this.bodyEl.innerHTML = renderForecast(this.forecast, this.forecastLoading); break;
+        this.bodyEl.innerHTML = renderForecast(
+          this.forecast, this.forecastLoading, state?.cmes ?? [], this.remembered,
+        );
+        break;
       case 'sun':
-        this.bodyEl.innerHTML = renderSun(this.sun, LOOPS, this.cycle, this.cycleLoading); break;
-      case 'sources': this.bodyEl.innerHTML = renderSources(state, this.checks); break;
+        this.bodyEl.innerHTML = renderSun(this.sun, LOOPS, this.cycle, this.cycleLoading);
+        this.placeSunFrame();
+        break;
+      case 'sources':
+        this.bodyEl.innerHTML = renderSources(state, this.checks, this.remembered);
+        break;
       case 'checks': this.bodyEl.innerHTML = renderChecks(this.checks, this.checksRunning); break;
       case 'detail':
         this.bodyEl.innerHTML = this.detailId ? renderDetail(this.detailId, state, now) : '';
@@ -319,12 +460,45 @@ export class Hud {
     }
   }
 
+  /**
+   * Move the cached element for the current frame into the panel's slot.
+   *
+   * Nothing here sets a `src`. The cache already holds a loaded element for
+   * this URL, so this is a DOM move: no network, no decode, no flash of an
+   * empty box while the browser catches up.
+   */
+  private placeSunFrame(): void {
+    const slot = document.getElementById('sun-slot');
+    const url = slot?.dataset['frame'];
+    if (!slot || !url) return;
+    const img = this.images.acquire(url);
+    img.alt = slot.dataset['alt'] ?? '';
+    img.className = 'sun-img';
+    if (img.parentElement !== slot) slot.replaceChildren(img);
+    // The scene shows whatever the panel shows, so scrubbing the loop scrubs
+    // the Sun as well. A frame still loading is announced on completion.
+    if (this.cb.onSunFrame) {
+      if (img.complete && img.naturalWidth > 0) this.cb.onSunFrame(img);
+      else img.addEventListener('load', () => this.cb.onSunFrame?.(img), { once: true });
+    }
+    // A short lookahead so playback and scrubbing do not stall on the next one.
+    const frames = this.sun.loop?.frames;
+    if (frames) {
+      const i = this.sun.frameIndex;
+      this.images.warm([
+        frames[(i + 1) % frames.length]!.url,
+        frames[(i + 2) % frames.length]!.url,
+      ]);
+    }
+  }
+
   /** Swap just the image while a loop plays, rather than re-rendering the panel. */
   private updateSunFrame(): void {
-    const img = document.getElementById('sun-img') as HTMLImageElement | null;
+    const slot = document.getElementById('sun-slot');
     const f = this.sun.loop?.frames[this.sun.frameIndex];
-    if (!img || !f) { this.renderMargin(); return; }
-    img.src = f.url;
+    if (!slot || !f) { this.renderMargin(); return; }
+    slot.dataset['frame'] = f.url;
+    this.placeSunFrame();
     const stamp = this.bodyEl.querySelector('.sun-stamp');
     if (stamp) {
       const age = Math.round((Date.now() - Date.parse(f.time)) / 60000);
@@ -333,4 +507,67 @@ export class Hud {
     const scrub = document.getElementById('sun-scrub') as HTMLInputElement | null;
     if (scrub && document.activeElement !== scrub) scrub.value = String(this.sun.frameIndex);
   }
+
+  /**
+   * Nothing in the ticker may be hidden without an affordance.
+   *
+   * A fixed max-height silently clipped the last alerts whenever the viewport
+   * was narrow enough that six items needed three lines — which is exactly the
+   * case where the newest alert matters most. This trims to what fits and
+   * offers the remainder behind a button, so the count is always visible even
+   * when the text is not.
+   *
+   * Idempotent, because a ResizeObserver watches the same element it resizes:
+   * expanding must not immediately re-trim, and re-running must not oscillate.
+   */
+  private fitTicker(): void {
+    if (this.fittingTicker) return;
+    this.fittingTicker = true;
+    try {
+      const box = this.tickerEl;
+      const items = box.querySelector('[data-t]') as HTMLElement | null;
+      if (!items) return;
+
+      const all = [...items.querySelectorAll('.ticker-item')] as HTMLElement[];
+      for (const el of all) el.hidden = false;
+      box.querySelector('.ticker-more')?.remove();
+      box.classList.toggle('is-expanded', this.tickerExpanded);
+
+      // Expanded shows everything; it only needs a way back.
+      if (this.tickerExpanded) {
+        if (all.length > 1) items.append(this.tickerMoreButton('show fewer', true));
+        return;
+      }
+
+      if (box.scrollHeight <= box.clientHeight + 1) return;
+
+      const more = this.tickerMoreButton('', false);
+      items.append(more);
+      let hidden = 0;
+      // Hide from the end until it fits, always keeping the newest alert.
+      for (let i = all.length - 1; i >= 1; i--) {
+        all[i]!.hidden = true;
+        hidden++;
+        more.textContent = `+${hidden} more`;
+        if (box.scrollHeight <= box.clientHeight + 1) break;
+      }
+      more.textContent = `+${hidden} more`;
+    } finally {
+      this.fittingTicker = false;
+    }
+  }
+
+  private tickerMoreButton(label: string, expanded: boolean): HTMLButtonElement {
+    const b = document.createElement('button');
+    b.className = 'ticker-more';
+    b.type = 'button';
+    b.textContent = label;
+    b.setAttribute('aria-expanded', String(expanded));
+    b.addEventListener('click', () => {
+      this.tickerExpanded = !this.tickerExpanded;
+      this.fitTicker();
+    });
+    return b;
+  }
+
 }

@@ -322,10 +322,183 @@ caught exactly this during development:
 | **Geomagnetic pole** | 80.7°N, 72.8°W | The IGRF dipole axis, from g₁⁰, g₁¹, h₁¹ |
 
 They are ~13° apart. **The auroral oval is organised by the dipole geometry**, so the
-geomagnetic pole is the one the OVATION overlay must be checked against. The live verify
-row computes the probability-weighted centroid of the northern oval and compares it with
-our own IGRF-14 dipole axis: two independently computed things, agreeing to within a
-degree or so. A transposed, mirrored or rotated grid would not.
+geomagnetic pole is the one the OVATION overlay must be checked against.
+
+The check on this was rewritten on 2026-09-07, and the reason is worth recording. It
+originally asserted that the oval's brightness-weighted centroid sits within 5° of the
+dipole pole, and it passed — on a quiet day. It went amber as soon as the nightside
+brightened ahead of an incoming CME, reporting a defect in a grid that was correct. The
+oval is *not* centred on the pole: it brightens toward magnetic midnight, by an amount that
+grows with activity, so a fixed separation threshold measures the weather rather than the
+software.
+
+What is invariant is the direction. The centroid lies on the anti-sunward side of the pole
+at every activity level, so that is what the check now asserts, against a sub-solar point
+computed from the ephemeris — a third independent quantity. A transposed, mirrored or
+rotated grid puts the oval on the dayside and fails immediately. The claim is deliberately
+weaker than the old one and, unlike the old one, it is true.
+
+---
+
+## 5b. Spacecraft ephemerides — `json/rtsw/rtsw_ephemerides_1h`
+
+Verified live 2026-09-07. `access-control-allow-origin: *`. 779 KB raw, **70 KB gzipped**,
+2009 records covering 31 days.
+
+**The endpoint name.** It is `_1h`, not `_1m`. Its siblings in the same directory are
+`rtsw_mag_1m` and `rtsw_wind_1m`, so the obvious guess is wrong and returns 404 — which is
+what an earlier probe recorded, and why this feed was written off as unavailable. The
+measurements are per-minute; the positions are hourly.
+
+**Ordering and the `active` flag.** Newest first, with all spacecraft interleaved at each
+timestamp — the same trap as the mag and wind feeds. On 2026-09-07 the file carried ACE,
+IMAP and SOLAR1, and only SOLAR1 was `active: true`.
+
+**Columns.** `x_gse`/`y_gse`/`z_gse` in km are always present. `*_gsm` and every velocity
+column are null for the inactive spacecraft and intermittently for the active one, so GSE
+is the only frame that can be relied on.
+
+**Frame.** GSE is +X sunward, +Z ecliptic north, +Y duskward. The scene works in the true
+equator of date, so the two differ by the obliquity — 23.44°, which is comparable to the
+off-axis excursion being drawn. Getting it wrong would not look wrong. The basis is built
+from astronomy-engine's ecliptic-of-date rotation rather than a hardcoded obliquity, and
+the test pins the resulting tilt at 23.4381° — the *true* obliquity, nutation included.
+
+**What it says.** Positions on 2026-09-07 07:00 UTC:
+
+| Craft | Distance | Off the Sun–Earth line | Angle |
+|---|---|---|---|
+| **SOLAR1** (operational) | 248 Rₑ | **44.5 Rₑ** | 10.3° |
+| ACE | 232 Rₑ | 40.3 Rₑ | 10.0° |
+| IMAP | 245 Rₑ | 32.5 Rₑ | 7.6° |
+
+44.5 Rₑ is about 280,000 km — three quarters of the way to the Moon's orbit, sideways. The
+usual dot-on-the-line diagram is not a simplification of this; it is a different claim.
+
+**A new cross-check.** Two independent feeds each name the operational spacecraft: the
+wind/mag files' per-record `active` flag, and this file's. If they disagree, every
+"measured by …" attribution on the page is wrong and nothing else would notice.
+
+## 5c. Feeds that are present, well-formed, and wrong
+
+`json/geospace/geospace_pred_est_kp_1_hour` parses cleanly, has a sane shape and a
+plausible `k` value. Its newest record is **2024-06-18**. A consumer that trusts a feed
+because it deserializes would publish a two-year-old Kp as the current one. Recorded here
+because the failure mode is silence, not an error: every staleness rule in the Viewer keys
+off `data_time`, which is exactly what saves it here.
+
+---
+
+## 5d. Dst — `json/geospace/geospace_dst_1_hour`
+
+Verified live 2026-09-07. `access-control-allow-origin: *`. 6 KB raw, **1 KB gzipped**,
+~107 records at 1-minute cadence. The 7-day companion is 78 KB gzipped for 10,131 records.
+
+**It is modelled, and the name hides that.** Kyoto's Dst — the definitive index, derived
+from four low-latitude magnetometers — has no CORS and stays on the stage-B list. This is
+NOAA's Geospace run (University of Michigan BATS-R-US/RCM) *driven by the L1 solar wind*.
+Same name, different quantity. It ships as `[D]` with the model cited, and the Situation
+Report says which one it is not.
+
+That distinction has teeth: because this Dst is computed from the wind, checking it against
+the wind would only be checking arithmetic against its own input. Checking it against
+**estimated Kp** — which comes from ground magnetometers and knows nothing about L1 — is a
+model against a measurement.
+
+**About half of every response is in the future.** The model propagates L1 wind to Earth,
+so it necessarily runs ahead of the clock:
+
+| Fetched | Records | In the future | Furthest ahead |
+|---|---|---|---|
+| 08:01 UTC | 107 | **47** | 47 min |
+
+"Take the newest record" is the correct rule for every other SWPC feed and it is wrong
+here — it publishes a forecast as the present value. `parseDst()` takes the newest sample
+whose time has *arrived*; the remainder is returned separately, plotted in its own series,
+and described as a forecast. The panel says how far ahead the model reaches.
+
+Severity bands are Loewe & Prölss (1997), *J. Geophys. Res.* **102**, 14209: quiet above
+−30 nT, then weak, moderate, intense, severe, great. They are conventional, not physical.
+
+---
+
+## 5e. WSA-Enlil at Earth — `json/enlil_time_series.json`
+
+Verified live 2026-09-07. `access-control-allow-origin: *`. 1.6 MB raw, **212 KB gzipped**,
+4416 records. Newest-first. Fetched on demand with the Ahead panel, never on the load path.
+
+The heliospheric forecast as *numbers*, which the inventory had listed only as imagery.
+Columns: `v_r` (radial speed at Earth, km/s), `earth_particles_per_cm3`, `temperature`,
+`b_r`/`b_theta`/`b_phi`, `polarity`, and `cloud` — a passive tracer marking CME plasma.
+
+**Span and cadence.** Three days of elapsed model time and four ahead, at the model's own
+~137-second timestep. Half the file has already happened, which is what makes it checkable.
+
+**The tracer is not a probability.** `cloud` ranged from 7.1e-37 to 1.15 in a single
+response. It is a mixing fraction; any "is a CME here" test on it needs a threshold well
+clear of the numerical floor, and the Viewer uses 0.1. A nonzero test would report ejecta at
+Earth continuously.
+
+**What it is worth.** Enlil is initialised from solar magnetograms and analysed CME cones
+and never sees L1, so its elapsed half can be set against the wind NOAA measured and
+propagated to Earth for the same moment — a model against a measurement of one physical
+quantity. Sampled on 2026-09-07 across an hour of propagated wind:
+
+| Time | Measured | Enlil | Δ |
+|---|---|---|---|
+| 07:57 | 364 km/s | 346 | −19 (−5%) |
+| 08:20 | 370 km/s | 347 | −23 (−6%) |
+| 08:45 | 368 km/s | 349 | −19 (−5%) |
+
+Mean absolute error 22 km/s. Density 12.4 modelled against 11–15 measured. The check row
+carries a ±200 km/s tolerance, which is deliberately far looser than that: it exists to
+catch a misread column or a time misalignment, not to grade the forecast.
+
+**And it makes our own cone model falsifiable.** Constant-speed propagation ignores drag,
+so it should run *early* against Enlil. On 2026-09-07 it did, by 4 hours on a 21-hour
+forecast — the right direction and a plausible magnitude. The panel states which direction
+it found rather than asserting the expected one, and says so when the sign is wrong.
+
+---
+
+## 5f. Solar imagery, projected onto the Sun
+
+The rendered Sun carries the live SUVI frame. Three things had to be measured rather than
+assumed, and the check built to validate them found two real defects.
+
+**The disk is not centred in the frame.** A 1280×1280 SUVI 304 Å frame on 2026-09-07 had
+its disk centred at (691, 628) — 51 px off the image centre, 13% of a solar radius — with a
+limb radius of 394 px. The 195 Å frame from the same minute measured 402 px, because its
+corona reaches further and the intensity edge sits outside the photospheric limb. So every
+frame is measured: the limb is the steepest fall in the radial intensity profile, found in
+two passes, the second centred on the disk alone so a prominence cannot drag it.
+
+**`solar_regions.json` longitudes are east-positive.** A record with `longitude: 50` carries
+`location: "S11E50"`; one with `-29` carries `"N09W29"`. That is the opposite of the
+direction rotation carries features, and reading it backwards mirrors every region across
+the disk while leaving a picture that looks entirely correct.
+
+**`observed_date` has no time of day.** The Sun turns 14.2° a day, so a position stamped
+only `2026-09-07` is of unknown longitude to within that much. The parser used to stamp
+midnight, which is the worst available choice: it is an *endpoint*, so the error runs 0–14°
+and rotating forward from it can double the error rather than reduce it. It now stamps
+midday — the midpoint of the possible epochs — which bounds the error at ±7°.
+
+**The check.** NOAA publishes the regions as numbers, from a different pipeline than the
+imagery, and active regions are bright in every SUVI passband, so the projection can be
+tested by asking whether the reported positions land on bright pixels. The absolute contrast
+is not the test: on 2026-09-07 the Sun carried nine regions of one to four spots against a
+bright chromosphere, and every hypothesis — right or wrong — scored between 1.0 and 1.35
+times the disk mean. So the measurement is comparative, against the same positions mirrored
+east–west, and when the two score within 6% of each other the row reports **no signal**
+rather than a verdict. A check that cries wolf whenever its evidence is weak is a check that
+will be ignored.
+
+One thing the check is structurally blind to, worth stating: a solar north rotated about the
+line of sight. Heliographic longitude is measured *from* the central meridian, which north
+defines, so rotating north rotates the reported positions and the image frame together. It
+is a gauge freedom, not an error. A north tilted *out* of the plane changes B₀ and is
+caught.
 
 ---
 

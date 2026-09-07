@@ -124,6 +124,21 @@ export const INSTRUMENTS: Instrument[] = [
       + 'Earth’s own field — the size of that deficit is itself a storm indicator.',
   },
   {
+    id: 'dst', label: 'Ring current', unit: 'nT Dst', part: 'dst',
+    value: (d) => fmtInt(d?.dst?.value_nt ?? null),
+    detail: (d) => d?.dst?.level ?? '',
+    meaning: 'Dst measures how much the ring current — a torus of trapped ions drifting '
+      + 'westward around Earth at a few Earth radii — is subtracting from the surface '
+      + 'magnetic field. It is the closest thing space weather has to a single number for '
+      + 'the size of a storm, because it tracks the energy actually stored in the inner '
+      + 'magnetosphere rather than the disturbance at any one station. Quiet is above '
+      + '−30 nT; below −100 nT is an intense storm. This value is MODELLED: NOAA’s '
+      + 'Geospace run driven by the L1 solar wind, not Kyoto’s measured index, which has '
+      + 'no route into the browser. Because the model propagates the wind to Earth it '
+      + 'runs ahead of the clock — the value shown is the newest one that has actually '
+      + 'arrived, and the panel says how far its forecast reaches beyond that.',
+  },
+  {
     id: 'mpause', label: 'Magnetopause', unit: 'Rₑ', part: 'magnetopause',
     value: (d) => fmt(d?.magnetopause?.standoff_re ?? null, 1),
     detail: () => 'Shue 1998',
