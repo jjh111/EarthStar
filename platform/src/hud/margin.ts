@@ -43,7 +43,7 @@ export function escapeHtml(s: string): string {
 export function renderReport(
   state: StoreState, narration: SceneNarration, now: Date,
 ): string {
-  const lines = buildSituationReport(state.now, narration, now, state.aurora);
+  const lines = buildSituationReport(state.now, narration, now, state.aurora, state.cmes);
   // The sentence carries its own evidence: each quantity appears as glyph,
   // sparkline and number together. The prose report follows it, and the
   // screen-reader text alternative sits alongside.

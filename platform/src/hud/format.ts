@@ -33,15 +33,6 @@ export function fmtInt(v: number | null | undefined): string {
   return v === null || v === undefined || !Number.isFinite(v) ? NO_DATA : String(Math.round(v));
 }
 
-/** Scientific notation for X-ray flux, e.g. 3.7 × 10⁻⁷. */
-export function fmtFlux(v: number | null | undefined): string {
-  if (v === null || v === undefined || !Number.isFinite(v) || v <= 0) return NO_DATA;
-  const exp = Math.floor(Math.log10(v));
-  const mant = v / Math.pow(10, exp);
-  const sup = String(exp).replace('-', '⁻').replace(/\d/g, (d) => '⁰¹²³⁴⁵⁶⁷⁸⁹'[+d]!);
-  return `${mant.toFixed(1)} × 10${sup}`;
-}
-
 export interface Staleness {
   state: 'fresh' | 'stale' | 'no-data';
   ageS: number | null;

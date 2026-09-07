@@ -10,13 +10,6 @@ export type Tier = 'measured' | 'modeled' | 'ambient' | 'mixed';
 /** The provenance badge shown beside every value (plan §2). */
 export type Badge = 'E' | 'D' | 'M';
 
-export const TIER_BADGE: Record<Tier, Badge> = {
-  measured: 'E',
-  modeled: 'D',
-  ambient: 'M',
-  mixed: 'E',
-};
-
 export interface ModelRef {
   name: string;
   ref?: string;

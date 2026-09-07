@@ -7,6 +7,7 @@
 import type { NowEnvelope, Source } from './source.js';
 import type { AuroraNow, Envelope, SolarWindSeries } from '../contract/types.js';
 import type { ActiveRegion, Series } from './swpc.js';
+import { fetchCmes, type Cme } from './cme.js';
 
 export interface StoreState {
   now: NowEnvelope | null;
@@ -19,6 +20,7 @@ export interface StoreState {
   /** Its own cadence: ~5-minute product, 141 KB gzipped. */
   aurora: Envelope<AuroraNow | null> | null;
   regions: Envelope<ActiveRegion[]> | null;
+  cmes: Cme[];
   /** Last refresh attempt, whether or not it succeeded. */
   lastAttempt: string | null;
   lastError: string | null;
@@ -31,7 +33,7 @@ export class NowStore {
   private state: StoreState = {
     now: null, series: null, kpSeries: null, xraySeries: null,
     protonSeries: null, electronSeries: null,
-    aurora: null, regions: null, lastAttempt: null, lastError: null, loading: true,
+    aurora: null, regions: null, cmes: [], lastAttempt: null, lastError: null, loading: true,
   };
   private listeners = new Set<Listener>();
   private timer: number | null = null;
@@ -94,6 +96,11 @@ export class NowStore {
       // A daily product, fetched alongside the aurora rather than on a timer
       // of its own — there is no third cadence worth maintaining.
       this.emit({ regions: await this.source.fetchRegions() });
+    } catch { /* keep the previous list */ }
+    try {
+      // DONKI is a human-curated catalogue: a new analysis appears hours after
+      // the event, so there is nothing to gain from polling it faster.
+      this.emit({ cmes: await fetchCmes() });
     } catch { /* keep the previous list */ }
   }
 

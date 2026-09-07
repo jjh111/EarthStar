@@ -12,10 +12,7 @@
  * surrounding text, so a paragraph can carry its own evidence.
  */
 
-export interface Series {
-  time: string[];
-  value: (number | null)[];
-}
+import type { Series } from '../data/swpc.js';
 
 export interface SparkOptions {
   /** Rendered size in ex-units of the surrounding text. */

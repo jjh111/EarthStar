@@ -72,7 +72,7 @@ the upstream traps.
 |---|--------|--------|
 | ✅ | `astronomy-engine` — Sun, Moon, inner planets | positions, sub-solar point, sidereal time |
 | ✅ | IGRF-14, vendored | field lines, both magnetic poles |
-| ✅ | DONKI `CMEAnalysis` (CCMC, **CORS, no key**) | ◻ not yet rendered — cone parameters + ETA are ready to use |
+| ✅ | DONKI `CMEAnalysis` (CCMC, **CORS, no key**) | cone parameters propagated and drawn; arrival estimated client-side with a stated window |
 | ◻ | DONKI `FLR`, `GST`, `notifications` | flare/storm event history with NASA's analysis |
 | ⛔ | JPL Horizons | no CORS → stage B. Needed for real DSCOVR/PSP/Solar Orbiter markers |
 
@@ -80,22 +80,28 @@ the upstream traps.
 
 ## What is worth doing next, in order
 
-1. **CME cones from DONKI** (§6). Fetchable today without a key; the geometry is the
-   remaining work. This is the only feature that would let the Viewer show something
-   *coming* rather than something present — the difference between an instrument and a
-   forecast.
-2. **GOES magnetometer** (§2). The field measured *at geostationary orbit*, which is where
+1. **GOES magnetometer** (§2). The field measured *at geostationary orbit*, which is where
    a magnetopause crossing would actually be felt. It would turn the modelled standoff into
    something checkable against a measurement, the way the aurora overlay is checked against
    the dipole axis today.
-3. **Spacecraft markers** (§6). The Viewer says "measured by SOLAR1 at L1" but draws no L1.
+2. **Spacecraft markers** (§6). The Viewer says "measured by SOLAR1 at L1" but draws no L1.
    `rtsw_ephemerides_1m` gives the real position without needing Horizons.
-4. **Enlil imagery** (§4). NOAA's full heliospheric wind forecast, as an animation — the
-   context for every CME the cone model would draw.
-5. **Ground magnetometers and Dst** (§2, stage B). The canonical storm index is still
+3. **Enlil imagery** (§4). NOAA's own heliospheric wind forecast as an animation — the
+   proper context for the cone model, and a check on it: Enlil accounts for drag and the
+   ambient wind, which our constant-speed propagation does not.
+4. **Ground magnetometers and Dst** (§2, stage B). The canonical storm index is still
    missing, and it is why the panel talks about Kp instead.
 
-## What shipped in this pass
+## Shipped since
+
+CME cones. DONKI's analysed cone parameters — apex direction, half-angle, and speed at
+21.5 R☉ — propagated radially at constant speed, with Earth-directed cones drawn warm and
+carrying an arrival estimate. Whether Earth lies inside a cone accounts for B₀, the ±7.25°
+seasonal swing of Earth's heliographic latitude; ignoring it would misjudge marginal cases.
+The constant-speed limit is stated in the panel: real ejections decelerate toward the
+ambient wind, so the arrival carries a window that widens with speed rather than a time.
+
+## What shipped in the pass before
 
 Propagated wind, proton and electron flux, active regions, and the solar cycle — the first,
 second, fourth and fifth items on the previous list. The propagation change is the one that

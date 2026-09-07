@@ -124,6 +124,7 @@ const btnMotion = btn('motion-toggle');
 const btnShield = btn('shield-toggle');
 const btnAurora = btn('aurora-toggle');
 const btnWind = btn('wind-toggle');
+const btnCme = btn('cme-toggle');
 const scaleLabelEl = document.getElementById('scale-label') as HTMLElement;
 
 let view: ViewName = 'deck';
@@ -133,6 +134,7 @@ function syncNarration(): void {
     mode: viewer.scaleMode, view, reducedMotion: motion.reduced,
     shield: viewer.shieldOn, fieldLines: viewer.fieldLineStats,
     aurora: viewer.auroraOn, wind: viewer.windOn,
+    cmes: { shown: viewer.cmesOn, count: viewer.cmeCount },
   });
   hud.render(store.get());
 }
@@ -185,6 +187,14 @@ btnScale.addEventListener('click', () => setScale(viewer.scaleMode === 'globe' ?
 btnShield.addEventListener('click', () => setShield(!viewer.shieldOn));
 btnAurora.addEventListener('click', () => setAurora(!viewer.auroraOn));
 btnWind.addEventListener('click', () => setWind(!viewer.windOn));
+function setCmes(on: boolean): void {
+  viewer.setCmesVisible(on);
+  btnCme.setAttribute('aria-pressed', String(on));
+  announce(on ? 'CME cones shown.' : 'CME cones hidden.');
+  syncNarration();
+}
+btnCme.addEventListener('click', () => setCmes(!viewer.cmesOn));
+
 btnMotion.addEventListener('click', () => motion.setOverride(!motion.reduced));
 
 motion.subscribe((reduced) => {
@@ -202,6 +212,7 @@ installKeyboard({
   toggleShield: () => setShield(!viewer.shieldOn),
   toggleAurora: () => setAurora(!viewer.auroraOn),
   toggleWind: () => setWind(!viewer.windOn),
+  toggleCmes: () => setCmes(!viewer.cmesOn),
   refresh: () => { announce('Refreshing.'); void store.refresh(); },
   focusReport: () => hud.selectTab('report'),
 });
@@ -210,6 +221,7 @@ store.subscribe((state) => {
   viewer.setNow(state.now?.data ?? null);
   viewer.setAurora(state.aurora?.data ?? null);
   viewer.setRegions(state.regions?.data ?? [], state.regions?.data?.[0]?.observed ?? null);
+  viewer.setCmes(state.cmes);
   syncNarration();
 });
 

@@ -99,6 +99,22 @@ wind are still in flight — the warning currently in hand.
 If the propagation feed is unavailable the L1 reading is used instead, and the Situation
 Report names which one it used.
 
+## Coronal mass ejections
+
+The one thing here that is still on its way. DONKI publishes each analysed CME as a cone —
+apex direction in Stonyhurst heliographic coordinates, half-angle, and speed where it
+crosses 21.5 R☉ — and the Viewer propagates that cone radially at constant speed.
+
+Whether Earth is inside a cone accounts for **B₀**, the ±7.25° seasonal swing of Earth's
+heliographic latitude; treating Earth as sitting on the solar equator would misjudge
+marginal cases by up to 7°.
+
+Constant speed ignores drag, and real ejections decelerate toward the ambient wind — fast
+ones arrive later than this, slow ones earlier. So the arrival carries a **window that
+widens with speed**, and the panel says it is an order-of-magnitude bound rather than a
+fitted error model. Where DONKI supplies its own Enlil arrival, that is used instead and
+labelled as theirs.
+
 ## What moves, and why
 
 Three things in the scene are driven by the live wind rather than by a clock:

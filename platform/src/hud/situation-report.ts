@@ -9,6 +9,7 @@
 import type { NowEnvelope } from '../data/source.js';
 import { hhmmUTC, formatAge } from '../contract/types.js';
 import type { AuroraNow, Envelope } from '../contract/types.js';
+import type { Cme } from '../data/cme.js';
 import { stalenessOf } from './format.js';
 import { scaleLabel, type ScaleMode } from '../scene/scales.js';
 import { subsolarPoint } from '../models/ephemeris.js';
@@ -18,6 +19,7 @@ export interface SceneNarration {
   view: string;
   reducedMotion: boolean;
   shield: boolean;
+  cmes?: { shown: boolean; count: number };
   fieldLines: { lines: number; points: number };
   aurora: boolean;
   wind?: boolean;
@@ -43,6 +45,7 @@ function cardinal(lat: number, lon: number): string {
 export function buildSituationReport(
   env: NowEnvelope | null, scene: SceneNarration, now = new Date(),
   aurora: Envelope<AuroraNow | null> | null = null,
+  cmes: Cme[] = [],
 ): string[] {
   const lines: string[] = [];
   const at = `${hhmmUTC(now.toISOString())} UTC`;
@@ -185,6 +188,46 @@ export function buildSituationReport(
     } else {
       lines.push('No NOAA alerts, watches or warnings in the feed.');
     }
+  }
+
+  /* --- CMEs: the only thing here that is still on its way --------------- */
+  const inbound = cmes
+    .filter((c) => c.earthDirected && c.arrival && Date.parse(c.arrival.time) > now.getTime())
+    .sort((a, b) => Date.parse(a.arrival!.time) - Date.parse(b.arrival!.time));
+
+  if (inbound.length > 0) {
+    const c = inbound[0]!;
+    const hours = (Date.parse(c.arrival!.time) - now.getTime()) / 3.6e6;
+    lines.push(
+      `A coronal mass ejection is on its way. NASA's DONKI catalogue analysed it leaving ` +
+      `the Sun at ${Math.round(c.speedKms)} km/s on ${hhmmUTC(c.time215)} UTC, with a ` +
+      `${Math.round(c.halfAngle)}° half-angle cone pointed ${c.offAxisDeg < 5 ? 'almost directly at Earth'
+        : `${Math.round(c.offAxisDeg)}° off the Earth line`} [D · NASA]. ` +
+      `Propagating it radially at that constant speed puts arrival near ` +
+      `${hhmmUTC(c.arrival!.time)} UTC, about ${hours < 24 ? `${Math.round(hours)} hours`
+        : `${(hours / 24).toFixed(1)} days`} from now, give or take ` +
+      `${c.arrival!.windowHours} hours [D · cone]. ` +
+      `${c.arrivalFromEnlil ? 'That arrival time is NOAA/NASA\u2019s own Enlil run.'
+        : 'Constant speed ignores drag — real ejections decelerate toward the ambient wind, ' +
+          'so fast ones tend to arrive later than this and slow ones earlier. The window ' +
+          'is an order-of-magnitude bound, not a fitted error.'}` +
+      `${inbound.length > 1 ? ` ${inbound.length - 1} more are also inbound.` : ''}`,
+    );
+  } else if (cmes.length > 0) {
+    lines.push(
+      `${cmes.length} coronal mass ejection${cmes.length > 1 ? 's have' : ' has'} been ` +
+      `analysed in the last few days, none of them Earth-directed with an arrival still ` +
+      `ahead of us. Nothing is inbound.`,
+    );
+  }
+
+  if (scene.cmes && scene.cmes.count > 0) {
+    lines.push(
+      `${scene.cmes.count} cone${scene.cmes.count > 1 ? 's are' : ' is'} drawn expanding ` +
+      `from the Sun [D], warm where Earth lies inside the cone and cool where it does not. ` +
+      `The apex direction, half-angle and speed are DONKI's analysis of coronagraph ` +
+      `imagery; the radial propagation is ours.`,
+    );
   }
 
   /* --- The scene itself ------------------------------------------------ */
