@@ -20,7 +20,8 @@ import {
   BODY_PREFIX, TABS, escapeHtml, renderChecks, renderDetail, renderForecast, renderReport,
   renderSources, renderSun, type SunState, type TabId,
 } from './margin.js';
-import type { SceneNarration } from './situation-report.js';
+import { buildSituationReport, type SceneNarration } from './situation-report.js';
+import { briefingFilename, buildBriefing } from './briefing.js';
 
 export interface HudCallbacks {
   onSelectLoop(id: string): void;
@@ -42,7 +43,15 @@ export class Hud {
   private bodyEl: HTMLElement;
   private statusEl: HTMLElement;
   private perfEl: HTMLElement;
+  private copyEl: HTMLButtonElement;
+  private downloadEl: HTMLButtonElement;
   private perfKey = '';
+  /**
+   * Which collapsible sections the reader has opened or closed. Held in memory
+   * and mirrored to localStorage, because the panel re-renders on every store
+   * tick and a section that snapped shut once a minute would be unusable.
+   */
+  private sectionState = new Map<string, boolean>();
   /** Owns the solar frame elements so panel re-renders never cost a decode. */
   readonly images = new ImageCache();
   private clockEl: HTMLElement;
@@ -83,6 +92,13 @@ export class Hud {
     this.bodyEl = document.getElementById('margin-body') as HTMLElement;
     this.statusEl = document.getElementById('status') as HTMLElement;
     this.perfEl = document.getElementById('perf') as HTMLElement;
+    this.copyEl = document.getElementById('brief-copy') as HTMLButtonElement;
+    this.downloadEl = document.getElementById('brief-download') as HTMLButtonElement;
+    this.copyEl.addEventListener('click', () => void this.copyBriefing());
+    this.loadSectionState();
+    // `toggle` does not bubble, so it is captured rather than delegated.
+    this.bodyEl.addEventListener('toggle', this.onSectionToggle, true);
+    this.downloadEl.addEventListener('click', () => this.downloadBriefing());
     this.clockEl = document.getElementById('clock') as HTMLElement;
     this.buildTiles();
     this.buildTabs();
@@ -215,6 +231,58 @@ export class Hud {
     this.renderMargin();
   }
 
+  /**
+   * The whole panel as Markdown, for pasting somewhere the timestamps and
+   * tiers survive. Built from the same state the panel renders, so the two
+   * cannot drift apart.
+   */
+  briefing(now = new Date()): string {
+    if (!this.state) return '';
+    return buildBriefing({
+      state: this.state,
+      narration: buildSituationReport(
+        this.state.now, this.narration, now, this.state.aurora, this.state.cmes,
+        this.state.spacecraft?.data ?? [],
+      ),
+      checks: this.checks,
+      forecast: this.forecast,
+      now,
+      origin: `${location.origin}${location.pathname}`,
+    });
+  }
+
+  private async copyBriefing(): Promise<void> {
+    const text = this.briefing();
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      this.flash(this.copyEl, 'Copied');
+    } catch {
+      // Clipboard access can be refused; the download still works and says so.
+      this.flash(this.copyEl, 'Blocked — use .md');
+    }
+  }
+
+  private downloadBriefing(): void {
+    const text = this.briefing();
+    if (!text) return;
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = briefingFilename();
+    a.click();
+    URL.revokeObjectURL(url);
+    this.flash(this.downloadEl, 'Saved');
+  }
+
+  /** Confirm an action on its own button, so no layout moves. */
+  private flash(el: HTMLElement, text: string): void {
+    const original = el.dataset['label'] ?? el.textContent ?? '';
+    el.dataset['label'] = original;
+    el.textContent = text;
+    window.setTimeout(() => { el.textContent = el.dataset['label'] ?? original; }, 1600);
+  }
+
   /** Open a body's detail from a click in the scene. */
   showBody(name: string): void { this.openDetail(BODY_PREFIX + name); }
 
@@ -340,6 +408,33 @@ export class Hud {
       + `${Math.round(s.fps)} fps. Geometry and data are unaffected.`;
   }
 
+  private readonly SECTION_KEY = 'viewer.sections';
+
+  private loadSectionState(): void {
+    try {
+      const raw = localStorage.getItem(this.SECTION_KEY);
+      if (!raw) return;
+      const o = JSON.parse(raw) as Record<string, boolean>;
+      for (const [k, v] of Object.entries(o)) this.sectionState.set(k, !!v);
+    } catch {
+      // A blocked or corrupt store is not a reason to fail; defaults apply.
+    }
+  }
+
+  private onSectionToggle = (e: Event): void => {
+    const el = e.target as HTMLDetailsElement;
+    const id = el.dataset?.['sect'];
+    if (!id) return;
+    this.sectionState.set(id, el.open);
+    try {
+      localStorage.setItem(
+        this.SECTION_KEY, JSON.stringify(Object.fromEntries(this.sectionState)),
+      );
+    } catch { /* private browsing; the in-memory map still works this session */ }
+  };
+
+  private remembered = (id: string): boolean | undefined => this.sectionState.get(id);
+
   private renderMargin(): void {
     const state = this.state;
     if (!state) return;
@@ -347,12 +442,17 @@ export class Hud {
     switch (this.tab) {
       case 'report': this.bodyEl.innerHTML = renderReport(state, this.narration, now); break;
       case 'forecast':
-        this.bodyEl.innerHTML = renderForecast(this.forecast, this.forecastLoading, state?.cmes ?? []); break;
+        this.bodyEl.innerHTML = renderForecast(
+          this.forecast, this.forecastLoading, state?.cmes ?? [], this.remembered,
+        );
+        break;
       case 'sun':
         this.bodyEl.innerHTML = renderSun(this.sun, LOOPS, this.cycle, this.cycleLoading);
         this.placeSunFrame();
         break;
-      case 'sources': this.bodyEl.innerHTML = renderSources(state, this.checks); break;
+      case 'sources':
+        this.bodyEl.innerHTML = renderSources(state, this.checks, this.remembered);
+        break;
       case 'checks': this.bodyEl.innerHTML = renderChecks(this.checks, this.checksRunning); break;
       case 'detail':
         this.bodyEl.innerHTML = this.detailId ? renderDetail(this.detailId, state, now) : '';

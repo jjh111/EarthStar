@@ -300,6 +300,7 @@ window.setInterval(() => hud.setStats(viewer.stats), 1000);
 
 Object.assign(window as unknown as Record<string, unknown>, {
   __viewer: viewer,
+  __hud: hud,
   __stats: () => viewer.stats,
   __sunTimer: sunTimer,
 });

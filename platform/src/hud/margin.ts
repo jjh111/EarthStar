@@ -46,6 +46,33 @@ export function escapeHtml(s: string): string {
  * Panels
  * ------------------------------------------------------------------ */
 
+/**
+ * A collapsible section.
+ *
+ * The panel had grown into one long scroll per tab — provenance ran a table,
+ * three prose blocks, an inset and a model list before it ended — and a reader
+ * looking for one thing had to travel past everything else to reach it. These
+ * are `<details>`, so the browser gives keyboard and screen-reader behaviour for
+ * free, and the open state is remembered per section: a reader who does not care
+ * about model citations should not have to close them again every minute when
+ * the store ticks.
+ *
+ * `openByDefault` is the first impression, not a preference — a remembered
+ * choice always wins over it.
+ */
+export function section(
+  id: string, title: string, body: string, openByDefault = true,
+  remembered?: (id: string) => boolean | undefined,
+): string {
+  if (!body.trim()) return '';
+  const saved = remembered?.(id);
+  const open = saved === undefined ? openByDefault : saved;
+  return `<details class="sect" data-sect="${escapeHtml(id)}"${open ? ' open' : ''}>
+    <summary>${escapeHtml(title)}</summary>
+    <div class="sect-body">${body}</div>
+  </details>`;
+}
+
 export function renderReport(
   state: StoreState, narration: SceneNarration, now: Date,
 ): string {
@@ -93,6 +120,7 @@ function kpBars(f: ForecastBundle): string {
 
 export function renderForecast(
   f: ForecastBundle | null, loading: boolean, cmes: Cme[] = [],
+  remembered?: (id: string) => boolean | undefined,
 ): string {
   if (!f) {
     return `<h2>Ahead</h2><p>${loading ? 'Loading NOAA forecasts…' : 'Forecasts have not loaded.'}</p>`;
@@ -134,16 +162,18 @@ export function renderForecast(
     proxy for solar activity and the driver of upper-atmosphere density, so it sets how fast
     satellites in low orbit decay.</p>` : ''}
 
-    ${enlilSection(f.enlil, cmes)}
+    ${enlilSection(f.enlil, cmes, remembered)}
 
-    ${three ? `<h3>NOAA 3-day forecast</h3>
-    <pre class="product">${escapeHtml(three.body)}</pre>
-    ${three.issued ? `<p class="tile-meta">Issued ${escapeHtml(three.issued)}.
-      <a href="${FORECAST_LINK.threeDay}" rel="noreferrer noopener" target="_blank">Source</a>.</p>` : ''}` : ''}
+    ${section('fc-3day', 'NOAA 3-day forecast', three ? `
+      <pre class="product">${escapeHtml(three.body)}</pre>
+      ${three.issued ? `<p class="tile-meta">Issued ${escapeHtml(three.issued)}.
+        <a href="${FORECAST_LINK.threeDay}" rel="noreferrer noopener" target="_blank">Source</a>.</p>` : ''}
+    ` : '', false, remembered)}
 
-    ${disc ? `<h3>Forecaster discussion</h3>
-    <pre class="product">${escapeHtml(disc.body)}</pre>
-    ${disc.issued ? `<p class="tile-meta">Issued ${escapeHtml(disc.issued)}.</p>` : ''}` : ''}`;
+    ${section('fc-discussion', 'Forecaster discussion', disc ? `
+      <pre class="product">${escapeHtml(disc.body)}</pre>
+      ${disc.issued ? `<p class="tile-meta">Issued ${escapeHtml(disc.issued)}.</p>` : ''}
+    ` : '', false, remembered)}`;
 }
 
 /**
@@ -152,7 +182,10 @@ export function renderForecast(
  * section leads with what the model expects and then says plainly what kind of
  * claim that is.
  */
-function enlilSection(run: EnlilRun | null, cmes: Cme[] = []): string {
+function enlilSection(
+  run: EnlilRun | null, cmes: Cme[] = [],
+  remembered?: (id: string) => boolean | undefined,
+): string {
   if (!run || run.ahead.length === 0) return '';
 
   const peak = run.peakSpeed;
@@ -171,7 +204,7 @@ function enlilSection(run: EnlilRun | null, cmes: Cme[] = []): string {
     return h < 1 ? 'within the hour' : `in about ${Math.round(h)} h`;
   };
 
-  return `<h3>WSA-Enlil — the wind at Earth, forecast</h3>
+  return section('fc-enlil', 'WSA-Enlil — the wind at Earth', `
     <p>A magnetohydrodynamic simulation of the inner heliosphere sampled at Earth
     <span class="badge badge-d">D</span>, run by NOAA from solar magnetograms and the
     analysed CME cones. It is the only forecast here that solves the physics rather than
@@ -185,7 +218,7 @@ function enlilSection(run: EnlilRun | null, cmes: Cme[] = []): string {
       ${hours(peak.time)} — ${hhmmUTC(peak.time)} UTC on
       ${new Date(peak.time).toUTCString().slice(0, 11)}.</p>` : ''}
 
-    <h3>Ejecta at Earth</h3>
+    <h4>Ejecta at Earth</h4>
     <p class="fine">The model carries a passive tracer that marks CME plasma. It is a mixing
     fraction, not a density and not a probability — it says where the ejection is in the
     simulation, and the simulation can be wrong about that.</p>
@@ -203,7 +236,7 @@ function enlilSection(run: EnlilRun | null, cmes: Cme[] = []): string {
     <p class="fine">Model output starts ${new Date(run.firstTime!).toUTCString().slice(0, 11)}
     at ${hhmmUTC(run.firstTime!)} UTC — ${run.past.length}
     samples already elapsed and ${run.ahead.length} still ahead. The elapsed half is checked
-    against the measured wind in the Checks panel.</p>`;
+    against the measured wind in the Checks panel.</p>`, true, remembered);
 }
 
 /**
@@ -259,7 +292,10 @@ function metaRow(key: string, m: PartMeta): string {
   </tr>`;
 }
 
-export function renderSources(state: StoreState, checks: CheckResult | null): string {
+export function renderSources(
+  state: StoreState, checks: CheckResult | null,
+  remembered?: (id: string) => boolean | undefined,
+): string {
   const env = state.now;
   if (!env) return '<h2>Provenance</h2><p>No envelope loaded yet.</p>';
 
@@ -273,28 +309,36 @@ export function renderSources(state: StoreState, checks: CheckResult | null): st
     <td class="num">${au.data ? `${au.latency_s}s` : NO_DATA}</td>
   </tr>` : '';
 
+  const monitors = renderMonitors(
+    state.spacecraft?.data ?? [], state.now?.data.solar_wind?.speed ?? null,
+  );
+
   return `
     <h2>Provenance</h2>
     <p>Every element on screen, its evidence tier, where it came from and how old it is.</p>
     ${checks ? checkSummary(checks) : ''}
-    <table class="prov">
-      <thead><tr><th>Element</th><th>Tier</th><th>Source</th><th>Time</th><th>Lat.</th></tr></thead>
-      <tbody>${Object.entries(env.parts).map(([k, m]) => metaRow(k, m)).join('')}${auRow}</tbody>
-    </table>
-    <h3>Tiers</h3>
-    <p><span class="badge badge-e">E</span> Measured — read from an instrument, shown with its
-    timestamp and latency.<br>
-    <span class="badge badge-d">D</span> Modelled — computed from measured inputs by a named,
-    cited model.<br>
-    <span class="badge badge-m">M</span> Ambient — artwork. Parameter-driven, sometimes by real
-    values, but never itself a measurement.</p>
-    ${renderMonitors(state.spacecraft?.data ?? [], state.now?.data.solar_wind?.speed ?? null)}
-    <h3>Models cited</h3>
-    <p>Shue et al. 1998 (doi:10.1029/98JA01103) — magnetopause.<br>
-    Farris &amp; Russell 1994 — bow shock.<br>
-    IGRF-14 (IAGA, epoch 2025.0) — the geomagnetic field and its lines.<br>
-    OVATION Prime (NOAA SWPC) — aurora probability.<br>
-    astronomy-engine (VSOP87/Meeus) — every position, and the sub-solar point.</p>`;
+    ${section('prov-table', 'Every element', `
+      <table class="prov">
+        <thead><tr><th>Element</th><th>Tier</th><th>Source</th><th>Time</th><th>Lat.</th></tr></thead>
+        <tbody>${Object.entries(env.parts).map(([k, m]) => metaRow(k, m)).join('')}${auRow}</tbody>
+      </table>`, true, remembered)}
+    ${section('prov-monitors', 'The monitors', monitors, false, remembered)}
+    ${section('prov-tiers', 'What the tiers mean', `
+      <p><span class="badge badge-e">E</span> Measured — read from an instrument, shown with its
+      timestamp and latency.<br>
+      <span class="badge badge-d">D</span> Modelled — computed from measured inputs by a named,
+      cited model.<br>
+      <span class="badge badge-m">M</span> Ambient — artwork. Parameter-driven, sometimes by real
+      values, but never itself a measurement.</p>`, false, remembered)}
+    ${section('prov-models', 'Models cited', `
+      <p>Shue et al. 1998 (doi:10.1029/98JA01103) — magnetopause.<br>
+      Farris &amp; Russell 1994 — bow shock.<br>
+      IGRF-14 (IAGA, epoch 2025.0) — the geomagnetic field and its lines.<br>
+      OVATION Prime (NOAA SWPC) — aurora probability.<br>
+      NOAA Geospace (Univ. Michigan BATS-R-US/RCM) — Dst.<br>
+      WSA-Enlil (NOAA SWPC) — the heliospheric wind forecast.<br>
+      astronomy-engine (VSOP87/Meeus) — every position, the sub-solar point, and the
+      solar rotation axis the imagery is projected about.</p>`, false, remembered)}`;
 }
 
 /** Earth radii to kilometres, for the panel's plain-language distances. */
@@ -340,7 +384,7 @@ export function renderMonitors(list: SpacecraftPos[], speedKms: number | null): 
        there is, and it is not the same thing as a measurement taken here.</p>`
     : '<p>No spacecraft is currently flagged operational in the ephemeris feed.</p>';
 
-  return `<h3>The monitors</h3>
+  return `
     ${l1Inset(list)}
     <p class="fine caption">Looking sunward along the Sun–Earth line. Nothing here is
     compressed — Earth, the Moon’s orbit and the spacecraft offsets are one scale.</p>
