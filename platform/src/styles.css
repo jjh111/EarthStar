@@ -115,7 +115,7 @@ header.top {
 /* The Earth Star mark, linking back to the site this is part of. */
 .mark { display: flex; align-items: center; flex: none; opacity: 0.82; }
 .mark:hover, .mark:focus-visible { opacity: 1; }
-.mark img { height: 26px; width: auto; display: block; }
+.mark img { height: 30px; width: auto; display: block; }
 
 .ctl {
   font-family: var(--sans); font-size: 0.68rem; line-height: 1;
@@ -128,7 +128,19 @@ header.top {
 .ctl-group .ctl:last-child { border-radius: 0 4px 4px 0; }
 .ctl-group .ctl:only-child { border-radius: 4px; }
 .ctl:hover { color: var(--ink); border-color: var(--line-strong); }
+/* Two kinds of control, two states.
+   Scale and View are exclusive choices: the selected one is *the* current
+   state, so it takes the solid fill. Layers are independent toggles, and all
+   of them are on by default — filling five buttons solid puts a bar of accent
+   across the header that says nothing, since "everything is on" is the resting
+   condition. On reads as lit; off reads as dimmed. */
 .ctl[aria-pressed='true'] { color: var(--bg); background: var(--accent); border-color: var(--accent); }
+.ctl-toggles .ctl[aria-pressed='true'] {
+  color: var(--accent); background: rgba(127, 212, 193, 0.10);
+  border-color: rgba(127, 212, 193, 0.5);
+}
+.ctl-toggles .ctl[aria-pressed='false'] { color: var(--ink-faint); }
+.ctl-toggles .ctl:hover { color: var(--ink); }
 :where(button, a, summary, [tabindex]):focus-visible {
   outline: 2px solid var(--accent); outline-offset: 1px;
 }
