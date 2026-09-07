@@ -7,6 +7,7 @@
 import type { PartMeta } from '../data/source.js';
 import type { StoreState } from '../data/store.js';
 import type { FrameStats } from '../scene/viewer.js';
+import { ImageCache } from './image-cache.js';
 import type { CheckResult } from '../data/checks.js';
 import type { ForecastBundle } from '../data/forecast.js';
 import type { SolarCycle } from '../data/solar-cycle.js';
@@ -27,6 +28,8 @@ export interface HudCallbacks {
   onToggleSunPlay(): void;
   onScrubSun(index: number): void;
   onRunChecks(): void;
+  /** The solar frame now on screen, for the Sun in the scene. */
+  onSunFrame?(image: HTMLImageElement): void;
   onLoadCycle(): void;
 }
 
@@ -40,6 +43,8 @@ export class Hud {
   private statusEl: HTMLElement;
   private perfEl: HTMLElement;
   private perfKey = '';
+  /** Owns the solar frame elements so panel re-renders never cost a decode. */
+  readonly images = new ImageCache();
   private clockEl: HTMLElement;
 
   private tiles = new Map<string, HTMLElement>();
@@ -341,7 +346,9 @@ export class Hud {
       case 'forecast':
         this.bodyEl.innerHTML = renderForecast(this.forecast, this.forecastLoading, state?.cmes ?? []); break;
       case 'sun':
-        this.bodyEl.innerHTML = renderSun(this.sun, LOOPS, this.cycle, this.cycleLoading); break;
+        this.bodyEl.innerHTML = renderSun(this.sun, LOOPS, this.cycle, this.cycleLoading);
+        this.placeSunFrame();
+        break;
       case 'sources': this.bodyEl.innerHTML = renderSources(state, this.checks); break;
       case 'checks': this.bodyEl.innerHTML = renderChecks(this.checks, this.checksRunning); break;
       case 'detail':
@@ -350,12 +357,45 @@ export class Hud {
     }
   }
 
+  /**
+   * Move the cached element for the current frame into the panel's slot.
+   *
+   * Nothing here sets a `src`. The cache already holds a loaded element for
+   * this URL, so this is a DOM move: no network, no decode, no flash of an
+   * empty box while the browser catches up.
+   */
+  private placeSunFrame(): void {
+    const slot = document.getElementById('sun-slot');
+    const url = slot?.dataset['frame'];
+    if (!slot || !url) return;
+    const img = this.images.acquire(url);
+    img.alt = slot.dataset['alt'] ?? '';
+    img.className = 'sun-img';
+    if (img.parentElement !== slot) slot.replaceChildren(img);
+    // The scene shows whatever the panel shows, so scrubbing the loop scrubs
+    // the Sun as well. A frame still loading is announced on completion.
+    if (this.cb.onSunFrame) {
+      if (img.complete && img.naturalWidth > 0) this.cb.onSunFrame(img);
+      else img.addEventListener('load', () => this.cb.onSunFrame?.(img), { once: true });
+    }
+    // A short lookahead so playback and scrubbing do not stall on the next one.
+    const frames = this.sun.loop?.frames;
+    if (frames) {
+      const i = this.sun.frameIndex;
+      this.images.warm([
+        frames[(i + 1) % frames.length]!.url,
+        frames[(i + 2) % frames.length]!.url,
+      ]);
+    }
+  }
+
   /** Swap just the image while a loop plays, rather than re-rendering the panel. */
   private updateSunFrame(): void {
-    const img = document.getElementById('sun-img') as HTMLImageElement | null;
+    const slot = document.getElementById('sun-slot');
     const f = this.sun.loop?.frames[this.sun.frameIndex];
-    if (!img || !f) { this.renderMargin(); return; }
-    img.src = f.url;
+    if (!slot || !f) { this.renderMargin(); return; }
+    slot.dataset['frame'] = f.url;
+    this.placeSunFrame();
     const stamp = this.bodyEl.querySelector('.sun-stamp');
     if (stamp) {
       const age = Math.round((Date.now() - Date.parse(f.time)) / 60000);

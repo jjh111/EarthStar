@@ -143,3 +143,28 @@ export function gseToScene(
     .addScaledVector(basis.y, v.y)
     .addScaledVector(basis.z, v.z);
 }
+
+/**
+ * The Sun's rotation axis as a unit vector in the scene frame.
+ *
+ * Needed because solar imagery is published with solar north up, so projecting
+ * a frame back onto the sphere requires knowing which way that is. The solar
+ * equator's ascending node on the ecliptic is Ω and its inclination i = 7.25°
+ * (Meeus ch. 29, the same elements `subEarthLatitude` uses), which puts the
+ * pole at ecliptic longitude Ω − 90° and latitude 90° − i.
+ */
+export function solarNorth(date: Date): Vector3 {
+  const time = Astronomy.MakeTime(date);
+  const omega = 73.6667 + (1.3958333 * (time.tt - 15020.0)) / 36525;
+  const lon = ((omega - 90) * Math.PI) / 180;
+  const lat = ((90 - 7.25) * Math.PI) / 180;
+  // Ecliptic-of-date Cartesian, then into the equator of date and the scene.
+  const ecl = new Astronomy.Vector(
+    Math.cos(lat) * Math.cos(lon),
+    Math.cos(lat) * Math.sin(lon),
+    Math.sin(lat),
+    time,
+  );
+  const eqd = Astronomy.RotateVector(Astronomy.Rotation_ECT_EQD(time), ecl);
+  return toScene(eqd).normalize();
+}

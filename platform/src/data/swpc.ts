@@ -414,6 +414,16 @@ export interface ActiveRegion {
  * region per day. Only the most recent observation of each region is kept, and
  * only for the latest observed date — a region seen three days ago has rotated
  * since, and drawing it at its old longitude would be a fabrication.
+ *
+ * **`observed_date` is a date with no time of day.** That matters more than it
+ * looks: the Sun turns 14.2° a day, so a position stamped only "2026-09-07" is
+ * of unknown longitude to within that much, and anything that rotates it
+ * forward is compounding an assumption. Stamping midnight — which this used to
+ * do — is the worst available choice, because it is an endpoint: it makes the
+ * error run from 0 to 14°, and rotating forward from it can double the error
+ * rather than reduce it. Midday is the midpoint of the possible epochs and
+ * bounds the error at ±7°, so that is what is stamped, and consumers should
+ * treat the longitude as carrying that much slack.
  */
 export function parseRegions(json: unknown): ActiveRegion[] {
   const rows = asArray(json);
@@ -437,7 +447,8 @@ export function parseRegions(json: unknown): ActiveRegion[] {
     if (seen.has(region)) continue;
     seen.add(region);
     out.push({
-      region, observed: `${latest}T00:00:00.000Z`,
+      // Midday, not midnight: see the note above on the missing time of day.
+      region, observed: `${latest}T12:00:00.000Z`,
       lat, lon,
       area: num(r['area']), spots: num(r['number_spots']),
       spotClass: (r['spot_class'] as string) ?? null,

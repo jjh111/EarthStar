@@ -461,6 +461,47 @@ it found rather than asserting the expected one, and says so when the sign is wr
 
 ---
 
+## 5f. Solar imagery, projected onto the Sun
+
+The rendered Sun carries the live SUVI frame. Three things had to be measured rather than
+assumed, and the check built to validate them found two real defects.
+
+**The disk is not centred in the frame.** A 1280×1280 SUVI 304 Å frame on 2026-09-07 had
+its disk centred at (691, 628) — 51 px off the image centre, 13% of a solar radius — with a
+limb radius of 394 px. The 195 Å frame from the same minute measured 402 px, because its
+corona reaches further and the intensity edge sits outside the photospheric limb. So every
+frame is measured: the limb is the steepest fall in the radial intensity profile, found in
+two passes, the second centred on the disk alone so a prominence cannot drag it.
+
+**`solar_regions.json` longitudes are east-positive.** A record with `longitude: 50` carries
+`location: "S11E50"`; one with `-29` carries `"N09W29"`. That is the opposite of the
+direction rotation carries features, and reading it backwards mirrors every region across
+the disk while leaving a picture that looks entirely correct.
+
+**`observed_date` has no time of day.** The Sun turns 14.2° a day, so a position stamped
+only `2026-09-07` is of unknown longitude to within that much. The parser used to stamp
+midnight, which is the worst available choice: it is an *endpoint*, so the error runs 0–14°
+and rotating forward from it can double the error rather than reduce it. It now stamps
+midday — the midpoint of the possible epochs — which bounds the error at ±7°.
+
+**The check.** NOAA publishes the regions as numbers, from a different pipeline than the
+imagery, and active regions are bright in every SUVI passband, so the projection can be
+tested by asking whether the reported positions land on bright pixels. The absolute contrast
+is not the test: on 2026-09-07 the Sun carried nine regions of one to four spots against a
+bright chromosphere, and every hypothesis — right or wrong — scored between 1.0 and 1.35
+times the disk mean. So the measurement is comparative, against the same positions mirrored
+east–west, and when the two score within 6% of each other the row reports **no signal**
+rather than a verdict. A check that cries wolf whenever its evidence is weak is a check that
+will be ignored.
+
+One thing the check is structurally blind to, worth stating: a solar north rotated about the
+line of sight. Heliographic longitude is measured *from* the central meridian, which north
+defines, so rotating north rotates the reported positions and the image frame together. It
+is a gauge freedom, not an error. A north tilted *out* of the plane changes B₀ and is
+caught.
+
+---
+
 ## 6. What the Viewer does with all this
 
 - Selection is **by timestamp and `active` flag**, never by array position.

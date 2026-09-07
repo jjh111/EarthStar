@@ -20,13 +20,14 @@ import { CameraRig, type ViewName } from './camera-rig.js';
 import {
   distanceToScene, moonDistanceToScene, radiusToScene, type ScaleMode,
 } from './scales.js';
-import { gseBasis, moonGeo, planetState, sunGeo, toScene } from '../models/ephemeris.js';
+import { gseBasis, moonGeo, planetState, solarNorth, sunGeo, toScene } from '../models/ephemeris.js';
 import { FieldLines, Magnetosphere } from './magnetosphere.js';
 import { SolarWind } from './solar-wind.js';
 import { ActiveRegions } from './active-regions.js';
 import { CmeCones } from './cmes.js';
 import type { SpacecraftPos } from '../data/ephemerides.js';
 import { SpacecraftMarkers } from './spacecraft.js';
+import { calibrateDisk } from './disk-calibration.js';
 import { activeCmes, type Cme } from '../data/cme.js';
 import type { ActiveRegion } from '../data/swpc.js';
 import { magnetopause } from '../models/shue1998.js';
@@ -193,6 +194,7 @@ export class Viewer {
   private regionsObservedAt: string | null = null;
   private readonly spacecraft = new SpacecraftMarkers();
   private spacecraftPos: SpacecraftPos[] = [];
+  private sunImageUrl: string | null = null;
   private shieldVisible = true;
   private windVisible = true;
   private sunDirEarthFixed = new Vector3(1, 0, 0);
@@ -287,6 +289,28 @@ export class Viewer {
   get regionCount(): number { return this.activeRegions.count; }
 
   setCmes(cmes: Cme[]): void { this.cmes = cmes; }
+
+  /**
+   * Put a solar frame on the Sun. The calibration is measured from the image
+   * itself, once per frame; a frame that cannot be measured is not shown,
+   * because a mis-registered projection puts active regions in the wrong place
+   * and looks entirely convincing doing it.
+   */
+  setSunImage(image: HTMLImageElement | null): void {
+    if (!image || !image.complete || image.naturalWidth === 0) {
+      this.sun.setImage(null, null);
+      this.sunImageUrl = null;
+      return;
+    }
+    if (image.src === this.sunImageUrl) return;
+    this.sunImageUrl = image.src;
+    this.sun.setImage(image, calibrateDisk(image));
+  }
+
+  get sunHasImage(): boolean { return this.sun.hasImage; }
+
+  /** The live solar projection, for the check that tests it against NOAA's numbers. */
+  sunProjection(): ReturnType<Sun['projection']> { return this.sun.projection(); }
 
   setSpacecraft(list: SpacecraftPos[]): void { this.spacecraftPos = list; }
 
@@ -386,6 +410,9 @@ export class Viewer {
     // Sun at the origin; its rendered radius follows the scale mode.
     this.sun.setRadius(radiusToScene('Sun', this.mode));
     this.sun.update(elapsed, this.now?.xray?.flux_long ?? null);
+    // The projection is defined by where the image was taken from: the
+    // direction to Earth, and solar north for the image's "up".
+    this.sun.setViewGeometry(sunDir.clone().negate(), solarNorth(date));
     this.activeRegions.update(date, this.regionsObservedAt, radiusToScene('Sun', this.mode));
     this.sunLight.position.set(0, 0, 0);
 

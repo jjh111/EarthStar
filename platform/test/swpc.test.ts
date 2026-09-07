@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   parseAlerts, parseKpNow, parseScalesNow, parseSolarWindNow, parseSolarWindSeries,
-  parseXrayFromSeries, parseXrayLatestClass, swpcTime, num, xrayClass,
+  parseXrayFromSeries, parseXrayLatestClass, parseRegions, swpcTime, num, xrayClass,
 } from '../src/data/swpc.js';
 
 /* Real shape: NEWEST-FIRST, three spacecraft interleaved, only one `active`. */
@@ -213,5 +213,38 @@ describe('X-ray from the flux series', () => {
     expect(parseXrayLatestClass(raw)!.class).toBe('B3.7');
     // Guard the regression directly: that field read as flux would be X-class.
     expect(xrayClass(0.0019062842475250363)![0]).toBe('X');
+  });
+});
+
+describe('active region epoch', () => {
+  const feed = [
+    { observed_date: '2026-09-07', region: 4524, latitude: 12, longitude: 12,
+      location: 'N12E12', area: 100, number_spots: 4 },
+    { observed_date: '2026-09-06', region: 4524, latitude: 12, longitude: 26,
+      location: 'N12E26', area: 90, number_spots: 3 },
+  ];
+
+  it('stamps midday, because the feed gives a date and no time', () => {
+    // The Sun turns 14.2° a day. Midnight is an endpoint of the possible
+    // epochs, so it makes the longitude error run 0–14° and rotating forward
+    // from it can double the error. Midday halves the worst case.
+    expect(parseRegions(feed)[0]!.observed).toBe('2026-09-07T12:00:00.000Z');
+  });
+
+  it('keeps only the latest observed date', () => {
+    const out = parseRegions(feed);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.lon).toBe(12);
+  });
+
+  it('reads longitude east-positive, matching the location string', () => {
+    // `longitude: 12` comes with `location: "N12E12"`; a record at W29 carries
+    // `longitude: -29`. The sign is the opposite of the direction rotation
+    // carries features, and getting it backwards mirrors the whole Sun.
+    const west = parseRegions([
+      { observed_date: '2026-09-07', region: 4521, latitude: 9, longitude: -29,
+        location: 'N09W29' },
+    ]);
+    expect(west[0]!.lon).toBe(-29);
   });
 });

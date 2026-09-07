@@ -271,6 +271,7 @@ header.top {
   background: #000; border: 1px solid var(--line); border-radius: 4px;
   overflow: hidden; margin-bottom: 0.4rem;
 }
+.sun-slot { position: absolute; inset: 0; }
 .sun-frame img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .sun-stamp {
   /* Top, not bottom: SUVI and LASCO burn their own caption into the bottom of
@@ -415,3 +416,6 @@ text.l1-idle { fill: var(--ink-faint); }
   font-size: 0.6rem; line-height: 1.45; color: var(--ink-faint);
   border-top: 1px solid var(--line);
 }
+
+/* A check that ran but could not settle the question is neither pass nor fail. */
+.verdict-none { color: var(--ink-faint); font-family: var(--mono); font-size: 0.6rem; }

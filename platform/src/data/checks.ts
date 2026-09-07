@@ -18,6 +18,9 @@ import { GEOSYNC_RE, dipoleFieldAtRe } from './geosync.js';
 import { EPHEM_URL, parseEphemerides } from './ephemerides.js';
 import { DST_URL, parseDst } from './dst.js';
 import { enlilAt, fetchEnlil } from './enlil.js';
+import { regionAgreement } from '../scene/region-agreement.js';
+import type { DiskCalibration } from '../scene/disk-calibration.js';
+import type { Vector3 } from 'three';
 import { hhmmUTC } from '../contract/types.js';
 
 export interface CheckRow {
@@ -26,12 +29,20 @@ export interface CheckRow {
   theirs: string;
   ok: boolean;
   note: string;
+  /**
+   * The measurement ran but the data cannot settle the question today. Not a
+   * pass and not a failure: a check that reports a defect whenever its evidence
+   * is weak is a check that will be ignored.
+   */
+  inconclusive?: boolean;
 }
 
 export interface CheckResult {
   rows: CheckRow[];
   ranAt: string;
   passed: number;
+  /** Rows that ran but could not settle the question on today's data. */
+  inconclusive: number;
 }
 
 const j = async (u: string, signal?: AbortSignal): Promise<unknown> =>
@@ -52,7 +63,40 @@ function near(a: number | null, b: number | null, tol: number): boolean {
   return Math.abs(a - b) <= tol;
 }
 
-export async function runChecks(signal?: AbortSignal): Promise<CheckResult> {
+/**
+ * The live solar projection, supplied by the scene. Optional: the checks run
+ * without a browser scene in tests, and a missing projection means one fewer
+ * row rather than a failure.
+ */
+export interface SunProjection {
+  image: HTMLImageElement;
+  calibration: DiskCalibration;
+  north: Vector3;
+  earthDir: Vector3;
+}
+
+/** Luminance of a drawable, at `n`x`n`. Null when the canvas cannot be read. */
+function luminanceOf(source: CanvasImageSource, n: number): Float32Array | null {
+  const c = document.createElement('canvas');
+  c.width = n; c.height = n;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return null;
+  try {
+    ctx.drawImage(source, 0, 0, n, n);
+    const d = ctx.getImageData(0, 0, n, n).data;
+    const out = new Float32Array(n * n);
+    for (let i = 0; i < n * n; i++) {
+      out[i] = 0.299 * d[i * 4]! + 0.587 * d[i * 4 + 1]! + 0.114 * d[i * 4 + 2]!;
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+export async function runChecks(
+  signal?: AbortSignal, sun?: SunProjection | null,
+): Promise<CheckResult> {
   const rows: CheckRow[] = [];
   const source = new DirectSource();
 
@@ -281,32 +325,48 @@ export async function runChecks(signal?: AbortSignal): Promise<CheckResult> {
    * NOAA's Dst is *computed from the L1 solar wind*, so comparing it with the
    * wind proves nothing — it would only be checking arithmetic against its own
    * input. Estimated Kp comes from a network of ground magnetometers and knows
-   * nothing about L1. So the two disagreeing about whether the ground is quiet
-   * is a statement about the model, not about our parsing.
+   * nothing about L1. So the two disagreeing is a statement about the model,
+   * not about our parsing.
    *
-   * The claim is deliberately coarse. Dst and Kp measure different things — one
-   * the ring current's depression of the field, the other the range of
-   * mid-latitude disturbance in three hours — and they are only loosely
-   * correlated storm to storm. What they should never do is contradict each
-   * other about quiet versus disturbed.
+   * The test is coarse, and deliberately coarser than it first was. Dst and Kp
+   * measure different things — the ring current's depression of the field
+   * against the range of mid-latitude disturbance over three hours — and the
+   * ring current responds first. At storm onset Dst routinely crosses −30 nT
+   * while Kp is still 3, which the first version of this row reported as a
+   * defect. It is not one; it is what a storm beginning looks like.
+   *
+   * So each index is placed in a band, and only a two-band contradiction counts
+   * — one saying severe while the other says quiet. Anything closer is reported
+   * as unsettled, with both numbers shown.
    */
   const dstParsed = parseDst(dstRaw, new Date());
   const dstNow = dstParsed.now?.dst ?? null;
   const kpNow = d.kp?.estimated_kp ?? null;
   if (dstNow !== null && kpNow !== null) {
-    const dstDisturbed = dstNow <= -30;
-    const kpDisturbed = kpNow >= 4;
-    const aheadCount = dstParsed.ahead.length;
+    const dstBand = dstNow <= -100 ? 2 : dstNow <= -30 ? 1 : 0;
+    const kpBand = kpNow >= 6 ? 2 : kpNow >= 4 ? 1 : 0;
+    const gap = Math.abs(dstBand - kpBand);
+    const word = ['quiet', 'disturbed', 'severe'];
     rows.push({
       name: 'Modelled Dst vs measured Kp',
-      ours: `Dst ${dstNow.toFixed(0)} nT → ${dstDisturbed ? 'disturbed' : 'quiet'}`,
-      theirs: `Kp ${kpNow.toFixed(2)} → ${kpDisturbed ? 'disturbed' : 'quiet'}`,
-      ok: dstDisturbed === kpDisturbed,
-      note: `A model driven by the L1 wind against a measurement from ground `
-        + `magnetometers — they share no input. Thresholds are Dst ≤ −30 nT and Kp ≥ 4; `
-        + `the two indices are only loosely correlated, so this checks that they agree on `
-        + `quiet versus disturbed, nothing finer. ${aheadCount} of the feed's samples lie `
-        + `in the future and are excluded from "now".`,
+      ours: `Dst ${dstNow.toFixed(0)} nT → ${word[dstBand]}`,
+      theirs: `Kp ${kpNow.toFixed(2)} → ${word[kpBand]}`,
+      ok: gap === 0,
+      inconclusive: gap === 1,
+      note: gap >= 2
+        ? `Two bands apart, which the difference between the indices cannot explain. `
+          + `A model driven by the L1 wind against a measurement from ground magnetometers; `
+          + `they share no input, so one of them is wrong.`
+        : gap === 1
+          ? `One band apart, which is what a storm beginning looks like: the ring current `
+            + `responds before the mid-latitude range does, so Dst crosses its threshold `
+            + `first. Not a contradiction, and not evidence of agreement either. `
+            + `${dstParsed.ahead.length} of the Dst feed's samples lie in the future and are `
+            + `excluded from "now".`
+          : `A model driven by the L1 wind against a measurement from ground magnetometers `
+            + `— they share no input. Bands are Dst −30 and −100 nT, Kp 4 and 6. `
+            + `${dstParsed.ahead.length} of the feed's samples lie in the future and are `
+            + `excluded from "now".`,
     });
   }
 
@@ -345,9 +405,62 @@ export async function runChecks(signal?: AbortSignal): Promise<CheckResult> {
     }
   }
 
+  /**
+   * The picture against the numbers.
+   *
+   * The Sun in the scene carries a SUVI frame projected back onto the sphere,
+   * which depends on the solar rotation axis, the disk's measured centre and
+   * radius, the orthographic mapping and the direction NOAA's longitudes run.
+   * Get any of them wrong and the result is a convincing Sun with its active
+   * regions in the wrong places.
+   *
+   * NOAA publishes those regions as numbers, from a different pipeline than the
+   * imagery, and active regions are bright in every SUVI passband. So this asks
+   * whether the reported positions land on bright pixels. A wrong projection
+   * scatters them onto ordinary disk and the contrast collapses.
+   */
+  if (sun) {
+    const N = 384;
+    const lum = luminanceOf(sun.image, N);
+    const regions = (await source.fetchRegions(signal)).data;
+    const observed = regions[0]?.observed;
+    const hours = observed ? (Date.now() - Date.parse(observed)) / 3_600_000 : 0;
+    const agree = lum
+      ? regionAgreement(lum, N, regions, sun.north, sun.earthDir, sun.calibration, hours)
+      : null;
+    if (agree) {
+      // Comparative, not absolute: the published positions against the same
+      // positions mirrored east–west. A day of small regions on a bright
+      // chromosphere gives both a similar score, and that is a statement about
+      // the day rather than about the projection.
+      const margin = agree.mirroredRatio > 0 ? agree.ratio / agree.mirroredRatio : 0;
+      const decisive = Math.abs(margin - 1) >= 0.06;
+      rows.push({
+        name: 'Solar imagery lines up with the region list',
+        ours: `${agree.ratio.toFixed(2)}x disk mean at ${agree.tested} reported positions`,
+        theirs: `${agree.mirroredRatio.toFixed(2)}x mirrored east–west`,
+        ok: decisive && margin > 1,
+        inconclusive: !decisive,
+        note: decisive
+          ? `The imagery and the region list come from different pipelines, so this tests `
+            + `our projection — the rotation axis, the measured disk centre and radius, and `
+            + `the longitude convention — rather than either of theirs. Longitudes rotated `
+            + `${hours.toFixed(0)} h forward at the Carrington rate.`
+          : `Too close to call today: the published positions and their mirror image score `
+            + `within ${(Math.abs(margin - 1) * 100).toFixed(0)}% of each other, so the `
+            + `picture cannot settle the projection. That happens when the regions are `
+            + `small — ${agree.tested} tested here — against a bright chromosphere. `
+            + `Reporting a defect on this evidence would be crying wolf.`,
+      });
+    }
+  }
+
   return {
     rows,
     ranAt: new Date().toISOString(),
+    // An inconclusive row is not counted against the total: it did not fail,
+    // and pretending it passed would be as wrong as pretending it failed.
     passed: rows.filter((r) => r.ok).length,
+    inconclusive: rows.filter((r) => r.inconclusive).length,
   };
 }

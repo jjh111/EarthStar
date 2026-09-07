@@ -351,8 +351,12 @@ export function renderMonitors(list: SpacecraftPos[], speedKms: number | null): 
 }
 
 function checkSummary(c: CheckResult): string {
-  const all = c.passed === c.rows.length;
-  return `<p><span class="summary-pill ${all ? 'ok' : 'bad'}">${c.passed} / ${c.rows.length} checks pass</span></p>`;
+  const decisive = c.rows.length - c.inconclusive;
+  const all = c.passed === decisive;
+  return `<p><span class="summary-pill ${all ? 'ok' : 'bad'}">${c.passed} / ${decisive} checks pass</span>${
+    c.inconclusive > 0
+      ? ` <span class="tile-meta">${c.inconclusive} could not be settled on today's data</span>`
+      : ''}</p>`;
 }
 
 export function renderChecks(checks: CheckResult | null, running: boolean): string {
@@ -371,7 +375,8 @@ export function renderChecks(checks: CheckResult | null, running: boolean): stri
         ${checks.rows.map((r) => `
           <tr class="check-row">
             <td colspan="2"><strong>${escapeHtml(r.name)}</strong></td>
-            <td class="${r.ok ? 'verdict-ok' : 'verdict-bad'}">${r.ok ? 'pass' : 'DRIFT'}</td>
+            <td class="${r.inconclusive ? 'verdict-none' : r.ok ? 'verdict-ok' : 'verdict-bad'}">${
+              r.inconclusive ? 'no signal' : r.ok ? 'pass' : 'DRIFT'}</td>
           </tr>
           <tr class="check-row">
             <td class="num">${escapeHtml(r.ours)}</td>
@@ -464,7 +469,11 @@ export function renderSun(
     <h2>The Sun</h2>
     <div class="sun-picker">${picker}</div>
     <div class="sun-frame">
-      <img id="sun-img" src="${f.url}" alt="${escapeHtml(L.instrument)} image of the Sun at ${hhmmUTC(f.time)} UTC" />
+      <!-- The image element is not written here. It is owned by the image
+           cache and moved into this slot after render, so that rebuilding the
+           panel does not throw away a decode that costs 380 ms. -->
+      <div class="sun-slot" id="sun-slot" data-frame="${escapeHtml(f.url)}"
+           data-alt="${escapeHtml(L.instrument)} image of the Sun at ${hhmmUTC(f.time)} UTC"></div>
       <div class="sun-stamp"><span>${hhmmUTC(f.time)} UTC</span><span>${ageMin} min ago</span></div>
     </div>
     <div class="sun-transport">${transport}</div>

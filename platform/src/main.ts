@@ -35,13 +35,37 @@ async function selectLoop(id: string): Promise<void> {
   const spec = LOOPS.find((l) => l.id === id) ?? LOOPS[0]!;
   hud.sunState.loopId = spec.id;
   if (loopCache.has(spec.id)) {
-    hud.setSunLoop(loopCache.get(spec.id) ?? null, false);
+    const cached = loopCache.get(spec.id) ?? null;
+    hud.setSunLoop(cached, false);
+    sunTexture(cached);
     return;
   }
   hud.setSunLoop(null, true);
   const loop = await fetchLoop(spec);
   loopCache.set(spec.id, loop);
-  if (hud.sunState.loopId === spec.id) hud.setSunLoop(loop, false);
+  if (hud.sunState.loopId === spec.id) {
+    hud.setSunLoop(loop, false);
+    sunTexture(loop);
+  }
+}
+
+/**
+ * Put the newest usable frame on the Sun in the scene.
+ *
+ * Driven from the loop rather than from the panel: the sphere should carry the
+ * live Sun whether or not anyone has opened the Sun tab, and it is the first
+ * thing visible on load. Once the panel is open its own frame takes over, so
+ * scrubbing the loop scrubs the Sun too.
+ *
+ * Coronagraph loops are skipped. LASCO occults the disk — projecting it back
+ * onto the sphere would paint the Sun with a picture of the Sun being hidden.
+ */
+function sunTexture(loop: ImageLoop | null): void {
+  const f = loop?.frames[loop.newestGood];
+  if (!f || !loop!.id.startsWith('suvi')) { viewer.setSunImage(null); return; }
+  const img = hud.images.acquire(f.url);
+  if (img.complete && img.naturalWidth > 0) viewer.setSunImage(img);
+  else img.addEventListener('load', () => viewer.setSunImage(img), { once: true });
 }
 
 function stepSun(): void {
@@ -75,14 +99,14 @@ let checkResult: CheckResult | null = null;
 async function doChecks(): Promise<void> {
   hud.setChecks(null, true);
   try {
-    checkResult = await runChecks();
+    checkResult = await runChecks(undefined, viewer.sunProjection());
   } catch (e) {
     checkResult = {
       rows: [{
         name: 'Checks could not run', ours: 'error', theirs: '—', ok: false,
         note: e instanceof Error ? e.message : String(e),
       }],
-      ranAt: new Date().toISOString(), passed: 0,
+      ranAt: new Date().toISOString(), passed: 0, inconclusive: 0,
     };
   }
   hud.setChecks(checkResult, false);
@@ -111,6 +135,7 @@ const hud = new Hud({
   onToggleSunPlay: () => void toggleSunPlay(),
   onScrubSun: (i) => { hud.setSunPlaying(false); hud.setSunFrame(i); },
   onRunChecks: () => void doChecks(),
+  onSunFrame: (img) => viewer.setSunImage(img),
 });
 
 /* ---------------- controls ---------------- */
