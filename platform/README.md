@@ -16,10 +16,13 @@ npm test         # model, parser and contract tests
 ```
 src/contract/    Envelope<T> and the payload types — plans/DATA_CONTRACT.md in TypeScript
 src/data/        source adapters (DirectSource = stage A), SWPC parsers, polling store
-src/models/      ephemeris (astronomy-engine), Shue 1998 magnetopause, X-ray class
+src/models/      ephemeris (astronomy-engine), IGRF-14 synthesis + field-line tracing,
+                 Shue 1998 magnetopause, Farris & Russell bow shock, X-ray class
 src/scene/       Three.js scene: Earth + terminator, Sun, planets, camera rig, scale modes
 src/hud/         instrument tiles, alerts ticker, Situation Report, provenance drawer
 src/a11y/        reduced motion, keyboard rig
+vendor/          IGRF-14 coefficients as published by IAGA (source of truth)
+scripts/         gen-igrf.mjs — vendor/*.txt → src/models/igrf14-coeffs.ts
 docs/sources.md  live endpoint verification — read this before touching src/data/
 test/            model tests against published references; contract conformance
 verify.html      our numbers vs NOAA's own, side by side, live
@@ -37,7 +40,8 @@ From `plans/VIEWER_PLATFORM_PLAN.md` §2. They are not style preferences:
    the last good envelope and lets it visibly age — it never blanks and never silently
    re-reads as fresh.
 3. **Units on everything**, and `HH:MM UTC` beside every value.
-4. **Models cited in-app** — Shue et al. 1998 (doi:10.1029/98JA01103), astronomy-engine.
+4. **Models cited in-app** — Shue et al. 1998 (doi:10.1029/98JA01103), Farris & Russell
+   1994, IGRF-14 (IAGA, epoch 2025.0), OVATION Prime (NOAA), astronomy-engine.
 5. **Tier badges are honest.** `[E]` measured, `[D]` modeled, `[M]` ambient. Ambient
    elements may be *driven* by measurements (the corona brightens with X-ray flux) but are
    never presented as measurements.
@@ -62,11 +66,24 @@ Reduced motion (OS setting or the in-app toggle) freezes the corona and cuts cam
 transitions rather than easing them. Keyboard: `1` deck, `2` orbit, `s` scale, `m` motion,
 `r` refresh, `?` help; everything is also reachable by Tab.
 
-## Not in phase 0
+## Regenerating the IGRF coefficients
 
-IGRF-14 field lines, the Shue magnetopause *surface* (the number is computed and shown;
-the geometry is not drawn yet), OVATION aurora, Parker spiral, CME cones, Helioviewer
-imagery, the 7-day scrubber, and post-processing. See the plan's phase table.
+`vendor/igrf14coeffs.txt` is the published IAGA file and the source of truth.
+`src/models/igrf14-coeffs.ts` is generated from it and ships only the 2025.0 main field and
+the 2025–30 secular variation — not the epochs back to 1900.
+
+```bash
+node scripts/gen-igrf.mjs
+```
+
+A test re-parses the vendored file and asserts the generated module still matches, so the
+two cannot drift.
+
+## Not yet built
+
+Parker spiral, CME cones, Helioviewer imagery (which must go via stage B — it sends no
+CORS headers), spacecraft markers, the 7-day scrubber, ground magnetometers, and
+post-processing. See the plan's phase table.
 
 `postprocessing` is deliberately not a dependency yet — it lands with bloom in phase 3
 rather than sitting unused in the phase-0 payload.

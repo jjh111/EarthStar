@@ -1,6 +1,6 @@
 # Data sources — live verification
 
-**Verified:** 2026-09-06, 17:16–18:10 UTC · **Method:** `fetch()` executed from a real
+**Verified:** 2026-09-06, 17:16–18:10 UTC (phase 0); 2026-09-07, 00:20–03:25 UTC (phase 1) · **Method:** `fetch()` executed from a real
 browser at origin `https://earthstar.space` (a genuine cross-origin request, so a missing
 `Access-Control-Allow-Origin` fails the fetch), plus `curl -H 'Origin: https://earthstar.space'`
 to capture the literal response headers. Transfer sizes are `Accept-Encoding: gzip`.
@@ -52,15 +52,35 @@ Latency is `fetch time − newest data timestamp`, observed. Cadence is from the
 | 5 | Alerts / watches / warnings | `/products/alerts.json` | event | event | 44 KB | 5 KB | newest→oldest | `[E]` |
 | 6 | GOES X-ray flux | `/json/goes/primary/xrays-6-hour.json` | 1 min | ~3 min | 159 KB | **26 KB** | oldest→newest | `[E]` |
 
-**Total phase-0 payload per refresh: ~273 KB gzipped.** Comfortably inside the 3 MB
+**Total phase-0 payload per refresh: ~273 KB gzipped**, plus **141 KB** for the aurora
+grid every five minutes. Comfortably inside the 3 MB
 initial budget; the two `rtsw` files dominate and are the obvious first target if the
 budget ever tightens (a 2-hour variant would cut them by ~90%).
 
-### Verified but not yet consumed (phases 1–2)
+### Phase-1 additions
+
+| # | Feed | Endpoint / origin | Cadence | gzip | Tier |
+|---|------|-------------------|---------|------|------|
+| 7 | OVATION aurora grid | `/json/ovation_aurora_latest.json` | ~5 min | **141 KB** | `[D·NOAA]` |
+| 8 | IGRF-14 coefficients | `vendor/igrf14coeffs.txt` (IAGA) — **vendored, no runtime fetch** | static (annual SV) | 2.9 KB as generated TS | `[D]` |
+
+The aurora grid is polled on its **own 5-minute cadence**, not on the 60-second `/now`
+poll — at 141 KB it has no business riding a per-minute request. Its staleness is measured
+against `Observation Time`, never `Forecast Time`: the forecast is ~75 minutes in the
+future and using it would make an hours-old grid look fresh.
+
+Exact shape, verified live: `{Observation Time, Forecast Time, Data Format, coordinates, type}`,
+**65 160 cells = 360 lon × 181 lat**, longitude 0–359 east, latitude −90–90, probability
+0–100, with **latitude varying fastest** (`index = lon × 181 + (lat + 90)`). This matches
+the contract's `/v1/aurora` grid description exactly — the one place upstream and the
+contract already agreed. The parser nonetheless places each cell by its own stated
+lon/lat rather than trusting the ordering, so an upstream reordering cannot silently
+rotate the oval.
+
+### Verified but not yet consumed (phase 2)
 
 | Feed | Endpoint | gzip | Notes |
 |------|----------|------|-------|
-| OVATION aurora grid | `/json/ovation_aurora_latest.json` | 141 KB | Confirmed `{Observation Time, Forecast Time, Data Format, coordinates[[lon,lat,p]], type}`; 65 341 cells, lon 0–359, lat −90–90. |
 | Solar regions | `/json/solar_regions.json` | — | 29 fields/record, newest-first. Contract's field names do not match (§3.6). |
 | F10.7 flux | `/json/f107_cm_flux.json` | — | Newest-first; value is in `flux`. |
 | Sunspot report | `/json/sunspot_report.json` | — | 183 KB raw, per-observatory records — heavier than the contract implies. |
@@ -223,7 +243,55 @@ explained, and the test asserts the explanation rather than widening a tolerance
 
 ---
 
-## 5. What the Viewer does with all this
+## 5. Model references (phase 1)
+
+### IGRF-14, checked against BGS
+
+NCEI's own calculator now requires an API key, so the reference implementation used is the
+**British Geological Survey** geomagnetic model web service, which serves the same IGRF-14
+and needs no key:
+
+`https://geomag.bgs.ac.uk/web_service/GMModels/igrf/14/?latitude=&longitude=&altitude=&date=&format=json`
+
+Six points, 2026-09-06, all components (nT):
+
+| Point | lat | lon | alt km | X | Y | Z | F |
+|-------|-----|-----|--------|---|---|---|---|
+| Boulder (BOU) | 40.14 | −105.24 | 0 | 20535 | 2762 | 46805 | 51186 |
+| South Atlantic Anomaly | −25 | −45 | 0 | 15333 | −6247 | −15735 | 22841 |
+| Equator at Greenwich | 0 | 0 | 0 | 27416 | −1826 | −15982 | 31787 |
+| Tromsø | 70 | 25 | 0 | 10171 | 2677 | 53321 | 54348 |
+| Southern high latitude | −65 | 140 | 0 | −573 | 1406 | −66510 | 66528 |
+| Boulder at altitude | 40.14 | −105.24 | 400 | 16978 | 2051 | 38536 | 42160 |
+
+**Worst residual across all 24 component comparisons: 0.509 nT.** BGS publishes integers,
+so ±0.5 nT is its own rounding — the synthesis agrees to the limit of what this reference
+can resolve. Phase-1 acceptance was 1 nT. Declination and inclination at Boulder match to
+better than 0.01°.
+
+Two conversions matter at this tolerance and are implemented rather than skipped:
+geodetic↔geocentric (the WGS-84 normal is tilted up to 0.19° from the radius vector, worth
+~100 nT), and the rotation of the field components back into the geodetic frame.
+
+### The two magnetic poles are not the same place
+
+Worth stating because conflating them is an easy and invisible error — the verify page
+caught exactly this during development:
+
+| | Location, 2026-09-06 | Definition |
+|---|---|---|
+| **Dip pole** | 85.4°N, 133.5°E | Where the field stands vertical (found by search) |
+| **Geomagnetic pole** | 80.7°N, 72.8°W | The IGRF dipole axis, from g₁⁰, g₁¹, h₁¹ |
+
+They are ~13° apart. **The auroral oval is organised by the dipole geometry**, so the
+geomagnetic pole is the one the OVATION overlay must be checked against. The live verify
+row computes the probability-weighted centroid of the northern oval and compares it with
+our own IGRF-14 dipole axis: two independently computed things, agreeing to within a
+degree or so. A transposed, mirrored or rotated grid would not.
+
+---
+
+## 6. What the Viewer does with all this
 
 - Selection is **by timestamp and `active` flag**, never by array position.
 - A failed feed becomes `null` with an error on its provenance record, and renders as

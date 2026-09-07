@@ -5,9 +5,12 @@
  */
 
 import type { NowEnvelope, Source } from './source.js';
+import type { AuroraNow, Envelope } from '../contract/types.js';
 
 export interface StoreState {
   now: NowEnvelope | null;
+  /** Its own cadence: ~5-minute product, 141 KB gzipped. */
+  aurora: Envelope<AuroraNow | null> | null;
   /** Last refresh attempt, whether or not it succeeded. */
   lastAttempt: string | null;
   lastError: string | null;
@@ -17,12 +20,20 @@ export interface StoreState {
 type Listener = (s: StoreState) => void;
 
 export class NowStore {
-  private state: StoreState = { now: null, lastAttempt: null, lastError: null, loading: true };
+  private state: StoreState = {
+    now: null, aurora: null, lastAttempt: null, lastError: null, loading: true,
+  };
   private listeners = new Set<Listener>();
   private timer: number | null = null;
   private inflight: AbortController | null = null;
 
-  constructor(private source: Source, private intervalMs = 60_000) {}
+  private auroraTimer: number | null = null;
+
+  constructor(
+    private source: Source,
+    private intervalMs = 60_000,
+    private auroraIntervalMs = 5 * 60_000,
+  ) {}
 
   get(): StoreState { return this.state; }
 
@@ -58,21 +69,33 @@ export class NowStore {
     }
   }
 
+  /** Aurora failures are isolated from /now — one must not blank the other. */
+  async refreshAurora(): Promise<void> {
+    try {
+      this.emit({ aurora: await this.source.fetchAurora() });
+    } catch {
+      // Keep the previous grid; it ages and the HUD says so.
+    }
+  }
+
   start(): void {
     if (this.timer !== null) return;
     void this.refresh();
+    void this.refreshAurora();
     this.timer = window.setInterval(() => void this.refresh(), this.intervalMs);
+    this.auroraTimer = window.setInterval(() => void this.refreshAurora(), this.auroraIntervalMs);
     // Catch up immediately when the tab comes back rather than showing stale data.
     document.addEventListener('visibilitychange', this.onVisible);
   }
 
   stop(): void {
     if (this.timer !== null) { clearInterval(this.timer); this.timer = null; }
+    if (this.auroraTimer !== null) { clearInterval(this.auroraTimer); this.auroraTimer = null; }
     document.removeEventListener('visibilitychange', this.onVisible);
     this.inflight?.abort();
   }
 
   private onVisible = (): void => {
-    if (document.visibilityState === 'visible') void this.refresh();
+    if (document.visibilityState === 'visible') { void this.refresh(); void this.refreshAurora(); }
   };
 }

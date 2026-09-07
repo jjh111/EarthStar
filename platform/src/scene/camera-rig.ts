@@ -7,7 +7,7 @@
 import { PerspectiveCamera, Vector3 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
-export type ViewName = 'deck' | 'orbit';
+export type ViewName = 'deck' | 'shield' | 'orbit';
 
 const TRANSITION_MS = 1100;
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
@@ -40,13 +40,30 @@ export class CameraRig {
 
   setReducedMotion(on: boolean): void { this.reducedMotion = on; }
 
-  /** Deck: looking at Earth from slightly above and sunward-off-axis. */
+  /**
+   * Deck frames the globe; Shield pulls back far enough to contain the
+   * magnetopause and bow shock (roughly 11 and 14 Earth radii) and views them
+   * side-on, so the compressed dayside and the flared tail are both legible;
+   * Orbit backs off to the whole inner system.
+   */
   goTo(view: ViewName, earthPos: Vector3, earthRadius: number, sunDir: Vector3): void {
     this.view = view;
-    const target = view === 'deck' ? earthPos.clone() : new Vector3(0, 0, 0);
+    let target = view === 'orbit' ? new Vector3(0, 0, 0) : earthPos.clone();
 
     let pos: Vector3;
-    if (view === 'deck') {
+    if (view === 'shield') {
+      // Perpendicular to the Sun line: the nose compression and the tail
+      // flaring are only visible in profile.
+      const across = new Vector3().crossVectors(sunDir, new Vector3(0, 1, 0)).normalize();
+      // Aim down-tail of Earth so the frame holds the compressed nose and a
+      // useful stretch of tail rather than centring on a body that is, at this
+      // scale, a dot.
+      target = earthPos.clone().addScaledVector(sunDir, -earthRadius * 6);
+      pos = earthPos.clone()
+        .add(across.multiplyScalar(earthRadius * 52))
+        .add(sunDir.clone().multiplyScalar(earthRadius * 4))
+        .add(new Vector3(0, earthRadius * 18, 0));
+    } else if (view === 'deck') {
       // Stand off from Earth, offset across the sun line so the terminator is
       // in frame rather than edge-on, and a little above the ecliptic.
       // Stand off outside the Moon's (compressed) orbit so it cannot sit

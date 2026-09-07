@@ -8,12 +8,12 @@
  * `null` + an `error` on its PartMeta, which the HUD renders as "no data".
  */
 
-import type { Envelope, Now, SolarWindSeries } from '../contract/types.js';
+import type { AuroraNow, Envelope, Now, SolarWindSeries } from '../contract/types.js';
 import type { NowEnvelope, PartMeta, Source } from './source.js';
 import { magnetopause } from '../models/shue1998.js';
 import {
   SWPC_URL, parseAlerts, parseKpNow, parseScalesNow, parseSolarWindNow,
-  parseSolarWindSeries, parseXrayFromSeries,
+  parseSolarWindSeries, parseXrayFromSeries, parseAurora,
 } from './swpc.js';
 
 const SWPC = 'NOAA SWPC';
@@ -26,6 +26,9 @@ export const STALE_AFTER = {
   scales: 6 * 60 * 60,
   alerts: 7 * 24 * 60 * 60,
   magnetopause: 20 * 60,
+  // OVATION publishes a ~30-90 minute forecast every ~5 minutes; an hour-old
+  // grid is still meaningful, a three-hour-old one is not.
+  aurora: 60 * 60,
 } as const;
 
 const FETCH_TIMEOUT_MS = 15_000;
@@ -113,7 +116,11 @@ export class DirectSource implements Source {
     const data: Now = {
       solar_wind, kp: kpNow, xray: xrayNow, scales: scalesNow, alerts: alertList,
       magnetopause: mp
-        ? { standoff_re: mp.r0Re, alpha: mp.alpha, model: 'Shue1998' }
+        ? {
+          standoff_re: mp.r0Re, alpha: mp.alpha,
+          bow_shock_re: mp.bowShockRe, dyn_pressure_npa: mp.dynPressureNPa,
+          model: 'Shue1998',
+        }
         : null,
     };
 
@@ -135,9 +142,29 @@ export class DirectSource implements Source {
         bz_gsm: 'nT', by_gsm: 'nT', bx_gsm: 'nT', bt: 'nT',
         speed: 'km/s', density: 'cm^-3', temperature: 'K',
         estimated_kp: 'Kp', flux_long: 'W/m^2', flux_short: 'W/m^2',
-        standoff_re: 'Re',
+        standoff_re: 'Re', bow_shock_re: 'Re', dyn_pressure_npa: 'nPa',
       },
       data, parts,
+    };
+  }
+
+  async fetchAurora(signal?: AbortSignal): Promise<Envelope<AuroraNow | null>> {
+    const res = await getJson<unknown>(SWPC_URL.aurora, signal);
+    const fetched_at = new Date().toISOString();
+    const data = res.json ? parseAurora(res.json) : null;
+    // Staleness is measured against the OBSERVATION, not the forecast: the
+    // forecast time is in the future and would make a stale grid look fresh.
+    const data_time = data?.observation_time ?? fetched_at;
+    return {
+      source: `${SWPC} · OVATION Prime aurora forecast`,
+      source_url: SWPC_URL.aurora,
+      tier: 'modeled',
+      model: { name: 'OVATION Prime (NOAA SWPC)' },
+      fetched_at, data_time,
+      latency_s: latency(fetched_at, data_time) ?? 0,
+      stale_after_s: STALE_AFTER.aurora,
+      units: { values: '% probability of visible aurora' },
+      data,
     };
   }
 

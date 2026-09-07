@@ -8,6 +8,7 @@
 
 import type { NowEnvelope } from '../data/source.js';
 import { hhmmUTC, formatAge } from '../contract/types.js';
+import type { AuroraNow, Envelope } from '../contract/types.js';
 import { stalenessOf } from './format.js';
 import { scaleLabel, type ScaleMode } from '../scene/scales.js';
 import { subsolarPoint } from '../models/ephemeris.js';
@@ -16,6 +17,9 @@ export interface SceneNarration {
   mode: ScaleMode;
   view: string;
   reducedMotion: boolean;
+  shield: boolean;
+  fieldLines: { lines: number; points: number };
+  aurora: boolean;
 }
 
 const KP_WORDS: [number, string][] = [
@@ -37,6 +41,7 @@ function cardinal(lat: number, lon: number): string {
 
 export function buildSituationReport(
   env: NowEnvelope | null, scene: SceneNarration, now = new Date(),
+  aurora: Envelope<AuroraNow | null> | null = null,
 ): string[] {
   const lines: string[] = [];
   const at = `${hhmmUTC(now.toISOString())} UTC`;
@@ -109,15 +114,25 @@ export function buildSituationReport(
       lines.push('NOAA R/S/G scales: no data.');
     }
 
-    /* --- Magnetopause (modeled) ---------------------------------------- */
-    if (d.magnetopause?.standoff_re != null) {
+    /* --- The shield (modeled) ------------------------------------------ */
+    const mp = d.magnetopause;
+    if (mp?.standoff_re != null) {
+      const compressed = mp.standoff_re < 9
+        ? ' That is a compressed magnetosphere — the shield is being pushed in.'
+        : mp.standoff_re > 11.5 ? ' That is an expanded, quiet magnetosphere.' : '';
       lines.push(
-        `Modeled [D] magnetopause standoff: ${d.magnetopause.standoff_re.toFixed(1)} Earth radii ` +
-        `on the sunward side, computed from the solar wind above using Shue et al. 1998 ` +
-        `(doi:10.1029/98JA01103). Not yet drawn in the scene — that lands in phase 1.`,
+        `Modeled [D] magnetopause standoff: ${mp.standoff_re.toFixed(1)} Earth radii on the ` +
+        `sunward side, with flaring parameter ${mp.alpha?.toFixed(2) ?? 'no data'}, computed from ` +
+        `the solar wind above (dynamic pressure ` +
+        `${mp.dyn_pressure_npa?.toFixed(2) ?? 'no data'} nanopascals) using Shue et al. 1998, ` +
+        `doi:10.1029/98JA01103.${compressed}` +
+        (mp.bow_shock_re != null
+          ? ` The bow shock stands off at ${mp.bow_shock_re.toFixed(1)} Earth radii ` +
+            `(Farris & Russell 1994).`
+          : ''),
       );
     } else {
-      lines.push('Magnetopause standoff: not computed, because the solar-wind inputs it needs are missing.');
+      lines.push('Magnetopause standoff: not computed, because the solar-wind inputs it needs are missing. No boundary is drawn.');
     }
 
     /* --- Alerts --------------------------------------------------------- */
@@ -141,6 +156,42 @@ export function buildSituationReport(
     `terminator in the scene is drawn from that point [D]. The Moon is shown at its ` +
     `true direction from Earth.`,
   );
+  /* --- Aurora --------------------------------------------------------- */
+  if (!scene.aurora) {
+    lines.push('The aurora overlay is hidden.');
+  } else if (aurora?.data) {
+    const a = aurora.data;
+    const ageS = (now.getTime() - Date.parse(a.observation_time)) / 1000;
+    const stale = ageS > aurora.stale_after_s;
+    lines.push(
+      `Aurora: NOAA's OVATION Prime model [D · NOAA] puts the peak probability of visible ` +
+      `aurora at ${a.max_probability}% in this forecast, valid ${hhmmUTC(a.forecast_time)} UTC ` +
+      `and computed from an observation at ${hhmmUTC(a.observation_time)} UTC ` +
+      `(${formatAge(ageS)} old${stale ? ', STALE' : ''}). It is drawn as the glowing oval over ` +
+      `the poles, on a 1°-by-1° grid, teal through magenta with increasing probability — ` +
+      `a legend for intensity, not the aurora's real colours. ` +
+      `The oval encircles the magnetic pole, not the geographic one — which is why it ` +
+      `sits off-centre.`,
+    );
+  } else {
+    lines.push('Aurora: the OVATION forecast has not loaded, so no oval is drawn.');
+  }
+
+  if (scene.shield) {
+    lines.push(
+      `The magnetic shield is drawn: ${scene.fieldLines.lines} field lines traced through ` +
+      `IGRF-14 (IAGA, epoch 2025.0 with secular variation to now) [D], blue where they close ` +
+      `between hemispheres and violet where they stay open toward the solar wind. The ` +
+      `teal boundary is the Shue et al. 1998 magnetopause and the orange one the ` +
+      `Farris & Russell 1994 bow shock, both re-shaped by the live solar wind above. ` +
+      `The field lines rotate with the Earth because the main field is fixed to it. ` +
+      `The boundary surfaces are drawn out to 100° from the sunward axis; the real ` +
+      `magnetotail continues far beyond that, and Shue et al. fitted the dayside and ` +
+      `near flanks, so the tail is truncated rather than ended.`,
+    );
+  } else {
+    lines.push('The magnetic shield is hidden.');
+  }
   lines.push(
     `${scaleLabel(scene.mode)}. Camera: ${scene.view} view. ` +
     `${scene.reducedMotion ? 'Reduced motion is on — the corona is still and camera moves cut rather than glide.' : 'Motion is enabled.'}`,

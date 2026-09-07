@@ -5,7 +5,7 @@
  * See plans/VIEWER_PLATFORM_PLAN.md §5.2.
  */
 
-import type { Envelope, ModelRef, Now, SolarWindSeries, Tier } from '../contract/types.js';
+import type { AuroraNow, Envelope, ModelRef, Now, SolarWindSeries, Tier } from '../contract/types.js';
 
 /**
  * Per-sub-object provenance for a `tier: 'mixed'` envelope.
@@ -31,4 +31,5 @@ export interface Source {
   readonly name: string;
   fetchNow(signal?: AbortSignal): Promise<NowEnvelope>;
   fetchSolarWindSeries(signal?: AbortSignal): Promise<Envelope<SolarWindSeries>>;
+  fetchAurora(signal?: AbortSignal): Promise<Envelope<AuroraNow | null>>;
 }

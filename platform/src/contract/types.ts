@@ -99,6 +99,10 @@ export interface AlertItem {
 export interface MagnetopauseNow {
   standoff_re: number | null;
   alpha: number | null;
+  /** CONTRACT ADDITION: Farris & Russell 1994 bow shock standoff, Rₑ. */
+  bow_shock_re: number | null;
+  /** Solar-wind dynamic pressure the solution was computed from, nPa. */
+  dyn_pressure_npa: number | null;
   model: string;
 }
 
@@ -109,6 +113,27 @@ export interface Now {
   scales: ScalesNow | null;
   alerts: AlertItem[];
   magnetopause: MagnetopauseNow | null;
+}
+
+/** OVATION aurora grid (contract §2 `/v1/aurora`). */
+export interface AuroraGrid {
+  lon_start: number; lon_step: number;
+  lat_start: number; lat_step: number;
+  width: number; height: number;
+  /**
+   * Probability of visible aurora, 0–100, indexed `lon * height + (lat - lat_start)`.
+   * The contract transports this base64-encoded; the DirectSource adapter has
+   * the decoded array already and passes it through as-is.
+   */
+  values: Uint8Array;
+}
+
+export interface AuroraNow {
+  observation_time: string;
+  forecast_time: string;
+  grid: AuroraGrid;
+  /** Highest probability anywhere on the grid, 0–100. */
+  max_probability: number;
 }
 
 /** Column-array time series (contract §2 `/v1/solar-wind`), oldest → newest. */

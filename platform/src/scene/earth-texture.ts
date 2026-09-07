@@ -97,3 +97,56 @@ export function buildEarthTexture(width = 2048): HTMLCanvasElement {
   }
   return canvas;
 }
+
+
+/**
+ * OVATION aurora probability as an equirectangular canvas, using the SAME
+ * lon/lat → pixel mapping as the surface texture above so the two are
+ * registered by construction rather than by eye.
+ *
+ * The canvas is drawn at 4× the grid resolution with a blur, because the raw
+ * 1°×1° grid renders as visible stair-steps on a sphere. That is smoothing of
+ * a model's own output, not invention: peak value and position are preserved.
+ */
+export function buildAuroraTexture(
+  grid: { width: number; height: number; lat_start: number; values: Uint8Array },
+  canvas?: HTMLCanvasElement,
+): HTMLCanvasElement {
+  const SCALE = 4;
+  const w = grid.width * SCALE;
+  const h = (grid.height - 1) * SCALE;
+  const c = canvas ?? document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d');
+  if (!ctx) return c;
+
+  ctx.clearRect(0, 0, w, h);
+  const img = ctx.createImageData(grid.width, grid.height);
+  for (let xi = 0; xi < grid.width; xi++) {
+    for (let yi = 0; yi < grid.height; yi++) {
+      const p = grid.values[xi * grid.height + yi] ?? 0;
+      // Longitude 0–359 east → the −180..180 frame the surface texture uses.
+      const lon = xi > 180 ? xi - 360 : xi;
+      const lat = yi + grid.lat_start;
+      const [px_, py] = px(lon, lat, grid.width, grid.height);
+      const ix = Math.min(grid.width - 1, Math.max(0, Math.round(px_)));
+      const iy = Math.min(grid.height - 1, Math.max(0, Math.round(py)));
+      const o = (iy * grid.width + ix) * 4;
+      img.data[o] = p;          // probability, 0–100, in red
+      img.data[o + 1] = p;
+      img.data[o + 2] = p;
+      img.data[o + 3] = 255;
+    }
+  }
+
+  // Upsample through an offscreen canvas so the 1° grid does not stair-step.
+  const small = document.createElement('canvas');
+  small.width = grid.width;
+  small.height = grid.height;
+  small.getContext('2d')?.putImageData(img, 0, 0);
+  ctx.filter = `blur(${SCALE * 0.9}px)`;
+  ctx.drawImage(small, 0, 0, w, h);
+  ctx.filter = 'none';
+  return c;
+}

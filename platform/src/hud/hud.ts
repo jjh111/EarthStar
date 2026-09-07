@@ -67,12 +67,16 @@ export class Hud {
   private bottom: HTMLElement;
   private tiles = new Map<string, HTMLElement>();
   private scalesEl!: HTMLElement;
+  private auroraEl!: HTMLElement;
   private tickerEl!: HTMLElement;
   private reportEl!: HTMLElement;
   private statusEl!: HTMLElement;
   private scaleEl!: HTMLElement;
   private drawerEl!: HTMLElement;
-  private narration: SceneNarration = { mode: 'globe', view: 'deck', reducedMotion: false };
+  private narration: SceneNarration = {
+    mode: 'globe', view: 'deck', reducedMotion: false,
+    shield: true, fieldLines: { lines: 0, points: 0 }, aurora: true,
+  };
 
   constructor(top: HTMLElement, bottom: HTMLElement) {
     this.top = top;
@@ -114,6 +118,19 @@ export class Hud {
       <p class="tile-detail">R radio · S radiation · G geomagnetic</p>`;
     this.scalesEl = scales;
     strip.appendChild(scales);
+
+    // Aurora rides its own envelope and cadence, so it gets its own tile
+    // rather than a row in the Now-driven table above.
+    const auroraTile = document.createElement('article');
+    auroraTile.className = 'tile';
+    auroraTile.id = 'tile-aurora';
+    auroraTile.innerHTML = `
+      <h3 class="tile-label">Aurora peak</h3>
+      <p class="tile-value"><span data-v>—</span><span class="tile-unit">% prob.</span></p>
+      <p class="tile-meta"><span class="badge badge-d">D</span><span data-time>—</span></p>
+      <p class="tile-detail" data-detail>OVATION Prime · NOAA</p>`;
+    this.auroraEl = auroraTile;
+    strip.appendChild(auroraTile);
 
     const ticker = document.createElement('div');
     ticker.className = 'ticker';
@@ -198,6 +215,23 @@ export class Hud {
       stalenessOf(scMeta, now).label;
     this.scalesEl.classList.toggle('is-nodata', !sc);
 
+    // Aurora tile — its own envelope, its own staleness.
+    const au = state.aurora;
+    const auStale = au?.data
+      ? stalenessOf({
+        tier: 'modeled', source: au.source, source_url: au.source_url, model: au.model,
+        data_time: au.data.observation_time, latency_s: au.latency_s,
+        stale_after_s: au.stale_after_s,
+      }, now)
+      : { state: 'no-data' as const, ageS: null, label: NO_DATA };
+    (this.auroraEl.querySelector('[data-v]') as HTMLElement).textContent =
+      au?.data ? String(au.data.max_probability) : NO_DATA;
+    (this.auroraEl.querySelector('[data-time]') as HTMLElement).textContent = auStale.label;
+    (this.auroraEl.querySelector('[data-detail]') as HTMLElement).textContent =
+      au?.data ? `OVATION Prime · valid ${hhmmUTC(au.data.forecast_time)} UTC` : 'OVATION Prime · NOAA';
+    this.auroraEl.classList.toggle('is-stale', auStale.state === 'stale');
+    this.auroraEl.classList.toggle('is-nodata', auStale.state === 'no-data');
+
     // Alerts ticker
     const tick = this.tickerEl.querySelector('[data-ticker]') as HTMLElement;
     if (d?.alerts?.length) {
@@ -228,7 +262,7 @@ export class Hud {
     this.scaleEl.textContent = scaleLabel(this.narration.mode);
 
     // Situation Report
-    const lines = buildSituationReport(env, this.narration, now);
+    const lines = buildSituationReport(env, this.narration, now, state.aurora);
     this.reportEl.innerHTML = lines.map((l) => `<p>${escapeHtml(l)}</p>`).join('');
 
     // Provenance drawer
@@ -241,9 +275,17 @@ export class Hud {
             <td>${m.data_time ? hhmmUTC(m.data_time) : NO_DATA}</td>
             <td>${m.error ? `<span class="err">${escapeHtml(m.error)}</span>` : m.latency_s === null ? NO_DATA : `${m.latency_s}s`}</td>
           </tr>`).join('')
-      }</tbody></table>
+      }${au ? `<tr>
+            <td>aurora</td>
+            <td><span class="badge badge-d">D</span> modeled · ${escapeHtml(au.model?.name ?? '')}</td>
+            <td><a href="${au.source_url}" rel="noreferrer noopener" target="_blank">${escapeHtml(au.source)}</a></td>
+            <td>${au.data ? hhmmUTC(au.data.observation_time) : NO_DATA}</td>
+            <td>${au.data ? `${au.latency_s}s` : NO_DATA}</td>
+          </tr>` : ''}</tbody></table>
       <p class="prov-note">Models cited in-app: Shue et al. 1998 (doi:10.1029/98JA01103) for the
-      magnetopause; astronomy-engine (VSOP87/Meeus-derived) for all positions and the sub-solar point.
+      magnetopause; Farris &amp; Russell 1994 for the bow shock; IGRF-14 (IAGA, epoch 2025.0) for
+      the field lines; OVATION Prime (NOAA SWPC) for the aurora;
+      astronomy-engine (VSOP87/Meeus-derived) for all positions and the sub-solar point.
       Ambient elements — corona texture, starfield, colour — are artwork and carry the M badge.</p>`
       : '<p>No envelope loaded yet.</p>';
   }

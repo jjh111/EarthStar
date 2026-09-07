@@ -11,7 +11,8 @@
 import './styles.css';
 import './verify.css';
 import { DirectSource } from './data/direct-source.js';
-import { SWPC_URL, parseXrayLatestClass, xrayClass } from './data/swpc.js';
+import { SWPC_URL, auroraAt, parseXrayLatestClass, xrayClass } from './data/swpc.js';
+import { angularSeparationDeg, geomagneticNorthPole } from './models/igrf14.js';
 import { hhmmUTC } from './contract/types.js';
 
 interface Row {
@@ -129,6 +130,54 @@ async function run(): Promise<void> {
     ok: !!d.solar_wind?.spacecraft && activeSources.includes(d.solar_wind.spacecraft),
     note: `newest record of ANY source is "${String(newestAny['source'])}" — selecting that instead would be the bug this row guards`,
   });
+
+  /**
+   * Aurora orientation (phase-1 acceptance). The auroral oval encircles the
+   * MAGNETIC pole, not the geographic one. If the grid were transposed,
+   * mirrored or rotated, the probability-weighted centroid of the northern
+   * oval would not sit near the dip pole. This checks the real live grid
+   * against our own IGRF-14 — two independent models agreeing on where north
+   * magnetically is.
+   */
+  const aurora = await source.fetchAurora();
+  if (aurora.data) {
+    const g = aurora.data.grid;
+    const pole = geomagneticNorthPole(new Date());
+    let sx = 0, sy = 0, sz = 0, weight = 0;
+    for (let lon = 0; lon < g.width; lon++) {
+      for (let lat = 45; lat <= 89; lat++) {
+        const p = auroraAt(g, lat, lon);
+        if (p <= 0) continue;
+        const la = (lat * Math.PI) / 180, lo = (lon * Math.PI) / 180;
+        sx += p * Math.cos(la) * Math.cos(lo);
+        sy += p * Math.cos(la) * Math.sin(lo);
+        sz += p * Math.sin(la);
+        weight += p;
+      }
+    }
+    if (weight > 0) {
+      const r = Math.sqrt(sx * sx + sy * sy + sz * sz);
+      const cLat = (Math.asin(sz / r) * 180) / Math.PI;
+      const cLon = (Math.atan2(sy, sx) * 180) / Math.PI;
+      const toPole = angularSeparationDeg(cLat, cLon, pole.lat, pole.lon);
+      rows.push({
+        name: 'Aurora oval centred on the geomagnetic pole',
+        ours: `centroid ${cLat.toFixed(1)}°N ${cLon.toFixed(1)}°E`,
+        theirs: `pole ${pole.lat.toFixed(1)}°N ${pole.lon.toFixed(1)}°E`,
+        ok: toPole < 5,
+        note: `${toPole.toFixed(2)}° apart. NOAA's oval and our IGRF-14 dipole axis are `
+          + `computed independently; a transposed, mirrored or rotated grid would not agree. `
+          + `Forecast ${hhmmUTC(aurora.data.forecast_time)} UTC, peak `
+          + `${aurora.data.max_probability}%`,
+      });
+    }
+  } else {
+    rows.push({
+      name: 'Aurora oval centred on the geomagnetic pole',
+      ours: 'no data', theirs: '—', ok: false,
+      note: 'OVATION grid did not load, so orientation could not be checked',
+    });
+  }
 
   const pass = rows.filter((r) => r.ok).length;
   out.innerHTML = `

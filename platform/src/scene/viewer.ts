@@ -21,8 +21,10 @@ import {
   distanceToScene, moonDistanceToScene, radiusToScene, type ScaleMode,
 } from './scales.js';
 import { moonGeo, planetState, sunGeo, toScene } from '../models/ephemeris.js';
+import { FieldLines, Magnetosphere } from './magnetosphere.js';
+import { magnetopause } from '../models/shue1998.js';
 import type { PlanetName } from '../models/ephemeris.js';
-import type { Now } from '../contract/types.js';
+import type { AuroraNow, Now } from '../contract/types.js';
 
 export interface FrameStats { fps: number; frames: number; }
 
@@ -36,6 +38,9 @@ export class Viewer {
   private planets = new Map<PlanetName, Planet>();
   private rings = new Map<PlanetName, OrbitRing>();
   private sunLight = new PointLight(0xfff2dd, 1.6, 0, 0);
+  private fieldLines = new FieldLines();
+  private magnetosphere = new Magnetosphere();
+  private shieldVisible = true;
 
   private mode: ScaleMode = 'globe';
   private _reducedMotion = false;
@@ -43,6 +48,8 @@ export class Viewer {
   private raf = 0;
   private clockStart = performance.now();
   private now: Now | null = null;
+  private aurora: AuroraNow | null = null;
+  private auroraVisible = true;
 
   // Frame-rate accounting for the performance budget (plan §5.4).
   private frameTimes: number[] = [];
@@ -63,6 +70,10 @@ export class Viewer {
     this.scene.add(this.earth.group);
     this.scene.add(this.moon.mesh);
     this.scene.add(this.sunLight);
+    // Field lines are Earth-fixed and ride the spin group; the magnetopause is
+    // Sun-oriented and must NOT spin, so it hangs off the unrotated group.
+    this.earth.spin.add(this.fieldLines.group);
+    this.earth.group.add(this.magnetosphere.group);
     this.scene.add(new AmbientLight(0x24304a, 0.55));
 
     this.planets = makePlanets();
@@ -80,6 +91,12 @@ export class Viewer {
 
   setNow(now: Now | null): void { this.now = now; }
 
+  setAurora(aurora: AuroraNow | null): void { this.aurora = aurora; }
+
+  setAuroraVisible(v: boolean): void { this.auroraVisible = v; }
+
+  get auroraOn(): boolean { return this.auroraVisible; }
+
   setScaleMode(mode: ScaleMode): void {
     if (mode === this.mode) return;
     this.mode = mode;
@@ -90,6 +107,19 @@ export class Viewer {
   get scaleMode(): ScaleMode { return this.mode; }
 
   get reducedMotion(): boolean { return this._reducedMotion; }
+
+  setShieldVisible(v: boolean): void {
+    this.shieldVisible = v;
+    this.fieldLines.setVisible(v);
+    this.magnetosphere.setVisible(v);
+  }
+
+  get shieldOn(): boolean { return this.shieldVisible; }
+
+  /** Field-line counts, for the Situation Report and the perf readout. */
+  get fieldLineStats(): { lines: number; points: number } {
+    return { lines: this.fieldLines.lineCount, points: this.fieldLines.pointCount };
+  }
 
   setReducedMotion(on: boolean): void {
     this._reducedMotion = on;
@@ -136,6 +166,20 @@ export class Viewer {
     this.earth.group.position.copy(earthPos);
     this.earth.setRadius(earthRadius);
     this.earth.update(date, sunDir);
+    this.earth.setAurora(this.aurora, this.auroraVisible);
+
+    // The shield. Tracing happens at most once a day; the surfaces rebuild only
+    // when the live wind actually moves them.
+    if (this.shieldVisible) {
+      this.fieldLines.ensureTraced(date);
+      this.fieldLines.setScale(earthRadius);
+      this.magnetosphere.setScale(earthRadius);
+      const sw = this.now?.solar_wind;
+      this.magnetosphere.update(
+        magnetopause(sw?.bz_gsm ?? null, sw?.density ?? null, sw?.speed ?? null),
+        sunDir,
+      );
+    }
 
     // Moon at its true geocentric direction; separation compressed in Globe mode.
     const mg = toScene(moonGeo(date));
@@ -171,6 +215,8 @@ export class Viewer {
     window.removeEventListener('resize', this.resize);
     this.earth.dispose();
     this.sun.dispose();
+    this.fieldLines.dispose();
+    this.magnetosphere.dispose();
     this.rig.dispose();
     this.renderer.dispose();
   }

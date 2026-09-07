@@ -15,7 +15,7 @@ if (!EXEC) {
   console.error('Set CHROME to a Chromium executable. See the header of this file.');
   process.exit(1);
 }
-const BASE = 'http://localhost:5190/viewer/';
+const BASE = process.env['BASE'] ?? 'http://localhost:5190/viewer/';
 const OUT = 'docs/screenshots';
 
 const browser = await chromium.launch({
@@ -38,6 +38,47 @@ const fps = await page.evaluate(() => new Promise(res => {
 }));
 console.log('  measured fps:', fps.toFixed(1));
 await page.screenshot({ path: `${OUT}/01-deck-view.png` });
+
+console.log('magnetosphere view...');
+await page.click('#view-shield');
+await settle(4500);
+await page.screenshot({ path: `${OUT}/07-magnetosphere.png` });
+const shield = await page.evaluate(() => {
+  const v = window.__viewer;
+  return { lines: v.fieldLineStats, fps: +v.stats.fps.toFixed(1),
+           standoff: v.now?.magnetopause?.standoff_re?.toFixed(2),
+           bow: v.now?.magnetopause?.bow_shock_re?.toFixed(2) };
+});
+console.log('  shield:', JSON.stringify(shield));
+
+console.log('deck with shield...');
+await page.click('#view-deck');
+await settle(4000);
+await page.screenshot({ path: `${OUT}/01-deck-view.png` });
+
+console.log('aurora over the pole...');
+// Drive the camera to a high-latitude night-side vantage: the oval is a real
+// forecast and at quiet Kp it is faint, so it needs a viewing angle that shows it.
+await page.evaluate(() => {
+  const v = window.__viewer;
+  const g = v.geometryNow(new Date());
+  const V = g.earthPos.constructor;
+  const r = g.earthRadius;
+  // Anti-sunward and well above the pole: night side, looking down on the oval.
+  // Scene +Y is Earth's spin axis, so this looks down on the north polar
+  // region, tilted onto the night side where the oval is not washed out.
+  const pos = g.earthPos.clone()
+    .add(new V(0, r * 4.0, 0))
+    .addScaledVector(g.sunDir, -r * 2.2);
+  v.rig.transitioning = false;
+  v.rig.camera.position.copy(pos);
+  v.rig.controls.target.copy(g.earthPos);
+  v.rig.controls.update();
+  v.setShieldVisible(false);   // the field-line cage would hide the oval
+});
+await settle(3000);
+await page.screenshot({ path: `${OUT}/08-aurora.png` });
+await page.evaluate(() => window.__viewer.setShieldVisible(true));
 
 console.log('orbit view...');
 await page.click('#view-orbit');

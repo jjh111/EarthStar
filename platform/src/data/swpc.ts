@@ -20,7 +20,7 @@
  */
 
 import type {
-  AlertItem, KpNow, ScaleValue, ScalesNow, SolarWindNow, SolarWindSeries, XrayNow,
+  AlertItem, AuroraNow, KpNow, ScaleValue, ScalesNow, SolarWindNow, SolarWindSeries, XrayNow,
 } from '../contract/types.js';
 
 export const SWPC_BASE = 'https://services.swpc.noaa.gov';
@@ -38,6 +38,7 @@ export const SWPC_URL = {
   xrays6h: `${SWPC_BASE}/json/goes/primary/xrays-6-hour.json`,
   xrays1d: `${SWPC_BASE}/json/goes/primary/xrays-1-day.json`,
   scales: `${SWPC_BASE}/products/noaa-scales.json`,
+  aurora: `${SWPC_BASE}/json/ovation_aurora_latest.json`,
   alerts: `${SWPC_BASE}/products/alerts.json`,
   summaryMag: `${SWPC_BASE}/products/summary/solar-wind-mag-field.json`,
   summarySpeed: `${SWPC_BASE}/products/summary/solar-wind-speed.json`,
@@ -266,4 +267,64 @@ export function parseAlerts(json: unknown, limit = 8): AlertItem[] {
     .filter((a): a is AlertItem => a !== null)
     .sort((a, b) => Date.parse(b.issued) - Date.parse(a.issued))
     .slice(0, limit);
+}
+
+/* ---------------------------------------------------------------- *
+ * OVATION aurora
+ * ---------------------------------------------------------------- */
+
+const AURORA_WIDTH = 360;
+const AURORA_HEIGHT = 181;
+
+/**
+ * OVATION Prime output as SWPC publishes it: a flat `coordinates` array of
+ * `[longitude, latitude, probability]`, longitude 0–359 east, latitude −90–90,
+ * with LATITUDE varying fastest. Verified live 2026-09-06: 65 160 cells,
+ * index = lon * 181 + (lat + 90).
+ *
+ * Rather than trust that ordering, each cell is placed by its own stated
+ * lon/lat — so a change in upstream ordering cannot silently rotate the oval.
+ */
+export function parseAurora(json: unknown): AuroraNow | null {
+  const o = json as Record<string, unknown> | null;
+  const coords = o?.['coordinates'];
+  if (!Array.isArray(coords) || coords.length === 0) return null;
+
+  const observation = swpcTime(o?.['Observation Time'] as string);
+  const forecast = swpcTime(o?.['Forecast Time'] as string);
+  if (!observation || !forecast) return null;
+
+  const values = new Uint8Array(AURORA_WIDTH * AURORA_HEIGHT);
+  let max = 0;
+  for (const cell of coords as unknown[]) {
+    if (!Array.isArray(cell) || cell.length < 3) continue;
+    const lon = Number(cell[0]);
+    const lat = Number(cell[1]);
+    const p = Number(cell[2]);
+    if (!Number.isFinite(lon) || !Number.isFinite(lat) || !Number.isFinite(p)) continue;
+    const xi = ((Math.round(lon) % AURORA_WIDTH) + AURORA_WIDTH) % AURORA_WIDTH;
+    const yi = Math.round(lat) + 90;
+    if (yi < 0 || yi >= AURORA_HEIGHT) continue;
+    const v = Math.max(0, Math.min(100, p));
+    values[xi * AURORA_HEIGHT + yi] = v;
+    if (v > max) max = v;
+  }
+
+  return {
+    observation_time: observation,
+    forecast_time: forecast,
+    max_probability: max,
+    grid: {
+      lon_start: 0, lon_step: 1, lat_start: -90, lat_step: 1,
+      width: AURORA_WIDTH, height: AURORA_HEIGHT, values,
+    },
+  };
+}
+
+/** Probability at a geographic point, nearest cell. 0 when off-grid. */
+export function auroraAt(grid: AuroraNow['grid'], latDeg: number, lonDeg: number): number {
+  const xi = ((Math.round(lonDeg) % grid.width) + grid.width) % grid.width;
+  const yi = Math.round(latDeg) - grid.lat_start;
+  if (yi < 0 || yi >= grid.height) return 0;
+  return grid.values[xi * grid.height + yi] ?? 0;
 }
