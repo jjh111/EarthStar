@@ -198,8 +198,9 @@ function enlilSection(run: EnlilRun | null, cmes: Cme[] = []): string {
            && Date.parse(c.arrival.time) > Date.now())
            ? ' Our cone propagation does put one here — the two disagree, and Enlil is the '
              + 'one that solves the physics.' : ''}</p>`}
-    <p class="fine">Model output covers ${hhmmUTC(run.firstTime!)} UTC onward, ${run.past.length}
-    samples already elapsed and ${run.ahead.length} ahead. Its hindcast half is checked
+    <p class="fine">Model output starts ${new Date(run.firstTime!).toUTCString().slice(0, 11)}
+    at ${hhmmUTC(run.firstTime!)} UTC — ${run.past.length}
+    samples already elapsed and ${run.ahead.length} still ahead. The elapsed half is checked
     against the measured wind in the Checks panel.</p>`;
 }
 
