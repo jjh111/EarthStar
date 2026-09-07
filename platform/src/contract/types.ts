@@ -81,12 +81,24 @@ export interface ScalesNow {
   time: string | null;
 }
 
+/**
+ * NOAA issues four kinds of notice and the distinction is the whole point:
+ * a WATCH says a thing may happen, a WARNING says it is expected, an ALERT
+ * says it is happening now, and a SUMMARY says it has finished. Presenting
+ * them as one undifferentiated list throws away the only ordering that
+ * matters when several are outstanding at once.
+ */
+export type AlertLevel = 'alert' | 'warning' | 'watch' | 'summary' | 'cancel' | 'other';
+
 export interface AlertItem {
   issued: string;
   product: string;
   message: string;
   /** First line of the message, for the ticker. */
   headline: string;
+  level: AlertLevel;
+  /** The headline with its leading "ALERT:" style prefix removed. */
+  text: string;
 }
 
 export interface MagnetopauseNow {

@@ -89,18 +89,64 @@ header.top {
   backdrop-filter: var(--glass);
   -webkit-backdrop-filter: var(--glass);
 }
-.ident { display: flex; flex-direction: column; justify-content: center; gap: 1px; }
+/* The mark supplies "Earth Star"; the word beside it supplies "Viewer". The
+   h1's accessible name is the two together, which is why the image keeps a
+   real alt rather than being decorative. */
 .brand {
-  font-family: var(--serif); font-size: 1.18rem; font-weight: 600;
-  margin: 0; letter-spacing: 0.01em; white-space: nowrap; line-height: 1.05;
+  display: flex; align-items: center; gap: 0.5rem;
+  font-family: var(--serif); font-size: 1.22rem; font-weight: 600;
+  margin: 0; letter-spacing: 0.01em; white-space: nowrap; line-height: 1;
 }
+.mark { display: flex; align-items: center; flex: none; opacity: 0.9; }
+.mark:hover, .mark:focus-visible { opacity: 1; }
+.mark img { height: 30px; width: auto; display: block; }
+.brand-word { padding-bottom: 2px; }
+
 .clock {
   margin: 0; font-family: var(--mono); font-size: 0.6rem; color: var(--ink-faint);
   white-space: nowrap; letter-spacing: 0.02em; line-height: 1;
+  align-self: center;
 }
 
+/* The most consequential outstanding notice, in the space the header row was
+   otherwise wasting. It shrinks before the controls do, and disappears when
+   NOAA has nothing outstanding rather than sitting there saying "all clear". */
+.headline-alert {
+  display: flex; align-items: baseline; gap: 0.5rem;
+  min-width: 0; flex: 1 1 auto;
+  text-decoration: none; color: var(--ink-dim);
+  font-size: 0.74rem; line-height: 1.2;
+  padding: 0.28rem 0.6rem; border-radius: 4px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  transition: border-color 0.15s, color 0.15s;
+}
+.headline-alert:hover { color: var(--ink); border-color: var(--line-strong); }
+.headline-alert .alert-text {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+}
+.headline-alert .alert-time {
+  font-family: var(--mono); font-size: 0.62rem; color: var(--ink-faint); flex: none;
+}
+
+/* The four words NOAA's notices actually mean. Colour carries the ordering so
+   a glance gets it before the text is read. */
+.alert-level {
+  flex: none; font-size: 0.56rem; letter-spacing: 0.12em; text-transform: uppercase;
+  border: 1px solid currentColor; border-radius: 2px; padding: 0 0.32em;
+}
+.level-alert   { --lvl: var(--err); }
+.level-warning { --lvl: var(--warn); }
+.level-watch   { --lvl: var(--badge-d); }
+.level-cancel, .level-summary, .level-other, .level-none { --lvl: var(--ink-faint); }
+.level-alert .alert-level, .level-warning .alert-level,
+.level-watch .alert-level, .level-cancel .alert-level,
+.level-summary .alert-level, .level-other .alert-level { color: var(--lvl); }
+.headline-alert.level-alert { border-color: rgba(255, 139, 115, 0.5); }
+.headline-alert.level-warning { border-color: rgba(240, 180, 41, 0.45); }
+
 .controls {
-  display: flex; gap: 0.75rem; margin-left: auto; align-items: center;
+  display: flex; gap: 0.75rem; align-items: center; flex: none;
   flex-wrap: wrap; justify-content: flex-end;
 }
 /* A cluster is a legend plus its buttons: the legend says what the group is
@@ -111,11 +157,6 @@ header.top {
   text-transform: uppercase; color: var(--ink-faint); white-space: nowrap;
 }
 .ctl-group { display: flex; gap: 2px; }
-
-/* The Earth Star mark, linking back to the site this is part of. */
-.mark { display: flex; align-items: center; flex: none; opacity: 0.82; }
-.mark:hover, .mark:focus-visible { opacity: 1; }
-.mark img { height: 30px; width: auto; display: block; }
 
 .ctl {
   font-family: var(--sans); font-size: 0.68rem; line-height: 1;
@@ -171,6 +212,14 @@ header.top {
 }
 .tile:hover { border-color: var(--line-strong); background: rgba(14, 21, 34, 0.9); }
 .tile[aria-current='true'] { border-color: var(--accent); }
+.tile-spark {
+  display: block; height: 17px; margin: 0.12rem 0 0.08rem;
+  /* An empty slot still holds its line, so tiles without a series — the NOAA
+     scales, the aurora forecast — stay the same height as the ones with one
+     instead of shuffling the grid every refresh. */
+}
+.tile-spark svg { display: block; width: 100%; height: 17px; }
+
 .tile-label {
   margin: 0; font-size: 0.56rem; letter-spacing: 0.09em; text-transform: uppercase;
   color: var(--ink-faint); font-weight: 500; white-space: nowrap;
@@ -181,10 +230,16 @@ header.top {
   display: flex; align-items: baseline; gap: 0.22rem; color: var(--ink);
 }
 .tile-unit { font-size: 0.55rem; color: var(--ink-faint); }
+/* The badge keeps its width; the text beside it is what gives way. `ellipsis`
+   on a flex container does nothing — it has to be on the item that holds the
+   text, which is why this clipped mid-word rather than trailing off. */
 .tile-meta {
   margin: 0.12rem 0 0; font-size: 0.56rem; color: var(--ink-dim);
   display: flex; align-items: center; gap: 0.25rem;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; overflow: hidden; min-width: 0;
+}
+.tile-meta > [data-time] {
+  overflow: hidden; text-overflow: ellipsis; min-width: 0;
 }
 .tile.is-stale { border-color: rgba(240, 180, 41, 0.5); }
 .tile.is-stale .tile-value, .tile.is-stale .tile-meta { color: var(--warn); }
@@ -208,22 +263,33 @@ header.top {
 .scale-1, .scale-2 { color: var(--warn); border-color: rgba(240,180,41,0.55); }
 .scale-3, .scale-4, .scale-5 { color: var(--err); border-color: rgba(255,139,115,0.6); }
 
-/* Alerts wrap rather than scrolling sideways: a horizontally-scrolled ticker
-   hides its own content, and the last item is as important as the first. */
+/* Notices. Alerts wrap rather than scrolling sideways — a horizontally
+   scrolled ticker hides its own content, and the last item is as important as
+   the first — and each carries the word NOAA's product type actually means, so
+   "happening now" and "possible later" are not the same shade of grey.
+   Sized and framed like the instrument tiles above, because it is the same
+   kind of thing: a current reading with a time on it. */
 .ticker {
-  display: flex; align-items: flex-start; gap: 0.45rem;
+  display: flex; align-items: flex-start; gap: 0.5rem;
   background: var(--bg-panel); border: 1px solid var(--line);
-  border-radius: 4px; padding: 0.32rem 0.5rem;
-  font-size: 0.64rem; color: var(--ink-dim); line-height: 1.45;
-  flex: none; max-height: 4.4em; overflow: hidden;
+  border-radius: 4px; padding: 0.4rem 0.55rem;
+  font-size: 0.72rem; color: var(--ink-dim); line-height: 1.5;
+  flex: none; max-height: 5.4em; overflow: hidden;
   backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
 }
-.ticker-items { display: flex; flex-wrap: wrap; gap: 0 0.7rem; min-width: 0; }
-.ticker-item { white-space: nowrap; }
-.ticker-item::after { content: '·'; margin-left: 0.7rem; color: var(--ink-faint); }
-.ticker-item:last-child::after { content: ''; }
+.ticker-items { display: flex; flex-wrap: wrap; gap: 0.2rem 0.9rem; min-width: 0; }
+.ticker-item {
+  display: inline-flex; align-items: baseline; gap: 0.4rem; white-space: nowrap;
+}
+.ticker-item .alert-text { color: var(--ink); }
+.ticker-item.level-summary .alert-text,
+.ticker-item.level-cancel .alert-text,
+.ticker-item.level-none .alert-text { color: var(--ink-dim); }
+.ticker-item .alert-time {
+  font-family: var(--mono); font-size: 0.62rem; color: var(--ink-faint);
+}
 .ticker-tag {
-  font-family: var(--mono); font-size: 0.54rem; letter-spacing: 0.1em;
+  font-family: var(--mono); font-size: 0.58rem; letter-spacing: 0.1em;
   color: var(--accent); border: 1px solid currentColor; border-radius: 2px;
   padding: 0 0.22rem; flex: none; margin-top: 0.1rem;
 }
