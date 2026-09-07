@@ -11,7 +11,8 @@
 
 import {
   AdditiveBlending, BufferGeometry, Color, DoubleSide, Float32BufferAttribute,
-  Group, Line, LineBasicMaterial, LineSegments, Mesh, MeshBasicMaterial, Vector3,
+  Group, Line, LineBasicMaterial, LineSegments, Mesh, MeshBasicMaterial,
+  ShaderMaterial, Vector3,
 } from 'three';
 import { EARTH_RADIUS_KM, traceAll, type FieldLine } from '../models/fieldlines.js';
 import { shueRadius, type Magnetopause } from '../models/shue1998.js';
@@ -25,11 +26,72 @@ function ecefToLocal(p: Vector3): Vector3 {
 const CLOSED_COLOR = new Color(0.42, 0.78, 0.95);
 const OPEN_COLOR = new Color(0.72, 0.55, 1.0);
 
+/**
+ * Field lines are traced from IGRF-14 alone, which knows nothing about the
+ * solar wind — an unconfined internal field extends forever. Two effects are
+ * applied on the GPU on top of that:
+ *
+ *  · CONFINEMENT `[D, approximate]` — vertices outside the Shue magnetopause
+ *    are pulled back onto it. The magnetosphere really is bounded there, so the
+ *    dayside visibly compresses when pressure rises. It is a geometric clamp,
+ *    not an MHD solution: a proper treatment (Tsyganenko) would also stretch
+ *    the tail and add current-sheet fields. The Situation Report says so.
+ *  · SHIVER `[M]` — a small transverse oscillation whose amplitude follows Kp.
+ *    Pure ambience. The real field does not wobble like this; disturbance is
+ *    genuinely higher at high Kp, and this is a legend for that, nothing more.
+ */
+const lineVert = /* glsl */ `
+  uniform float uTime;
+  uniform float uShiver;      // 0-1, from Kp
+  uniform float uR0;          // Shue standoff, Earth radii
+  uniform float uAlpha;
+  uniform vec3  uSunDir;      // unit, Earth-fixed frame
+  uniform float uConfine;     // 0 = raw IGRF, 1 = clamped to the magnetopause
+  varying float vDepth;
+
+  void main() {
+    vec3 p = position;
+    float r = max(length(p), 0.0001);
+
+    if (uShiver > 0.001) {
+      vec3 axis = normalize(cross(p, vec3(0.0, 1.0, 0.0)) + vec3(0.0001));
+      float amp = uShiver * 0.045 * min(r, 5.0);
+      p += axis * amp * sin(uTime * 1.9 + r * 2.3 + p.y * 2.7);
+      r = max(length(p), 0.0001);
+    }
+
+    if (uConfine > 0.001) {
+      float ct = clamp(dot(p / r, uSunDir), -1.0, 1.0);
+      float denom = max(1.0 + cos(acos(ct)), 0.004);
+      float rmp = uR0 * pow(2.0 / denom, uAlpha);
+      if (r > rmp) p *= mix(1.0, rmp / r, uConfine);
+    }
+
+    vDepth = r;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+  }
+`;
+
+const lineFrag = /* glsl */ `
+  uniform vec3 uColor;
+  uniform float uOpacity;
+  varying float vDepth;
+  void main() {
+    // Fade with distance so the near-Earth structure stays readable.
+    float fade = 1.0 - smoothstep(2.0, 14.0, vDepth) * 0.55;
+    gl_FragColor = vec4(uColor, uOpacity * fade);
+    #include <colorspace_fragment>
+  }
+`;
+
 export class FieldLines {
   /** Co-rotates with the globe — parent this to the Earth's spinning group. */
   readonly group = new Group();
   private lines: Line[] = [];
+  private materials: ShaderMaterial[] = [];
   private tracedFor: number | null = null;
+  private reduced = false;
+  private frozenAt = 0;
 
   constructor() {
     this.group.name = 'igrf-field-lines';
@@ -57,15 +119,24 @@ export class FieldLines {
       }
       const geom = new BufferGeometry();
       geom.setAttribute('position', new Float32BufferAttribute(pos, 3));
-      const mat = new LineBasicMaterial({
-        // Closed (trapped) and open (polar, solar-wind-connected) lines are
-        // physically different things, so they are not drawn the same.
-        color: line.closed ? CLOSED_COLOR : OPEN_COLOR,
-        transparent: true,
-        opacity: line.closed ? 0.30 : 0.42,
-        blending: AdditiveBlending,
-        depthWrite: false,
+      const mat = new ShaderMaterial({
+        uniforms: {
+          uTime: { value: 0 },
+          uShiver: { value: 0 },
+          uR0: { value: 10.5 },
+          uAlpha: { value: 0.58 },
+          uSunDir: { value: new Vector3(1, 0, 0) },
+          uConfine: { value: 1 },
+          // Closed (trapped) and open (polar, wind-connected) lines are
+          // physically different things, so they are not drawn the same.
+          uColor: { value: line.closed ? CLOSED_COLOR : OPEN_COLOR },
+          uOpacity: { value: line.closed ? 0.34 : 0.46 },
+        },
+        vertexShader: lineVert,
+        fragmentShader: lineFrag,
+        transparent: true, blending: AdditiveBlending, depthWrite: false,
       });
+      this.materials.push(mat);
       const l = new Line(geom, mat);
       l.name = line.closed ? 'field-line-closed' : 'field-line-open';
       this.lines.push(l);
@@ -80,6 +151,34 @@ export class FieldLines {
 
   setVisible(v: boolean): void { this.group.visible = v; }
 
+  setReducedMotion(on: boolean): void {
+    if (on && !this.reduced) this.frozenAt = this.materials[0]?.uniforms['uTime']?.value as number ?? 0;
+    this.reduced = on;
+  }
+
+  /**
+   * `sunDirLocal` must be in the Earth-FIXED frame: these lines co-rotate with
+   * the globe, so the inertial Sun direction has to be counter-rotated into it.
+   * `kp` drives the shiver; null leaves it still rather than guessing.
+   */
+  setDynamics(
+    elapsed: number, sunDirLocal: Vector3,
+    r0Re: number | null, alpha: number | null, kp: number | null,
+  ): void {
+    const t = this.reduced ? this.frozenAt : elapsed;
+    // Kp 0-4 is quiet through unsettled and gets nothing; 5-9 is storm.
+    const shiver = kp === null ? 0 : Math.max(0, Math.min(1, (kp - 4) / 5));
+    for (const m of this.materials) {
+      m.uniforms['uTime']!.value = t;
+      m.uniforms['uShiver']!.value = shiver;
+      (m.uniforms['uSunDir']!.value as Vector3).copy(sunDirLocal).normalize();
+      // No measured wind means no modelled boundary, so nothing to confine to.
+      m.uniforms['uConfine']!.value = r0Re === null ? 0 : 1;
+      if (r0Re !== null) m.uniforms['uR0']!.value = r0Re;
+      if (alpha !== null) m.uniforms['uAlpha']!.value = alpha;
+    }
+  }
+
   get lineCount(): number { return this.lines.length; }
 
   get pointCount(): number {
@@ -90,10 +189,11 @@ export class FieldLines {
   dispose(): void {
     for (const l of this.lines) {
       l.geometry.dispose();
-      (l.material as LineBasicMaterial).dispose();
+      (l.material as ShaderMaterial).dispose();
       this.group.remove(l);
     }
     this.lines = [];
+    this.materials = [];
   }
 }
 

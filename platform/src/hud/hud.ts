@@ -1,185 +1,202 @@
 /**
- * Instrument strip, alerts ticker, Situation Report and provenance drawer.
- * Every tile renders `value · unit · HH:MM UTC · [badge]`, dims when stale, and
- * says "no data" rather than showing a number it does not have.
+ * HUD orchestration: the instrument rail over the scene, and the margin column
+ * beside it. Tiles are buttons — selecting one opens its detail in the margin.
  */
 
-import type { PartMeta } from '../data/source.js';
-import type { Now } from '../contract/types.js';
-import type { StoreState } from '../data/store.js';
-import {
-  NO_DATA, badgeFor, badgeTitle, fmt, fmtInt, hhmmUTC, stalenessOf,
-} from './format.js';
-import { buildSituationReport, type SceneNarration } from './situation-report.js';
-import { scaleLabel } from '../scene/scales.js';
 
-interface TileSpec {
-  id: string;
-  label: string;
-  unit: string;
-  part: keyof Now;
-  value: (d: Now | null) => string;
-  detail?: (d: Now | null) => string;
+import type { PartMeta } from '../data/source.js';
+import type { StoreState } from '../data/store.js';
+import type { CheckResult } from '../data/checks.js';
+import { LOOPS, type ImageLoop } from '../data/solar-imagery.js';
+import {
+  NO_DATA, badgeFor, badgeTitle, formatAge, hhmmUTC, stalenessOf,
+} from './format.js';
+import { INSTRUMENTS } from './instruments.js';
+import {
+  TABS, escapeHtml, renderChecks, renderDetail, renderReport, renderSources,
+  renderSun, type SunState, type TabId,
+} from './margin.js';
+import type { SceneNarration } from './situation-report.js';
+
+export interface HudCallbacks {
+  onSelectLoop(id: string): void;
+  onToggleSunPlay(): void;
+  onScrubSun(index: number): void;
+  onRunChecks(): void;
 }
 
-const TILES: TileSpec[] = [
-  {
-    id: 'kp', label: 'Planetary K', unit: 'Kp', part: 'kp',
-    value: (d) => fmt(d?.kp?.estimated_kp ?? null, 2),
-    detail: (d) => (d?.kp?.kp ? `NOAA label ${d.kp.kp}` : ''),
-  },
-  {
-    id: 'bz', label: 'IMF Bz (GSM)', unit: 'nT', part: 'solar_wind',
-    value: (d) => fmt(d?.solar_wind?.bz_gsm ?? null, 1),
-    detail: (d) => {
-      const bz = d?.solar_wind?.bz_gsm;
-      if (bz === null || bz === undefined) return '';
-      return bz < 0 ? 'southward — couples energy in' : 'northward';
-    },
-  },
-  {
-    id: 'bt', label: 'IMF total', unit: 'nT', part: 'solar_wind',
-    value: (d) => fmt(d?.solar_wind?.bt ?? null, 1),
-  },
-  {
-    id: 'speed', label: 'Wind speed', unit: 'km/s', part: 'solar_wind',
-    value: (d) => fmtInt(d?.solar_wind?.speed ?? null),
-    detail: (d) => (d?.solar_wind?.spacecraft ? `via ${d.solar_wind.spacecraft}` : ''),
-  },
-  {
-    id: 'density', label: 'Proton density', unit: 'cm⁻³', part: 'solar_wind',
-    value: (d) => fmt(d?.solar_wind?.density ?? null, 1),
-  },
-  {
-    id: 'xray', label: 'X-ray class', unit: '0.1–0.8 nm', part: 'xray',
-    value: (d) => d?.xray?.class ?? NO_DATA,
-    detail: (d) => (d?.xray?.flux_long != null ? `${d.xray.flux_long.toExponential(1)} W/m²` : ''),
-  },
-  {
-    id: 'mpause', label: 'Magnetopause', unit: 'Rₑ', part: 'magnetopause',
-    value: (d) => fmt(d?.magnetopause?.standoff_re ?? null, 1),
-    detail: () => 'Shue et al. 1998',
-  },
-];
-
 export class Hud {
-  private top: HTMLElement;
-  private bottom: HTMLElement;
+  private instrumentsEl: HTMLElement;
+  private tickerEl: HTMLElement;
+  private tabsEl: HTMLElement;
+  private bodyEl: HTMLElement;
+  private statusEl: HTMLElement;
+  private clockEl: HTMLElement;
+
   private tiles = new Map<string, HTMLElement>();
-  private scalesEl!: HTMLElement;
-  private auroraEl!: HTMLElement;
-  private tickerEl!: HTMLElement;
-  private reportEl!: HTMLElement;
-  private statusEl!: HTMLElement;
-  private scaleEl!: HTMLElement;
-  private drawerEl!: HTMLElement;
+  private tab: TabId = 'report';
+  private detailId: string | null = null;
+  private checksRequested = false;
+
+  private state: StoreState | null = null;
+  private checks: CheckResult | null = null;
+  private checksRunning = false;
+  private sun: SunState = {
+    loop: null, loopId: LOOPS[0]!.id, frameIndex: 0,
+    playing: false, loading: true, preloaded: 0, preloading: false,
+  };
   private narration: SceneNarration = {
     mode: 'globe', view: 'deck', reducedMotion: false,
     shield: true, fieldLines: { lines: 0, points: 0 }, aurora: true,
   };
 
-  constructor(top: HTMLElement, bottom: HTMLElement) {
-    this.top = top;
-    this.bottom = bottom;
-    this.build();
+  constructor(private cb: HudCallbacks) {
+    this.instrumentsEl = document.getElementById('instruments') as HTMLElement;
+    this.tickerEl = document.getElementById('ticker') as HTMLElement;
+    this.tabsEl = document.getElementById('tabs') as HTMLElement;
+    this.bodyEl = document.getElementById('margin-body') as HTMLElement;
+    this.statusEl = document.getElementById('status') as HTMLElement;
+    this.clockEl = document.getElementById('clock') as HTMLElement;
+    this.buildTiles();
+    this.buildTabs();
+    this.bindMargin();
   }
 
   setNarration(n: SceneNarration): void { this.narration = n; }
-
-  private build(): void {
-    this.top.innerHTML = '';
-    this.bottom.innerHTML = '';
-
-    const strip = document.createElement('div');
-    strip.className = 'strip';
-    strip.setAttribute('role', 'group');
-    strip.setAttribute('aria-label', 'Space weather instruments');
-
-    for (const t of TILES) {
-      const tile = document.createElement('article');
-      tile.className = 'tile';
-      tile.id = `tile-${t.id}`;
-      tile.innerHTML = `
-        <h3 class="tile-label">${t.label}</h3>
-        <p class="tile-value"><span data-v>—</span><span class="tile-unit">${t.unit}</span></p>
-        <p class="tile-meta"><span data-badge class="badge">E</span><span data-time>—</span></p>
-        <p class="tile-detail" data-detail></p>`;
-      this.tiles.set(t.id, tile);
-      strip.appendChild(tile);
-    }
-
-    const scales = document.createElement('article');
-    scales.className = 'tile tile-scales';
-    scales.id = 'tile-scales';
-    scales.innerHTML = `
-      <h3 class="tile-label">NOAA scales</h3>
-      <p class="scales-row" data-scales></p>
-      <p class="tile-meta"><span class="badge badge-d">D</span><span data-time>—</span></p>
-      <p class="tile-detail">R radio · S radiation · G geomagnetic</p>`;
-    this.scalesEl = scales;
-    strip.appendChild(scales);
-
-    // Aurora rides its own envelope and cadence, so it gets its own tile
-    // rather than a row in the Now-driven table above.
-    const auroraTile = document.createElement('article');
-    auroraTile.className = 'tile';
-    auroraTile.id = 'tile-aurora';
-    auroraTile.innerHTML = `
-      <h3 class="tile-label">Aurora peak</h3>
-      <p class="tile-value"><span data-v>—</span><span class="tile-unit">% prob.</span></p>
-      <p class="tile-meta"><span class="badge badge-d">D</span><span data-time>—</span></p>
-      <p class="tile-detail" data-detail>OVATION Prime · NOAA</p>`;
-    this.auroraEl = auroraTile;
-    strip.appendChild(auroraTile);
-
-    const ticker = document.createElement('div');
-    ticker.className = 'ticker';
-    ticker.setAttribute('role', 'status');
-    ticker.setAttribute('aria-label', 'NOAA alerts');
-    ticker.innerHTML = '<span class="ticker-tag">NOAA</span><span data-ticker>Loading alerts…</span>';
-    this.tickerEl = ticker;
-
-    const status = document.createElement('p');
-    status.className = 'status';
-    status.setAttribute('role', 'status');
-    this.statusEl = status;
-
-    const scale = document.createElement('p');
-    scale.className = 'status status-scale';
-    this.scaleEl = scale;
-
-    // A <details> so the scene can be uncovered, open by default so the
-    // narration is present for assistive tech without any interaction.
-    const report = document.createElement('details');
-    report.className = 'report';
-    report.open = true;
-    report.innerHTML = `
-      <summary><h2 id="report-h">Situation Report</h2></summary>
-      <div class="report-body" data-report aria-live="polite" aria-atomic="false"></div>`;
-    this.reportEl = report.querySelector('[data-report]') as HTMLElement;
-
-    const drawer = document.createElement('details');
-    drawer.className = 'drawer';
-    drawer.innerHTML = '<summary>Provenance — every source, tier and timestamp</summary><div data-drawer></div>';
-    this.drawerEl = drawer.querySelector('[data-drawer]') as HTMLElement;
-
-    // Instruments and the alert ticker ride at the top, the narration at the
-    // bottom, so the scene keeps the middle of the frame.
-    this.top.append(strip, ticker, status, scale);
-    this.bottom.append(report, drawer);
+  setChecks(c: CheckResult | null, running: boolean): void {
+    this.checks = c; this.checksRunning = running; this.renderMargin();
+  }
+  setSunLoop(loop: ImageLoop | null, loading: boolean): void {
+    this.sun.loop = loop;
+    this.sun.loading = loading;
+    // Open on the newest frame — the current Sun, not yesterday's — and still.
+    this.sun.frameIndex = loop ? loop.frames.length - 1 : 0;
+    this.sun.playing = false;
+    this.sun.preloaded = 0;
+    this.sun.preloading = false;
+    this.renderMargin();
   }
 
+  setSunPreload(loaded: number, preloading: boolean): void {
+    this.sun.preloaded = loaded;
+    this.sun.preloading = preloading;
+    if (this.tab === 'sun') this.renderMargin();
+  }
+  setSunFrame(i: number): void {
+    this.sun.frameIndex = i;
+    if (this.tab === 'sun') this.updateSunFrame();
+  }
+  setSunPlaying(p: boolean): void { this.sun.playing = p; if (this.tab === 'sun') this.renderMargin(); }
+  get sunState(): SunState { return this.sun; }
+  get activeTab(): TabId { return this.tab; }
+
+  /* ---------------- construction ---------------- */
+
+  private buildTiles(): void {
+    this.instrumentsEl.innerHTML = '';
+    for (const inst of INSTRUMENTS) {
+      const el = document.createElement('button');
+      el.className = 'tile';
+      el.id = `tile-${inst.id}`;
+      el.type = 'button';
+      el.innerHTML = `
+        <span class="tile-label">${escapeHtml(inst.label)}</span>
+        <span class="tile-value"><span data-v>—</span><span class="tile-unit">${escapeHtml(inst.unit)}</span></span>
+        <span class="tile-meta"><span data-badge class="badge">E</span><span data-time>—</span></span>`;
+      el.addEventListener('click', () => this.openDetail(inst.id));
+      this.tiles.set(inst.id, el);
+      this.instrumentsEl.appendChild(el);
+    }
+
+    // NOAA scales are three values, so they get their own shape.
+    const scales = document.createElement('div');
+    scales.className = 'tile';
+    scales.id = 'tile-scales';
+    scales.innerHTML = `
+      <span class="tile-label">NOAA scales</span>
+      <span class="scales-row" data-scales></span>
+      <span class="tile-meta"><span class="badge badge-d">D</span><span data-time>—</span></span>`;
+    this.tiles.set('scales', scales);
+    this.instrumentsEl.appendChild(scales);
+
+    const aurora = document.createElement('button');
+    aurora.className = 'tile';
+    aurora.id = 'tile-aurora';
+    aurora.type = 'button';
+    aurora.innerHTML = `
+      <span class="tile-label">Aurora peak</span>
+      <span class="tile-value"><span data-v>—</span><span class="tile-unit">%</span></span>
+      <span class="tile-meta"><span class="badge badge-d">D</span><span data-time>—</span></span>`;
+    aurora.addEventListener('click', () => this.selectTab('report'));
+    this.tiles.set('aurora', aurora);
+    this.instrumentsEl.appendChild(aurora);
+  }
+
+  private buildTabs(): void {
+    this.tabsEl.innerHTML = TABS.map((t) =>
+      `<button class="tab" role="tab" data-tab="${t.id}" aria-selected="${t.id === this.tab}">${t.label}</button>`).join('');
+    this.tabsEl.addEventListener('click', (e) => {
+      const t = (e.target as HTMLElement).closest('[data-tab]') as HTMLElement | null;
+      if (t) this.selectTab(t.dataset['tab'] as TabId);
+    });
+  }
+
+  /** Delegated, because the margin's contents are replaced wholesale on render. */
+  private bindMargin(): void {
+    this.bodyEl.addEventListener('click', (e) => {
+      const el = e.target as HTMLElement;
+      const loop = el.closest('[data-loop]') as HTMLElement | null;
+      if (loop) { this.cb.onSelectLoop(loop.dataset['loop']!); return; }
+      if (el.closest('#sun-play')) { this.cb.onToggleSunPlay(); return; }
+    });
+    this.bodyEl.addEventListener('input', (e) => {
+      const el = e.target as HTMLInputElement;
+      if (el.id === 'sun-scrub') this.cb.onScrubSun(Number(el.value));
+    });
+  }
+
+  selectTab(tab: TabId): void {
+    this.tab = tab;
+    if (tab !== 'detail') this.detailId = null;
+    for (const b of this.tabsEl.querySelectorAll('[data-tab]')) {
+      b.setAttribute('aria-selected', String(b.getAttribute('data-tab') === tab));
+    }
+    for (const [, el] of this.tiles) el.removeAttribute('aria-current');
+    // Checks are a handful of network round trips; only run them when asked.
+    if (tab === 'checks' && !this.checksRequested) {
+      this.checksRequested = true;
+      this.cb.onRunChecks();
+    }
+    this.renderMargin();
+  }
+
+  private openDetail(id: string): void {
+    this.tab = 'detail';
+    this.detailId = id;
+    for (const b of this.tabsEl.querySelectorAll('[data-tab]')) b.setAttribute('aria-selected', 'false');
+    for (const [k, el] of this.tiles) {
+      if (el.tagName === 'BUTTON') el.setAttribute('aria-current', String(k === id));
+    }
+    this.renderMargin();
+    this.bodyEl.focus();
+  }
+
+  /* ---------------- rendering ---------------- */
+
   render(state: StoreState): void {
+    this.state = state;
+    const now = new Date();
     const env = state.now;
     const d = env?.data ?? null;
-    const now = new Date();
 
-    for (const t of TILES) {
-      const el = this.tiles.get(t.id)!;
-      const meta: PartMeta | undefined = env?.parts?.[t.part];
+    this.clockEl.textContent =
+      `${now.toISOString().slice(0, 10)} ${hhmmUTC(now.toISOString())} UTC`;
+
+    for (const inst of INSTRUMENTS) {
+      const el = this.tiles.get(inst.id)!;
+      const meta: PartMeta | undefined = env?.parts?.[inst.part];
       const s = stalenessOf(meta, now);
-      const raw = t.value(d);
-
+      const raw = inst.value(d);
       el.classList.toggle('is-stale', s.state === 'stale');
       el.classList.toggle('is-nodata', s.state === 'no-data' || raw === NO_DATA);
 
@@ -188,110 +205,98 @@ export class Hud {
       const b = badgeFor(meta);
       badge.textContent = b;
       badge.className = `badge badge-${b.toLowerCase()}`;
-      badge.title = badgeTitle(meta);
-      (el.querySelector('[data-time]') as HTMLElement).textContent = s.label;
-      (el.querySelector('[data-detail]') as HTMLElement).textContent =
-        s.state === 'no-data' ? '' : (t.detail?.(d) ?? '');
-
-      const unit = el.querySelector('.tile-unit')!.textContent;
+      const detail = inst.detail?.(d) ?? '';
+      (el.querySelector('[data-time]') as HTMLElement).textContent =
+        s.state === 'fresh' && detail ? detail : s.state === 'fresh'
+          ? `${formatAge(s.ageS ?? 0)} old` : s.label;
+      el.setAttribute('title',
+        `${inst.label}: ${raw === NO_DATA ? 'no data' : `${raw} ${inst.unit}`} · ${s.label} · ${badgeTitle(meta)}`);
       el.setAttribute('aria-label',
-        `${t.label}: ${raw === NO_DATA ? 'no data' : `${raw} ${unit}`}, ${s.label}, tier ${badgeTitle(meta)}`);
+        `${inst.label}: ${raw === NO_DATA ? 'no data' : `${raw} ${inst.unit}`}, ${s.label}. Open detail.`);
     }
 
     // NOAA scales
+    const scalesEl = this.tiles.get('scales')!;
+    const row = scalesEl.querySelector('[data-scales]') as HTMLElement;
     const sc = d?.scales;
-    const row = this.scalesEl.querySelector('[data-scales]') as HTMLElement;
-    if (sc) {
-      row.innerHTML = (['R', 'S', 'G'] as const).map((k) => {
-        const v = sc[k];
-        const n = v.scale ?? null;
-        return `<span class="scale-chip scale-${n ?? 'na'}" title="${k} — ${v.text ?? 'no data'}">${k}${n ?? '–'}</span>`;
-      }).join('');
-    } else {
-      row.textContent = NO_DATA;
-    }
-    const scMeta = env?.parts?.scales;
-    (this.scalesEl.querySelector('[data-time]') as HTMLElement).textContent =
-      stalenessOf(scMeta, now).label;
-    this.scalesEl.classList.toggle('is-nodata', !sc);
+    row.innerHTML = sc
+      ? (['R', 'S', 'G'] as const).map((k) => {
+        const n = sc[k].scale ?? null;
+        return `<span class="scale-chip scale-${n ?? 'na'}" title="${k} — ${escapeHtml(sc[k].text ?? 'no data')}">${k}${n ?? '–'}</span>`;
+      }).join('')
+      : NO_DATA;
+    (scalesEl.querySelector('[data-time]') as HTMLElement).textContent =
+      stalenessOf(env?.parts?.scales, now).label;
+    scalesEl.classList.toggle('is-nodata', !sc);
 
-    // Aurora tile — its own envelope, its own staleness.
+    // Aurora
+    const auEl = this.tiles.get('aurora')!;
     const au = state.aurora;
-    const auStale = au?.data
-      ? stalenessOf({
+    const auMeta: PartMeta | undefined = au
+      ? {
         tier: 'modeled', source: au.source, source_url: au.source_url, model: au.model,
-        data_time: au.data.observation_time, latency_s: au.latency_s,
+        data_time: au.data?.observation_time ?? null, latency_s: au.latency_s,
         stale_after_s: au.stale_after_s,
-      }, now)
-      : { state: 'no-data' as const, ageS: null, label: NO_DATA };
-    (this.auroraEl.querySelector('[data-v]') as HTMLElement).textContent =
+      }
+      : undefined;
+    const auS = stalenessOf(auMeta, now);
+    (auEl.querySelector('[data-v]') as HTMLElement).textContent =
       au?.data ? String(au.data.max_probability) : NO_DATA;
-    (this.auroraEl.querySelector('[data-time]') as HTMLElement).textContent = auStale.label;
-    (this.auroraEl.querySelector('[data-detail]') as HTMLElement).textContent =
-      au?.data ? `OVATION Prime · valid ${hhmmUTC(au.data.forecast_time)} UTC` : 'OVATION Prime · NOAA';
-    this.auroraEl.classList.toggle('is-stale', auStale.state === 'stale');
-    this.auroraEl.classList.toggle('is-nodata', auStale.state === 'no-data');
+    (auEl.querySelector('[data-time]') as HTMLElement).textContent =
+      au?.data ? `valid ${hhmmUTC(au.data.forecast_time)}` : auS.label;
+    auEl.classList.toggle('is-stale', auS.state === 'stale');
+    auEl.classList.toggle('is-nodata', !au?.data);
 
-    // Alerts ticker
-    const tick = this.tickerEl.querySelector('[data-ticker]') as HTMLElement;
-    if (d?.alerts?.length) {
-      tick.textContent = d.alerts
-        .slice(0, 4)
-        .map((a) => `${hhmmUTC(a.issued)} UTC — ${a.headline || a.product}`)
-        .join('   •   ');
-    } else {
-      tick.textContent = d ? 'No alerts, watches or warnings in the feed.' : NO_DATA;
-    }
+    // Ticker
+    this.tickerEl.innerHTML = '<span class="ticker-tag">NOAA</span><span data-t></span>';
+    const t = this.tickerEl.querySelector('[data-t]') as HTMLElement;
+    t.textContent = d?.alerts?.length
+      ? d.alerts.slice(0, 5).map((a) => `${hhmmUTC(a.issued)} — ${a.headline || a.product}`).join('   ·   ')
+      : d ? 'No alerts, watches or warnings in the feed.' : NO_DATA;
 
-    // Connection status — an honest line about the last refresh.
+    // Status
     if (state.lastError) {
       this.statusEl.textContent =
-        `Last refresh failed (${state.lastError}) at ${hhmmUTC(state.lastAttempt)} UTC. ` +
-        `Showing the last good data, ageing.`;
+        `Last refresh failed (${state.lastError}) at ${hhmmUTC(state.lastAttempt)} UTC. Showing last good data, ageing.`;
       this.statusEl.classList.add('is-error');
-    } else if (state.loading && !env) {
-      this.statusEl.textContent = 'Fetching live data from NOAA SWPC…';
-      this.statusEl.classList.remove('is-error');
     } else if (env) {
       this.statusEl.textContent =
-        `Live · ${env.source} · refreshed ${hhmmUTC(env.fetched_at)} UTC · ` +
-        `adapter: DirectSource (stage A)`;
+        `Live · NOAA SWPC · refreshed ${hhmmUTC(env.fetched_at)} UTC · DirectSource (stage A)`;
       this.statusEl.classList.remove('is-error');
+    } else {
+      this.statusEl.textContent = 'Fetching live data from NOAA SWPC…';
     }
-    // The scale mode is never hidden and never implicit (charter §2).
-    this.scaleEl.textContent = scaleLabel(this.narration.mode);
 
-    // Situation Report
-    const lines = buildSituationReport(env, this.narration, now, state.aurora);
-    this.reportEl.innerHTML = lines.map((l) => `<p>${escapeHtml(l)}</p>`).join('');
-
-    // Provenance drawer
-    this.drawerEl.innerHTML = env
-      ? `<table class="prov"><thead><tr><th>Element</th><th>Tier</th><th>Source</th><th>Data time (UTC)</th><th>Latency</th></tr></thead><tbody>${
-        Object.entries(env.parts).map(([k, m]) => `<tr>
-            <td>${k}</td>
-            <td><span class="badge badge-${badgeFor(m).toLowerCase()}">${badgeFor(m)}</span> ${m.tier}${m.model ? ` · ${escapeHtml(m.model.name)}` : ''}</td>
-            <td><a href="${m.source_url}" rel="noreferrer noopener" target="_blank">${escapeHtml(m.source)}</a></td>
-            <td>${m.data_time ? hhmmUTC(m.data_time) : NO_DATA}</td>
-            <td>${m.error ? `<span class="err">${escapeHtml(m.error)}</span>` : m.latency_s === null ? NO_DATA : `${m.latency_s}s`}</td>
-          </tr>`).join('')
-      }${au ? `<tr>
-            <td>aurora</td>
-            <td><span class="badge badge-d">D</span> modeled · ${escapeHtml(au.model?.name ?? '')}</td>
-            <td><a href="${au.source_url}" rel="noreferrer noopener" target="_blank">${escapeHtml(au.source)}</a></td>
-            <td>${au.data ? hhmmUTC(au.data.observation_time) : NO_DATA}</td>
-            <td>${au.data ? `${au.latency_s}s` : NO_DATA}</td>
-          </tr>` : ''}</tbody></table>
-      <p class="prov-note">Models cited in-app: Shue et al. 1998 (doi:10.1029/98JA01103) for the
-      magnetopause; Farris &amp; Russell 1994 for the bow shock; IGRF-14 (IAGA, epoch 2025.0) for
-      the field lines; OVATION Prime (NOAA SWPC) for the aurora;
-      astronomy-engine (VSOP87/Meeus-derived) for all positions and the sub-solar point.
-      Ambient elements — corona texture, starfield, colour — are artwork and carry the M badge.</p>`
-      : '<p>No envelope loaded yet.</p>';
+    this.renderMargin();
   }
-}
 
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+  private renderMargin(): void {
+    const state = this.state;
+    if (!state) return;
+    const now = new Date();
+    switch (this.tab) {
+      case 'report': this.bodyEl.innerHTML = renderReport(state, this.narration, now); break;
+      case 'sun': this.bodyEl.innerHTML = renderSun(this.sun, LOOPS); break;
+      case 'sources': this.bodyEl.innerHTML = renderSources(state, this.checks); break;
+      case 'checks': this.bodyEl.innerHTML = renderChecks(this.checks, this.checksRunning); break;
+      case 'detail':
+        this.bodyEl.innerHTML = this.detailId ? renderDetail(this.detailId, state, now) : '';
+        break;
+    }
+  }
+
+  /** Swap just the image while a loop plays, rather than re-rendering the panel. */
+  private updateSunFrame(): void {
+    const img = document.getElementById('sun-img') as HTMLImageElement | null;
+    const f = this.sun.loop?.frames[this.sun.frameIndex];
+    if (!img || !f) { this.renderMargin(); return; }
+    img.src = f.url;
+    const stamp = this.bodyEl.querySelector('.sun-stamp');
+    if (stamp) {
+      const age = Math.round((Date.now() - Date.parse(f.time)) / 60000);
+      stamp.innerHTML = `<span>${hhmmUTC(f.time)} UTC</span><span>${age} min ago</span>`;
+    }
+    const scrub = document.getElementById('sun-scrub') as HTMLInputElement | null;
+    if (scrub && document.activeElement !== scrub) scrub.value = String(this.sun.frameIndex);
+  }
 }

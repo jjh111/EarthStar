@@ -5,10 +5,12 @@
  */
 
 import type { NowEnvelope, Source } from './source.js';
-import type { AuroraNow, Envelope } from '../contract/types.js';
+import type { AuroraNow, Envelope, SolarWindSeries } from '../contract/types.js';
 
 export interface StoreState {
   now: NowEnvelope | null;
+  /** Recent history, from the same fetch as `now`. */
+  series: Envelope<SolarWindSeries> | null;
   /** Its own cadence: ~5-minute product, 141 KB gzipped. */
   aurora: Envelope<AuroraNow | null> | null;
   /** Last refresh attempt, whether or not it succeeded. */
@@ -21,7 +23,7 @@ type Listener = (s: StoreState) => void;
 
 export class NowStore {
   private state: StoreState = {
-    now: null, aurora: null, lastAttempt: null, lastError: null, loading: true,
+    now: null, series: null, aurora: null, lastAttempt: null, lastError: null, loading: true,
   };
   private listeners = new Set<Listener>();
   private timer: number | null = null;
@@ -54,8 +56,11 @@ export class NowStore {
     this.inflight = ctl;
     this.emit({ loading: true });
     try {
-      const now = await this.source.fetchNow(ctl.signal);
-      this.emit({ now, lastAttempt: new Date().toISOString(), lastError: null, loading: false });
+      const { now, series } = await this.source.fetchSnapshot(ctl.signal);
+      this.emit({
+        now, series,
+        lastAttempt: new Date().toISOString(), lastError: null, loading: false,
+      });
     } catch (e) {
       if (ctl.signal.aborted) return;
       // Keep the previous envelope; it simply gets older, and says so.

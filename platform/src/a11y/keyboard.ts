@@ -11,6 +11,7 @@ export interface KeyActions {
   toggleMotion(): void;
   toggleShield(): void;
   toggleAurora(): void;
+  toggleWind(): void;
   refresh(): void;
   focusReport(): void;
 }
@@ -19,7 +20,7 @@ const HELP: [string, string][] = [
   ['1', 'Deck view'], ['2', 'Magnetosphere view'], ['3', 'Orbit view'],
   ['s', 'Toggle Globe / True scale'],
   ['m', 'Toggle reduced motion'], ['f', 'Toggle the magnetic shield'],
-  ['a', 'Toggle the aurora overlay'],
+  ['a', 'Toggle the aurora overlay'], ['w', 'Toggle the solar wind stream'],
   ['r', 'Refresh data now'], ['?', 'This help'],
 ];
 
@@ -38,6 +39,7 @@ export function installKeyboard(actions: KeyActions): () => void {
       case 'm': case 'M': actions.toggleMotion(); break;
       case 'f': case 'F': actions.toggleShield(); break;
       case 'a': case 'A': actions.toggleAurora(); break;
+      case 'w': case 'W': actions.toggleWind(); break;
       case 'r': case 'R': actions.refresh(); break;
       case '?': announce(HELP.map(([k, d]) => `${k}: ${d}`).join('. ')); break;
       default: return;

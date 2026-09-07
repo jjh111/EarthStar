@@ -10,7 +10,7 @@
  */
 
 import {
-  AmbientLight, Color, PointLight, Scene, WebGLRenderer,
+  AmbientLight, Color, PointLight, Scene, Vector3, WebGLRenderer,
 } from 'three';
 import { Earth } from './earth.js';
 import { Sun } from './sun.js';
@@ -22,7 +22,9 @@ import {
 } from './scales.js';
 import { moonGeo, planetState, sunGeo, toScene } from '../models/ephemeris.js';
 import { FieldLines, Magnetosphere } from './magnetosphere.js';
+import { SolarWind } from './solar-wind.js';
 import { magnetopause } from '../models/shue1998.js';
+import { gastDegrees } from '../models/ephemeris.js';
 import type { PlanetName } from '../models/ephemeris.js';
 import type { AuroraNow, Now } from '../contract/types.js';
 
@@ -40,7 +42,10 @@ export class Viewer {
   private sunLight = new PointLight(0xfff2dd, 1.6, 0, 0);
   private fieldLines = new FieldLines();
   private magnetosphere = new Magnetosphere();
+  private solarWind: SolarWind;
   private shieldVisible = true;
+  private windVisible = true;
+  private sunDirEarthFixed = new Vector3(1, 0, 0);
 
   private mode: ScaleMode = 'globe';
   private _reducedMotion = false;
@@ -74,6 +79,10 @@ export class Viewer {
     // Sun-oriented and must NOT spin, so it hangs off the unrotated group.
     this.earth.spin.add(this.fieldLines.group);
     this.earth.group.add(this.magnetosphere.group);
+    // Mid-range devices choke on a large point cloud; halve it when the GPU
+    // reports a modest pixel budget.
+    this.solarWind = new SolarWind(window.devicePixelRatio > 1.5 ? 4200 : 2600);
+    this.earth.group.add(this.solarWind.points);
     this.scene.add(new AmbientLight(0x24304a, 0.55));
 
     this.planets = makePlanets();
@@ -116,6 +125,13 @@ export class Viewer {
 
   get shieldOn(): boolean { return this.shieldVisible; }
 
+  setWindVisible(v: boolean): void {
+    this.windVisible = v;
+    this.solarWind.setVisible(v);
+  }
+
+  get windOn(): boolean { return this.windVisible; }
+
   /** Field-line counts, for the Situation Report and the perf readout. */
   get fieldLineStats(): { lines: number; points: number } {
     return { lines: this.fieldLines.lineCount, points: this.fieldLines.pointCount };
@@ -125,11 +141,13 @@ export class Viewer {
     this._reducedMotion = on;
     this.sun.setReducedMotion(on);
     this.rig.setReducedMotion(on);
+    this.fieldLines.setReducedMotion(on);
+    this.solarWind.setReducedMotion(on);
   }
 
-  setView(view: ViewName): void {
+  setView(view: ViewName, immediate = false): void {
     const { earthPos, earthRadius, sunDir } = this.geometryNow(new Date());
-    this.rig.goTo(view, earthPos, earthRadius, sunDir);
+    this.rig.goTo(view, earthPos, earthRadius, sunDir, immediate);
   }
 
   private geometryNow(date: Date) {
@@ -168,16 +186,37 @@ export class Viewer {
     this.earth.update(date, sunDir);
     this.earth.setAurora(this.aurora, this.auroraVisible);
 
-    // The shield. Tracing happens at most once a day; the surfaces rebuild only
-    // when the live wind actually moves them.
+    // The live Shue solution drives the boundary surfaces, the confinement of
+    // the field lines, and where the wind stream parts. One computation, three
+    // consumers, so they cannot disagree on screen.
+    const sw = this.now?.solar_wind;
+    const mp = magnetopause(sw?.bz_gsm ?? null, sw?.density ?? null, sw?.speed ?? null);
+
+    // Field lines live in the Earth-fixed frame, so the inertial Sun direction
+    // must be counter-rotated by GAST before they can use it.
+    const gast = (gastDegrees(date) * Math.PI) / 180;
+    const cg = Math.cos(-gast), sg = Math.sin(-gast);
+    this.sunDirEarthFixed.set(
+      sunDir.x * cg + sunDir.z * sg, sunDir.y, -sunDir.x * sg + sunDir.z * cg,
+    );
+
     if (this.shieldVisible) {
       this.fieldLines.ensureTraced(date);
       this.fieldLines.setScale(earthRadius);
+      this.fieldLines.setDynamics(
+        elapsed, this.sunDirEarthFixed,
+        mp?.r0Re ?? null, mp?.alpha ?? null, this.now?.kp?.estimated_kp ?? null,
+      );
       this.magnetosphere.setScale(earthRadius);
-      const sw = this.now?.solar_wind;
-      this.magnetosphere.update(
-        magnetopause(sw?.bz_gsm ?? null, sw?.density ?? null, sw?.speed ?? null),
-        sunDir,
+      this.magnetosphere.update(mp, sunDir);
+    }
+
+    if (this.windVisible) {
+      this.solarWind.setVisible(true);
+      this.solarWind.setScale(earthRadius);
+      this.solarWind.update(
+        elapsed, sunDir, sw?.speed ?? null, sw?.density ?? null,
+        mp?.r0Re ?? null, mp?.alpha ?? null,
       );
     }
 
@@ -197,7 +236,7 @@ export class Viewer {
 
   start(): void {
     if (this.raf) return;
-    this.setView('deck');
+    this.setView('deck', true);
     this.raf = requestAnimationFrame(this.frame);
   }
 
@@ -217,6 +256,7 @@ export class Viewer {
     this.sun.dispose();
     this.fieldLines.dispose();
     this.magnetosphere.dispose();
+    this.solarWind.dispose();
     this.rig.dispose();
     this.renderer.dispose();
   }

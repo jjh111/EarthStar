@@ -27,8 +27,19 @@ export interface NowEnvelope extends Envelope<Now> {
   parts: Record<keyof Now, PartMeta>;
 }
 
+export interface Snapshot {
+  now: NowEnvelope;
+  series: Envelope<SolarWindSeries>;
+}
+
 export interface Source {
   readonly name: string;
+  /**
+   * `/now` and the solar-wind series come from the same two upstream files, so
+   * they are fetched together — one round trip, and the sparkline is guaranteed
+   * to be the same data as the reading above it.
+   */
+  fetchSnapshot(signal?: AbortSignal): Promise<Snapshot>;
   fetchNow(signal?: AbortSignal): Promise<NowEnvelope>;
   fetchSolarWindSeries(signal?: AbortSignal): Promise<Envelope<SolarWindSeries>>;
   fetchAurora(signal?: AbortSignal): Promise<Envelope<AuroraNow | null>>;

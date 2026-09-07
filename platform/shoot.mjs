@@ -15,7 +15,7 @@ if (!EXEC) {
   console.error('Set CHROME to a Chromium executable. See the header of this file.');
   process.exit(1);
 }
-const BASE = process.env['BASE'] ?? 'http://localhost:5190/viewer/';
+const BASE = process.env['BASE'] ?? 'http://localhost:5192/viewer/';
 const OUT = 'docs/screenshots';
 
 const browser = await chromium.launch({

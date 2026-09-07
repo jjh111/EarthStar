@@ -11,12 +11,6 @@ export default defineConfig({
     target: 'es2022',
     // Payload budget: ≤ 3 MB initial (plan §5.4). Warn well before that.
     chunkSizeWarningLimit: 1200,
-    rollupOptions: {
-      input: {
-        main: new URL('./index.html', import.meta.url).pathname,
-        verify: new URL('./verify.html', import.meta.url).pathname,
-      },
-    },
   },
   server: { port: 5180 },
 });

@@ -77,6 +77,33 @@ contract already agreed. The parser nonetheless places each cell by its own stat
 lon/lat rather than trusting the ordering, so an upstream reordering cannot silently
 rotate the oval.
 
+### Solar imagery — and why it works on stage A after all
+
+`docs/sources.md` §1 records that Helioviewer's JSON API sends no CORS headers. That
+ruled out its *API*, not imagery in general: **`<img>` elements are not subject to CORS**,
+only `fetch`/XHR are. NOAA SWPC additionally hosts frame lists as CORS-clean JSON, so both
+the list and the pictures work directly from the browser.
+
+| Product | Frame list | Frames | Cadence | Per frame |
+|---------|-----------|--------|---------|-----------|
+| GOES-19 SUVI 304/195/171/131 Å | `/products/animations/suvi-primary-<band>.json` | ~360 | 4 min | **1.1 MB PNG** |
+| SOHO LASCO C2 / C3 | `/products/animations/lasco-c2.json`, `-c3` | ~350 | 12 min | 94 KB JPEG |
+
+Both filename conventions carry the observation time, so every frame can be stamped:
+
+```
+SUVI    or_suvi-l2-ci304_g19_s20260906T033600Z_e20260906T034000Z_v1-0-2.png
+LASCO   20260906_0336_c2_512.jpg
+```
+
+A frame whose time cannot be parsed is **not displayed** — an undated image would fail the
+charter as surely as an undated number.
+
+**Download cost is disclosed, not incurred.** A full SUVI day is 360 × 1.1 MB ≈ 400 MB.
+The panel shows the newest frame as a still, subsamples playback to 24 frames evenly across
+the window (always keeping the newest), and states the size on the button — *"Load loop ·
+24 frames, ~26 MB"* — before fetching any of it.
+
 ### Verified but not yet consumed (phase 2)
 
 | Feed | Endpoint | gzip | Notes |

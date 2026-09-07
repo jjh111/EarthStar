@@ -1,0 +1,87 @@
+/**
+ * The instrument definitions. Each tile is a button: selecting one opens its
+ * detail in the margin, which is where the drill-down lives — the value, its
+ * provenance, a sparkline of recent history, and what the number means.
+ */
+
+import type { Now } from '../contract/types.js';
+import { NO_DATA, fmt, fmtInt } from './format.js';
+
+export interface Instrument {
+  id: string;
+  label: string;
+  unit: string;
+  /** Which part of the Now envelope carries this value's provenance. */
+  part: keyof Now;
+  value: (d: Now | null) => string;
+  /** Short line under the value. */
+  detail?: (d: Now | null) => string;
+  /** Column of the solar-wind series to sparkline, when there is one. */
+  series?: 'bz_gsm' | 'bt' | 'speed' | 'density';
+  /** What the reader should take from it — shown in the detail panel. */
+  meaning: string;
+}
+
+export const INSTRUMENTS: Instrument[] = [
+  {
+    id: 'kp', label: 'Planetary K', unit: 'Kp', part: 'kp',
+    value: (d) => fmt(d?.kp?.estimated_kp ?? null, 2),
+    detail: (d) => (d?.kp?.kp ? `NOAA ${d.kp.kp}` : ''),
+    meaning: 'A 0–9 index of global geomagnetic disturbance, derived from ground '
+      + 'magnetometers. Below 5 is quiet to unsettled; 5 and above is a geomagnetic '
+      + 'storm, and the aurora moves toward the equator.',
+  },
+  {
+    id: 'bz', label: 'IMF Bz', unit: 'nT', part: 'solar_wind', series: 'bz_gsm',
+    value: (d) => fmt(d?.solar_wind?.bz_gsm ?? null, 1),
+    detail: (d) => {
+      const bz = d?.solar_wind?.bz_gsm;
+      return bz === null || bz === undefined ? '' : bz < 0 ? 'southward' : 'northward';
+    },
+    meaning: 'The north–south component of the interplanetary magnetic field, in GSM '
+      + 'coordinates. This is the single most useful predictor on the panel: when Bz '
+      + 'turns southward it opposes Earth’s field, magnetic reconnection opens the '
+      + 'magnetosphere, and energy pours in. Sustained Bz below about −10 nT is what '
+      + 'storms are made of.',
+  },
+  {
+    id: 'bt', label: 'IMF total', unit: 'nT', part: 'solar_wind', series: 'bt',
+    value: (d) => fmt(d?.solar_wind?.bt ?? null, 1),
+    meaning: 'Total strength of the interplanetary magnetic field. A high Bt means '
+      + 'there is a lot of field available to turn southward.',
+  },
+  {
+    id: 'speed', label: 'Wind speed', unit: 'km/s', part: 'solar_wind', series: 'speed',
+    value: (d) => fmtInt(d?.solar_wind?.speed ?? null),
+    detail: (d) => (d?.solar_wind?.spacecraft ? `via ${d.solar_wind.spacecraft}` : ''),
+    meaning: 'Bulk speed of the solar wind at L1, about a million miles sunward of Earth. '
+      + 'Around 300–400 km/s is slow and quiet; above 600 km/s usually means a coronal '
+      + 'hole stream. Speed sets how hard the wind presses on the magnetosphere, and how '
+      + 'long the warning is: at 400 km/s, L1 buys roughly an hour.',
+  },
+  {
+    id: 'density', label: 'Proton density', unit: 'cm⁻³', part: 'solar_wind', series: 'density',
+    value: (d) => fmt(d?.solar_wind?.density ?? null, 1),
+    meaning: 'Protons per cubic centimetre in the solar wind. With speed it sets the '
+      + 'dynamic pressure that compresses the magnetopause.',
+  },
+  {
+    id: 'xray', label: 'X-ray class', unit: '0.1–0.8 nm', part: 'xray',
+    value: (d) => d?.xray?.class ?? NO_DATA,
+    detail: (d) => (d?.xray?.flux_long != null ? `${d.xray.flux_long.toExponential(1)} W/m²` : ''),
+    meaning: 'Solar soft X-ray flux measured by GOES, expressed on the NOAA flare scale. '
+      + 'Each letter is ten times the one before: A, B, C, M, X. M and X class flares '
+      + 'cause radio blackouts on Earth’s sunlit side within minutes — X-rays arrive '
+      + 'at the speed of light, so there is no warning.',
+  },
+  {
+    id: 'mpause', label: 'Magnetopause', unit: 'Rₑ', part: 'magnetopause',
+    value: (d) => fmt(d?.magnetopause?.standoff_re ?? null, 1),
+    detail: () => 'Shue 1998',
+    meaning: 'Modelled distance from Earth’s centre to the sunward edge of the '
+      + 'magnetosphere, in Earth radii, computed from the live solar wind. Typically '
+      + '10–11 Rₑ. Under storm pressure it can be pushed inside 7 Rₑ — closer than '
+      + 'geostationary orbit at 6.6 Rₑ, which then sits outside the magnetosphere and '
+      + 'exposed to the solar wind directly.',
+  },
+];

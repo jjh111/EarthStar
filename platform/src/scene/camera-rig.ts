@@ -46,7 +46,10 @@ export class CameraRig {
    * side-on, so the compressed dayside and the flared tail are both legible;
    * Orbit backs off to the whole inner system.
    */
-  goTo(view: ViewName, earthPos: Vector3, earthRadius: number, sunDir: Vector3): void {
+  goTo(
+    view: ViewName, earthPos: Vector3, earthRadius: number, sunDir: Vector3,
+    immediate = false,
+  ): void {
     this.view = view;
     let target = view === 'orbit' ? new Vector3(0, 0, 0) : earthPos.clone();
 
@@ -76,11 +79,14 @@ export class CameraRig {
     } else {
       pos = new Vector3(0, 4.2, 9.5);
     }
-    this.animateTo(pos, target);
+    this.animateTo(pos, target, immediate);
   }
 
-  private animateTo(pos: Vector3, target: Vector3): void {
-    if (this.reducedMotion) {
+  private animateTo(pos: Vector3, target: Vector3, immediate = false): void {
+    // The first view is a cut, not a flight: easing in from the constructor's
+    // arbitrary starting point means the first painted frame is wrong, and a
+    // backgrounded tab can be shown mid-flight.
+    if (this.reducedMotion || immediate) {
       this.camera.position.copy(pos);
       this.controls.target.copy(target);
       this.controls.update();

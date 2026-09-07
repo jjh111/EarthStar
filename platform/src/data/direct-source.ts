@@ -9,7 +9,7 @@
  */
 
 import type { AuroraNow, Envelope, Now, SolarWindSeries } from '../contract/types.js';
-import type { NowEnvelope, PartMeta, Source } from './source.js';
+import type { NowEnvelope, PartMeta, Snapshot, Source } from './source.js';
 import { magnetopause } from '../models/shue1998.js';
 import {
   SWPC_URL, parseAlerts, parseKpNow, parseScalesNow, parseSolarWindNow,
@@ -74,6 +74,10 @@ export class DirectSource implements Source {
   readonly name = 'DirectSource (stage A · browser → NOAA SWPC)';
 
   async fetchNow(signal?: AbortSignal): Promise<NowEnvelope> {
+    return (await this.fetchSnapshot(signal)).now;
+  }
+
+  async fetchSnapshot(signal?: AbortSignal): Promise<Snapshot> {
     const [mag, wind, kp, xray, scales, alerts] = await Promise.all([
       getJson<unknown>(SWPC_URL.mag, signal),
       getJson<unknown>(SWPC_URL.wind, signal),
@@ -131,7 +135,7 @@ export class DirectSource implements Source {
       .map((t) => Date.parse(t)).filter(Number.isFinite);
     const data_time = times.length ? new Date(Math.min(...times)).toISOString() : fetched_at;
 
-    return {
+    const now: NowEnvelope = {
       source: SWPC,
       source_url: 'https://services.swpc.noaa.gov/',
       tier: 'mixed', model: null,
@@ -146,6 +150,23 @@ export class DirectSource implements Source {
       },
       data, parts,
     };
+
+    // Built from the same two responses — no second round trip, and the
+    // history can never disagree with the current reading drawn above it.
+    const seriesData = parseSolarWindSeries(mag.json, wind.json);
+    const seriesTime = seriesData.time[seriesData.time.length - 1] ?? fetched_at;
+    const series: Envelope<SolarWindSeries> = {
+      source: `${SWPC} · real-time solar wind (L1)`,
+      source_url: SWPC_URL.mag,
+      tier: 'measured', model: null,
+      fetched_at, data_time: seriesTime,
+      latency_s: latency(fetched_at, seriesTime) ?? 0,
+      stale_after_s: STALE_AFTER.solar_wind,
+      units: { bz_gsm: 'nT', bt: 'nT', speed: 'km/s', density: 'cm^-3', temperature: 'K' },
+      data: seriesData,
+    };
+
+    return { now, series };
   }
 
   async fetchAurora(signal?: AbortSignal): Promise<Envelope<AuroraNow | null>> {

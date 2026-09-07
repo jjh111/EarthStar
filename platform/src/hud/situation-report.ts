@@ -20,6 +20,7 @@ export interface SceneNarration {
   shield: boolean;
   fieldLines: { lines: number; points: number };
   aurora: boolean;
+  wind?: boolean;
 }
 
 const KP_WORDS: [number, string][] = [
@@ -184,10 +185,12 @@ export function buildSituationReport(
       `between hemispheres and violet where they stay open toward the solar wind. The ` +
       `teal boundary is the Shue et al. 1998 magnetopause and the orange one the ` +
       `Farris & Russell 1994 bow shock, both re-shaped by the live solar wind above. ` +
-      `The field lines rotate with the Earth because the main field is fixed to it. ` +
-      `The boundary surfaces are drawn out to 100° from the sunward axis; the real ` +
-      `magnetotail continues far beyond that, and Shue et al. fitted the dayside and ` +
-      `near flanks, so the tail is truncated rather than ended.`,
+      `The field lines rotate with the Earth because the main field is fixed to it, and ` +
+      `they are clamped where they would cross the magnetopause — so the dayside visibly ` +
+      `compresses as pressure rises. That clamp is geometry, not magnetohydrodynamics: a ` +
+      `full treatment would also stretch the tail. The boundary surfaces stop at 100° ` +
+      `from the sunward axis, inside the range Shue et al. fitted; the real magnetotail ` +
+      `continues far beyond.`,
     );
   } else {
     lines.push('The magnetic shield is hidden.');
@@ -196,6 +199,21 @@ export function buildSituationReport(
     `${scaleLabel(scene.mode)}. Camera: ${scene.view} view. ` +
     `${scene.reducedMotion ? 'Reduced motion is on — the corona is still and camera moves cut rather than glide.' : 'Motion is enabled.'}`,
   );
+  if (scene.wind !== false && d?.solar_wind?.speed != null) {
+    lines.push(
+      `The streaming particles are ambient [M] — far sparser and brighter than the real ` +
+      `wind, which is invisible. What is real is their behaviour: they move at a rate set ` +
+      `by the measured ${Math.round(d.solar_wind.speed)} km/s, their number follows the ` +
+      `measured density, and they part around the same modelled magnetopause the HUD ` +
+      `reports. When the boundary is pushed in, the flow closes in with it.`,
+    );
+  }
+  if ((d?.kp?.estimated_kp ?? 0) > 4) {
+    lines.push(
+      `The field lines are shivering. That is ambient [M] — a legend for the elevated ` +
+      `Kp above, not a motion the real field makes.`,
+    );
+  }
   lines.push(
     `Colour, starfield and the corona's texture are ambient [M] — they are ` +
     `parameter-driven artwork, not measurements. The corona's brightness follows the ` +
