@@ -13,6 +13,7 @@
 import { DirectSource } from './direct-source.js';
 import { SWPC_URL, auroraAt, parseXrayLatestClass, xrayClass } from './swpc.js';
 import { angularSeparationDeg, geomagneticNorthPole } from '../models/igrf14.js';
+import { GEOSYNC_RE, dipoleFieldAtRe } from './geosync.js';
 import { hhmmUTC } from '../contract/types.js';
 
 export interface CheckRow {
@@ -137,6 +138,35 @@ export async function runChecks(signal?: AbortSignal): Promise<CheckResult> {
     note: `the feed interleaves several spacecraft; newest of ANY source right now is `
       + `"${String(newestAny['source'])}". Taking that instead is the bug this row guards.`,
   });
+
+  /**
+   * The one falsifiable claim the shield makes. Shue puts the magnetopause
+   * somewhere; GOES sits at 6.6 Rₑ and measures a real field there. If the
+   * model says the boundary is outside geostationary orbit, the spacecraft
+   * should be inside the magnetosphere and reading a field of roughly dipole
+   * order. If it says inside, GOES should be in the solar wind and the field
+   * should have collapsed.
+   */
+  const g = d.geosync;
+  const standoff = d.magnetopause?.standoff_re ?? null;
+  if (g && g.total_nt !== null && standoff !== null) {
+    const dipole = dipoleFieldAtRe(GEOSYNC_RE);
+    const insideModel = standoff > GEOSYNC_RE;
+    // Inside the magnetosphere the field is dipole-order, depressed by the ring
+    // current; outside it collapses to solar-wind values of a few nT.
+    const looksInside = g.total_nt > dipole * 0.25;
+    rows.push({
+      name: 'Shield model vs GOES at 6.6 Rₑ',
+      ours: `standoff ${standoff.toFixed(1)} Rₑ → ${insideModel ? 'inside' : 'OUTSIDE'}`,
+      theirs: `${g.total_nt.toFixed(0)} nT → ${looksInside ? 'inside' : 'outside'}`,
+      ok: insideModel === looksInside,
+      note: `Dipole at 6.6 Rₑ is ${dipole.toFixed(0)} nT; GOES-${g.satellite ?? '?'} reads `
+        + `${g.total_nt.toFixed(0)} nT, a deficit of ${(dipole - g.total_nt).toFixed(0)} nT `
+        + `from the ring and magnetopause currents. The check is the agreement of the two `
+        + `verdicts, not the numbers — Shue's boundary and this magnetometer are `
+        + `independent.${g.arcjet ? ' NOTE: thruster firing, reading suspect.' : ''}`,
+    });
+  }
 
   /**
    * The auroral oval encircles the geomagnetic (dipole) pole, ~13° from the dip

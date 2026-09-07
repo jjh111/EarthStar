@@ -107,6 +107,23 @@ export const INSTRUMENTS: Instrument[] = [
       + 'rather than minutes.',
   },
   {
+    id: 'geosync', label: 'Field at 6.6 Rₑ', unit: 'nT', part: 'geosync',
+    value: (d) => fmtInt(d?.geosync?.total_nt ?? null),
+    detail: (d) => {
+      const g = d?.geosync;
+      if (!g || g.deficit_nt === null) return '';
+      if (g.arcjet) return 'thruster firing — suspect';
+      return `${g.deficit_nt > 0 ? '−' : '+'}${Math.abs(g.deficit_nt).toFixed(0)} vs dipole`;
+    },
+    meaning: 'Total magnetic field measured by GOES at geostationary orbit, 6.6 Earth '
+      + 'radii out. This is the only in-situ magnetic measurement on the panel, and it is '
+      + 'the one check available on the modelled shield: when the magnetopause is pushed '
+      + 'inside 6.6 Rₑ, the spacecraft finds itself in the solar wind and the field it '
+      + 'measures collapses. The reading normally sits below the dipole value for that '
+      + 'distance, because the ring current and magnetopause currents subtract from '
+      + 'Earth’s own field — the size of that deficit is itself a storm indicator.',
+  },
+  {
     id: 'mpause', label: 'Magnetopause', unit: 'Rₑ', part: 'magnetopause',
     value: (d) => fmt(d?.magnetopause?.standoff_re ?? null, 1),
     detail: () => 'Shue 1998',

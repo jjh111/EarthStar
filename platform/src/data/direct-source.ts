@@ -11,6 +11,9 @@
 import type { AuroraNow, Envelope, Now, SolarWindSeries } from '../contract/types.js';
 import { PARTICLE_URL, parseParticles, seriesFor } from './particles.js';
 import { PROPAGATED_URL, parsePropagated } from './geospace.js';
+import {
+  GEOSYNC_URL, GEOSYNC_RE, dipoleFieldAtRe, geosyncSeries, parseGeosync,
+} from './geosync.js';
 import type { NowEnvelope, PartMeta, Snapshot, Source } from './source.js';
 import { magnetopause } from '../models/shue1998.js';
 import {
@@ -32,6 +35,7 @@ export const STALE_AFTER = {
   magnetopause: 20 * 60,
   particles: 30 * 60,
   propagated: 30 * 60,
+  geosync: 30 * 60,
   // OVATION publishes a ~30-90 minute forecast every ~5 minutes; an hour-old
   // grid is still meaningful, a three-hour-old one is not.
   aurora: 60 * 60,
@@ -85,7 +89,7 @@ export class DirectSource implements Source {
   }
 
   async fetchSnapshot(signal?: AbortSignal): Promise<Snapshot> {
-    const [mag, wind, kp, xray, scales, alerts, protons, electrons, prop] = await Promise.all([
+    const [mag, wind, kp, xray, scales, alerts, protons, electrons, prop, geo] = await Promise.all([
       getJson<unknown>(SWPC_URL.mag, signal),
       getJson<unknown>(SWPC_URL.wind, signal),
       getJson<unknown>(SWPC_URL.kp1m, signal),
@@ -95,6 +99,7 @@ export class DirectSource implements Source {
       getJson<unknown>(PARTICLE_URL.protons, signal),
       getJson<unknown>(PARTICLE_URL.electrons, signal),
       getJson<unknown>(PROPAGATED_URL, signal),
+      getJson<unknown>(GEOSYNC_URL, signal),
     ]);
     const fetched_at = new Date().toISOString();
 
@@ -107,6 +112,7 @@ export class DirectSource implements Source {
     const particles = protons.json || electrons.json
       ? parseParticles(protons.json, electrons.json) : null;
     const propagated = prop.json ? parsePropagated(prop.json) : null;
+    const geosync = geo.json ? parseGeosync(geo.json) : null;
     const arriving = propagated?.arrivingNow ?? null;
 
     // Modeled from the measured wind — null in, null out. Never a default.
@@ -144,6 +150,8 @@ export class DirectSource implements Source {
       particles: meta(fetched_at, particles?.time ?? null, STALE_AFTER.particles,
         `${SWPC} · GOES particle detectors`, PARTICLE_URL.protons,
         protons.error ?? electrons.error),
+      geosync: meta(fetched_at, geosync?.time ?? null, STALE_AFTER.geosync,
+        `${SWPC} · GOES magnetometer at geostationary orbit`, GEOSYNC_URL, geo.error),
       propagated: meta(fetched_at, arriving?.arrivesAt ?? null, STALE_AFTER.propagated,
         `${SWPC} · solar wind propagated to the bow shock nose`, PROPAGATED_URL,
         prop.error, 'modeled', { name: 'NOAA SWPC propagation' }),
@@ -151,6 +159,15 @@ export class DirectSource implements Source {
 
     const data: Now = {
       solar_wind, kp: kpNow, xray: xrayNow, scales: scalesNow, alerts: alertList,
+      geosync: geosync
+        ? {
+          time: geosync.time, satellite: geosync.satellite,
+          hp_nt: geosync.hp, total_nt: geosync.total,
+          deficit_nt: geosync.total === null
+            ? null : dipoleFieldAtRe(GEOSYNC_RE) - geosync.total,
+          arcjet: geosync.arcjet,
+        }
+        : null,
       particles: particles
         ? {
           time: particles.time,
@@ -196,6 +213,7 @@ export class DirectSource implements Source {
         estimated_kp: 'Kp', flux_long: 'W/m^2', flux_short: 'W/m^2',
         standoff_re: 'Re', bow_shock_re: 'Re', dyn_pressure_npa: 'nPa',
         proton_10mev: 'pfu', proton_100mev: 'pfu', electron_2mev: 'pfu',
+        hp_nt: 'nT', total_nt: 'nT', deficit_nt: 'nT',
       },
       data, parts,
     };
@@ -223,6 +241,7 @@ export class DirectSource implements Source {
       kpSeries: downsample(parseKpSeries(kp.json), 120),
       xraySeries: downsample(parseXraySeries(xray.json), 120),
       protonSeries: downsample(seriesFor(protons.json, '>=10 MeV'), 120),
+      geosyncSeries: downsample(geosyncSeries(geo.json, 'total'), 120),
       electronSeries: downsample(seriesFor(electrons.json, '>=2 MeV'), 120),
     };
   }

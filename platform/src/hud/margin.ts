@@ -323,6 +323,10 @@ function detailSpark(inst: { id: string; series?: string; unit: string }, state:
     return panelSpark(state.kpSeries, { band: [0, 4], unit: 'Kp', format: (v) => v.toFixed(2),
       label: 'Kp history, quiet band shaded' });
   }
+  if (inst.id === 'geosync' && state.geosyncSeries) {
+    return panelSpark(state.geosyncSeries, { unit: 'nT', format: (v) => v.toFixed(0),
+      label: 'total field at geostationary orbit' });
+  }
   if (inst.id === 'protons' && state.protonSeries) {
     return panelSpark(state.protonSeries, { log: true, unit: 'pfu',
       format: (v) => v.toFixed(2), label: 'proton flux above 10 MeV, logarithmic' });

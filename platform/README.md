@@ -99,6 +99,21 @@ wind are still in flight — the warning currently in hand.
 If the propagation feed is unavailable the L1 reading is used instead, and the Situation
 Report names which one it used.
 
+## The falsifiable check
+
+Most of the checks compare our parse of a feed against NOAA's own published figure — useful,
+but they can only catch our arithmetic. The GOES magnetometer is different. It sits at
+6.6 Rₑ, just inside the magnetopause on a quiet day and outside it during a strong
+compression, and it is measured independently of anything Shue 1998 knows about.
+
+So the check is the agreement of two verdicts, not of two numbers: if the model puts the
+boundary outside geostationary orbit, GOES should read a dipole-order field; if inside, that
+field should have collapsed. The measurement can say the model is wrong.
+
+The reading normally sits *below* the dipole value for that distance — the ring current and
+magnetopause currents subtract from Earth's own field, and the size of that deficit is
+itself a storm indicator.
+
 ## Coronal mass ejections
 
 The one thing here that is still on its way. DONKI publishes each analysed CME as a cone —
