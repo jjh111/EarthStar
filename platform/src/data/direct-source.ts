@@ -14,6 +14,7 @@ import { magnetopause } from '../models/shue1998.js';
 import {
   SWPC_URL, parseAlerts, parseKpNow, parseScalesNow, parseSolarWindNow,
   parseSolarWindSeries, parseXrayFromSeries, parseAurora,
+  parseKpSeries, parseXraySeries, downsample,
 } from './swpc.js';
 
 const SWPC = 'NOAA SWPC';
@@ -166,7 +167,14 @@ export class DirectSource implements Source {
       data: seriesData,
     };
 
-    return { now, series };
+    // Sparkline histories come free: they are parsed from responses this
+    // method already has in hand. Downsampled here rather than in the renderer
+    // so the cost is paid once per refresh, not once per repaint.
+    return {
+      now, series,
+      kpSeries: downsample(parseKpSeries(kp.json), 120),
+      xraySeries: downsample(parseXraySeries(xray.json), 120),
+    };
   }
 
   async fetchAurora(signal?: AbortSignal): Promise<Envelope<AuroraNow | null>> {

@@ -6,6 +6,7 @@
  */
 
 import type { AuroraNow, Envelope, ModelRef, Now, SolarWindSeries, Tier } from '../contract/types.js';
+import type { Series } from './swpc.js';
 
 /**
  * Per-sub-object provenance for a `tier: 'mixed'` envelope.
@@ -30,6 +31,9 @@ export interface NowEnvelope extends Envelope<Now> {
 export interface Snapshot {
   now: NowEnvelope;
   series: Envelope<SolarWindSeries>;
+  /** Kp and X-ray history, parsed from the same responses as `now`. */
+  kpSeries: Series;
+  xraySeries: Series;
 }
 
 export interface Source {

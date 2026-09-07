@@ -328,3 +328,57 @@ export function auroraAt(grid: AuroraNow['grid'], latDeg: number, lonDeg: number
   if (yi < 0 || yi >= grid.height) return 0;
   return grid.values[xi * grid.height + yi] ?? 0;
 }
+
+/* ---------------------------------------------------------------- *
+ * Series for sparklines — parsed from responses already fetched
+ * ---------------------------------------------------------------- */
+
+export interface Series {
+  time: string[];
+  value: (number | null)[];
+}
+
+/** Kp history from the 1-minute estimated-Kp feed (oldest → newest). */
+export function parseKpSeries(json: unknown): Series {
+  const rows = asArray(json)
+    .map((r) => ({ t: swpcTime(r['time_tag'] as string), v: num(r['estimated_kp']) }))
+    .filter((r): r is { t: string; v: number | null } => r.t !== null)
+    .sort((a, b) => Date.parse(a.t) - Date.parse(b.t));
+  return { time: rows.map((r) => r.t), value: rows.map((r) => r.v) };
+}
+
+/** GOES long-band X-ray flux history, W/m² (oldest → newest). */
+export function parseXraySeries(json: unknown): Series {
+  const rows = asArray(json)
+    .filter((r) => String(r['energy']).startsWith('0.1-0.8'))
+    .map((r) => ({ t: swpcTime(r['time_tag'] as string), v: num(r['flux']) }))
+    .filter((r): r is { t: string; v: number | null } => r.t !== null)
+    .sort((a, b) => Date.parse(a.t) - Date.parse(b.t));
+  return { time: rows.map((r) => r.t), value: rows.map((r) => r.v) };
+}
+
+/**
+ * Downsample by bucketed maximum-|value|, preserving spikes. A plain stride
+ * would drop a flare that lasted one sample, which is precisely the sample a
+ * reader is looking for.
+ */
+export function downsample(s: Series, target: number): Series {
+  if (s.time.length <= target) return s;
+  const bucket = s.time.length / target;
+  const time: string[] = [];
+  const value: (number | null)[] = [];
+  for (let i = 0; i < target; i++) {
+    const lo = Math.floor(i * bucket);
+    const hi = Math.min(s.time.length, Math.floor((i + 1) * bucket));
+    let best: number | null = null;
+    let bestIdx = lo;
+    for (let k = lo; k < hi; k++) {
+      const v = s.value[k];
+      if (v === null || v === undefined) continue;
+      if (best === null || Math.abs(v) > Math.abs(best)) { best = v; bestIdx = k; }
+    }
+    time.push(s.time[bestIdx] ?? s.time[lo]!);
+    value.push(best);
+  }
+  return { time, value };
+}

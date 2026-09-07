@@ -67,6 +67,24 @@ view. The only thing that ever scrolls is the margin's own body.
 Instrument tiles are buttons: selecting one opens its detail in the margin — the value, a
 sparkline of the last 24 hours, what the number means, and its full provenance.
 
+## Sparklines and the state sentence
+
+The **Now** tab opens with one sentence describing the whole system, with the graphics
+inside it rather than beside it — each quantity as glyph, sparkline and number together.
+Every mark is real: the sparklines draw the same series the instruments and the checks use,
+and a quantity with no data is written as missing rather than dropped from the sentence.
+
+Sparkline conventions follow Tufte: no axes, no frame, the most recent value in red and the
+period's extremes in blue, with a reference rule (zero for Bz) or band (quiet Kp) behind the
+line where the question is "which side of the line". History is downsampled by bucketed
+maximum-magnitude rather than by stride, so a one-sample flare survives.
+
+## Forecasts
+
+The **Ahead** tab aggregates NOAA's own predictions: observed and predicted Kp, C/M/X flare
+odds, recent flares, F10.7, and the 3-day forecast and forecaster discussion reproduced
+**verbatim** — a summary of a forecast is a different claim from the forecast.
+
 ## What moves, and why
 
 Three things in the scene are driven by the live wind rather than by a clock:

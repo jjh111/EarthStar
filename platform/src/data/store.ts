@@ -6,11 +6,14 @@
 
 import type { NowEnvelope, Source } from './source.js';
 import type { AuroraNow, Envelope, SolarWindSeries } from '../contract/types.js';
+import type { Series } from './swpc.js';
 
 export interface StoreState {
   now: NowEnvelope | null;
   /** Recent history, from the same fetch as `now`. */
   series: Envelope<SolarWindSeries> | null;
+  kpSeries: Series | null;
+  xraySeries: Series | null;
   /** Its own cadence: ~5-minute product, 141 KB gzipped. */
   aurora: Envelope<AuroraNow | null> | null;
   /** Last refresh attempt, whether or not it succeeded. */
@@ -23,7 +26,8 @@ type Listener = (s: StoreState) => void;
 
 export class NowStore {
   private state: StoreState = {
-    now: null, series: null, aurora: null, lastAttempt: null, lastError: null, loading: true,
+    now: null, series: null, kpSeries: null, xraySeries: null,
+    aurora: null, lastAttempt: null, lastError: null, loading: true,
   };
   private listeners = new Set<Listener>();
   private timer: number | null = null;
@@ -56,9 +60,9 @@ export class NowStore {
     this.inflight = ctl;
     this.emit({ loading: true });
     try {
-      const { now, series } = await this.source.fetchSnapshot(ctl.signal);
+      const { now, series, kpSeries, xraySeries } = await this.source.fetchSnapshot(ctl.signal);
       this.emit({
-        now, series,
+        now, series, kpSeries, xraySeries,
         lastAttempt: new Date().toISOString(), lastError: null, loading: false,
       });
     } catch (e) {

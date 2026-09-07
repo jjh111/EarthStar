@@ -268,6 +268,17 @@ explained, and the test asserts the explanation rather than widening a tolerance
   planetocentric, which is what a rendered sphere wants. `tan φ_d = tan φ_c / (1−f)²`.
   Residual after conversion: **0.000014° (0.05″)**.
 
+### Forecast products
+
+All CORS-clean, all NOAA's own predictions consumed as products (`[D · NOAA]`):
+`products/noaa-planetary-k-index-forecast` (7 KB, observed + predicted Kp),
+`json/solar_probabilities` (9 KB, C/M/X odds), `text/3-day-forecast.txt` (1.8 KB) and
+`text/discussion.txt` (3.4 KB) reproduced verbatim, `json/goes/primary/xray-flares-7-day`
+(18 KB), and `products/summary/10cm-flux` (47 B).
+
+A full census of what is reachable, what is shipped and what is worth doing next is in
+[`data-inventory.md`](./data-inventory.md).
+
 ---
 
 ## 5. Model references (phase 1)

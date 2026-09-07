@@ -6,19 +6,24 @@
  * that reading: value, provenance, recent history, and what it means.
  */
 
-import type { Envelope, Now, SolarWindSeries } from '../contract/types.js';
+import type { Now } from '../contract/types.js';
 import type { NowEnvelope, PartMeta } from '../data/source.js';
 import type { StoreState } from '../data/store.js';
 import type { CheckResult } from '../data/checks.js';
 import type { ImageLoop } from '../data/solar-imagery.js';
-import { NO_DATA, badgeFor, badgeTitle, hhmmUTC, stalenessOf } from './format.js';
+import { NO_DATA, badgeFor, badgeTitle, formatAge, hhmmUTC, stalenessOf } from './format.js';
+import { panelSpark } from './sparkline.js';
+import { stateSentence, stateSentenceText } from './state-sentence.js';
+import type { ForecastBundle } from '../data/forecast.js';
+import { stripProductHeader } from '../data/forecast.js';
 import { INSTRUMENTS } from './instruments.js';
 import { buildSituationReport, type SceneNarration } from './situation-report.js';
 
-export type TabId = 'report' | 'sun' | 'sources' | 'checks' | 'detail';
+export type TabId = 'report' | 'forecast' | 'sun' | 'sources' | 'checks' | 'detail';
 
 export const TABS: Array<{ id: TabId; label: string }> = [
-  { id: 'report', label: 'Report' },
+  { id: 'report', label: 'Now' },
+  { id: 'forecast', label: 'Ahead' },
   { id: 'sun', label: 'Sun' },
   { id: 'sources', label: 'Sources' },
   { id: 'checks', label: 'Checks' },
@@ -30,48 +35,6 @@ export function escapeHtml(s: string): string {
 }
 
 /* ------------------------------------------------------------------ *
- * Sparkline — recent history for a single series
- * ------------------------------------------------------------------ */
-
-/**
- * A small multiple, not a decoration: it shows whether the current reading is
- * a spike or a plateau, which a single number cannot. Zero is drawn when the
- * series crosses it, because for Bz the sign is the whole story.
- */
-export function sparkline(
-  series: Envelope<SolarWindSeries> | null,
-  column: 'bz_gsm' | 'bt' | 'speed' | 'density',
-): string {
-  const vals = series?.data?.[column];
-  if (!vals || vals.length < 2) return '<p class="tile-meta">No history loaded.</p>';
-
-  const pts = vals.map((v, i) => ({ v, i })).filter((p): p is { v: number; i: number } =>
-    p.v !== null && Number.isFinite(p.v));
-  if (pts.length < 2) return '<p class="tile-meta">No history loaded.</p>';
-
-  const W = 260, H = 42, pad = 2;
-  const min = Math.min(...pts.map((p) => p.v));
-  const max = Math.max(...pts.map((p) => p.v));
-  const span = max - min || 1;
-  const n = vals.length - 1;
-  const x = (i: number) => pad + (i / n) * (W - pad * 2);
-  const y = (v: number) => pad + (1 - (v - min) / span) * (H - pad * 2);
-
-  const d = pts.map((p, k) => `${k === 0 ? 'M' : 'L'}${x(p.i).toFixed(1)},${y(p.v).toFixed(1)}`).join('');
-  const zero = min < 0 && max > 0
-    ? `<line class="spark-axis" x1="${pad}" y1="${y(0).toFixed(1)}" x2="${W - pad}" y2="${y(0).toFixed(1)}" />`
-    : '';
-
-  const hours = ((Date.parse(series!.data.time[n]!) - Date.parse(series!.data.time[0]!)) / 3.6e6);
-  return `
-    <svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
-         aria-label="Last ${hours.toFixed(0)} hours: minimum ${min.toFixed(1)}, maximum ${max.toFixed(1)}">
-      ${zero}<path class="spark-line" d="${d}" />
-    </svg>
-    <p class="tile-meta">${min.toFixed(1)} to ${max.toFixed(1)} over the last ${hours.toFixed(0)} h</p>`;
-}
-
-/* ------------------------------------------------------------------ *
  * Panels
  * ------------------------------------------------------------------ */
 
@@ -79,8 +42,99 @@ export function renderReport(
   state: StoreState, narration: SceneNarration, now: Date,
 ): string {
   const lines = buildSituationReport(state.now, narration, now, state.aurora);
-  return `<h2>Situation Report</h2>${lines.map((l) => `<p>${escapeHtml(l)}</p>`).join('')}`;
+  // The sentence carries its own evidence: each quantity appears as glyph,
+  // sparkline and number together. The prose report follows it, and the
+  // screen-reader text alternative sits alongside.
+  return `
+    <h2>Now</h2>
+    <p class="state-sentence" aria-hidden="true">${stateSentence(state)}</p>
+    <p class="sr-only">${escapeHtml(stateSentenceText(state))}</p>
+    <h3>Situation Report</h3>
+    ${lines.map((l) => `<p>${escapeHtml(l)}</p>`).join('')}`;
 }
+
+/* ------------------------------------------------------------------ *
+ * Forecast — NOAA's own predictions, rendered as theirs
+ * ------------------------------------------------------------------ */
+
+function kpBars(f: ForecastBundle): string {
+  if (f.kp.length === 0) return '<p class="tile-meta">No Kp forecast loaded.</p>';
+  const pts = f.kp.slice(-40);
+  const max = Math.max(5, ...pts.map((p) => p.kp));
+  const w = 268, h = 46, gap = 1;
+  const bw = (w - gap * (pts.length - 1)) / pts.length;
+  const bars = pts.map((p, i) => {
+    const bh = (p.kp / max) * (h - 10);
+    const cls = p.kind === 'predicted' ? 'kp-pred' : 'kp-obs';
+    const storm = p.kp >= 5 ? ' kp-storm' : '';
+    return `<rect class="${cls}${storm}" x="${(i * (bw + gap)).toFixed(2)}" y="${(h - 10 - bh).toFixed(2)}"
+      width="${bw.toFixed(2)}" height="${Math.max(0.6, bh).toFixed(2)}">
+      <title>${hhmmUTC(p.time)} UTC — Kp ${p.kp.toFixed(2)} (${p.kind})</title></rect>`;
+  }).join('');
+  // Kp 5 is the storm threshold; the line is the reason the chart exists.
+  const y5 = h - 10 - (5 / max) * (h - 10);
+  return `<svg class="kp-chart" viewBox="0 0 ${w} ${h}" role="img"
+      aria-label="Planetary K index, observed and predicted, storm threshold at 5">
+      <line class="spark-rule" x1="0" y1="${y5.toFixed(2)}" x2="${w}" y2="${y5.toFixed(2)}" />
+      ${bars}</svg>
+    <p class="tile-meta"><span class="key-obs">▮</span> observed
+      <span class="key-pred">▮</span> predicted · rule at Kp 5, the storm threshold</p>`;
+}
+
+export function renderForecast(f: ForecastBundle | null, loading: boolean): string {
+  if (!f) {
+    return `<h2>Ahead</h2><p>${loading ? 'Loading NOAA forecasts…' : 'Forecasts have not loaded.'}</p>`;
+  }
+  const three = f.threeDay ? stripProductHeader(f.threeDay) : null;
+  const disc = f.discussion ? stripProductHeader(f.discussion) : null;
+  const odds = f.odds[0];
+
+  return `
+    <h2>Ahead</h2>
+    <p>Everything below is <span class="badge badge-d">D</span> NOAA's own forecast, not ours.
+    Where the forecaster wrote prose, it is reproduced verbatim — a summary of a forecast is
+    a different claim from the forecast.</p>
+
+    <h3>Planetary K, observed and predicted</h3>
+    ${kpBars(f)}
+
+    ${odds ? `<h3>Flare probability, next 24 h</h3>
+    <table class="prov"><tbody>
+      <tr><td>C class</td><td class="num">${odds.c ?? '—'}%</td>
+          <td>common; minor or no effect at the ground</td></tr>
+      <tr><td>M class</td><td class="num">${odds.m ?? '—'}%</td>
+          <td>radio blackouts on the sunlit side</td></tr>
+      <tr><td>X class</td><td class="num">${odds.x ?? '—'}%</td>
+          <td>strong blackouts, possible radiation storm</td></tr>
+    </tbody></table>
+    <p class="tile-meta">Issued for ${escapeHtml(odds.date)}.</p>` : ''}
+
+    ${f.flares.length ? `<h3>Recent flares</h3>
+    <table class="prov"><tbody>${f.flares.slice(0, 6).map((fl) => `
+      <tr><td class="num">${escapeHtml(fl.maxClass)}</td>
+          <td class="num">${hhmmUTC(fl.max ?? fl.begin)}</td>
+          <td>${fl.region ? `region ${fl.region}` : ''}
+            <span class="tile-meta">${formatAge((Date.now() - Date.parse(fl.begin)) / 1000)} ago</span></td></tr>`).join('')}
+    </tbody></table>` : ''}
+
+    ${f.f107.value !== null ? `<h3>Solar radio flux</h3>
+    <p>F10.7 at <b class="sentence-num">${f.f107.value}</b> solar flux units — the standard
+    proxy for solar activity and the driver of upper-atmosphere density, so it sets how fast
+    satellites in low orbit decay.</p>` : ''}
+
+    ${three ? `<h3>NOAA 3-day forecast</h3>
+    <pre class="product">${escapeHtml(three.body)}</pre>
+    ${three.issued ? `<p class="tile-meta">Issued ${escapeHtml(three.issued)}.
+      <a href="${FORECAST_LINK.threeDay}" rel="noreferrer noopener" target="_blank">Source</a>.</p>` : ''}` : ''}
+
+    ${disc ? `<h3>Forecaster discussion</h3>
+    <pre class="product">${escapeHtml(disc.body)}</pre>
+    ${disc.issued ? `<p class="tile-meta">Issued ${escapeHtml(disc.issued)}.</p>` : ''}` : ''}`;
+}
+
+const FORECAST_LINK = {
+  threeDay: 'https://services.swpc.noaa.gov/text/3-day-forecast.txt',
+};
 
 function metaRow(key: string, m: PartMeta): string {
   const b = badgeFor(m);
@@ -224,6 +278,26 @@ export function renderSun(sun: SunState, specs: Array<{ id: string; label: strin
     <a href="${L.sourceUrl}" rel="noreferrer noopener" target="_blank">Frame list</a>.</p>`;
 }
 
+/** Picks the right series and scaling for an instrument's detail sparkline. */
+function detailSpark(inst: { id: string; series?: string; unit: string }, state: StoreState): string {
+  if (inst.id === 'kp' && state.kpSeries) {
+    return panelSpark(state.kpSeries, { band: [0, 4], unit: 'Kp', format: (v) => v.toFixed(2),
+      label: 'Kp history, quiet band shaded' });
+  }
+  if (inst.id === 'xray' && state.xraySeries) {
+    return panelSpark(state.xraySeries, { log: true, unit: 'W/m²',
+      format: (v) => v.toExponential(1), label: 'X-ray flux history, log scale' });
+  }
+  if (!inst.series || !state.series) return '';
+  const col = inst.series as 'bz_gsm' | 'bt' | 'speed' | 'density';
+  return panelSpark(
+    { time: state.series.data.time, value: state.series.data[col] },
+    { rule: col === 'bz_gsm' ? 0 : null, unit: inst.unit,
+      format: (v) => (col === 'speed' ? v.toFixed(0) : v.toFixed(1)),
+      label: `${inst.id} history` },
+  );
+}
+
 export function renderDetail(
   id: string, state: StoreState, now: Date,
 ): string {
@@ -243,7 +317,7 @@ export function renderDetail(
     </p>
     <p class="tile-meta"><span class="badge badge-${b.toLowerCase()}">${b}</span>
       ${escapeHtml(s.label)}</p>
-    ${inst.series ? sparkline(state.series, inst.series) : ''}
+    ${detailSpark(inst, state)}
     <h3>What it means</h3>
     <p>${escapeHtml(inst.meaning)}</p>
     <h3>Provenance</h3>

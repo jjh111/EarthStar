@@ -15,6 +15,7 @@ import { DirectSource } from './data/direct-source.js';
 import { MotionPreference } from './a11y/motion.js';
 import { announce, installKeyboard } from './a11y/keyboard.js';
 import { runChecks, type CheckResult } from './data/checks.js';
+import { fetchForecast, type ForecastBundle } from './data/forecast.js';
 import { LOOPS, fetchLoop, preloadLoop, type ImageLoop } from './data/solar-imagery.js';
 import { scaleLabel, type ScaleMode } from './scene/scales.js';
 import type { ViewName } from './scene/camera-rig.js';
@@ -86,8 +87,20 @@ async function doChecks(): Promise<void> {
   hud.setChecks(checkResult, false);
 }
 
+let forecast: ForecastBundle | null = null;
+async function loadForecast(): Promise<void> {
+  hud.setForecast(null, true);
+  try {
+    forecast = await fetchForecast();
+  } catch {
+    forecast = null;
+  }
+  hud.setForecast(forecast, false);
+}
+
 const hud = new Hud({
   onSelectLoop: (id) => void selectLoop(id),
+  onLoadForecast: () => void loadForecast(),
   onToggleSunPlay: () => void toggleSunPlay(),
   onScrubSun: (i) => { hud.setSunPlaying(false); hud.setSunFrame(i); },
   onRunChecks: () => void doChecks(),
