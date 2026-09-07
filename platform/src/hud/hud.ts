@@ -204,12 +204,39 @@ export class Hud {
     this.instrumentsEl.appendChild(aurora);
   }
 
+  /**
+   * The full ARIA tabs pattern, not just the roles.
+   *
+   * `role="tab"` and `aria-selected` were already here, but without
+   * `aria-controls`, a `tabpanel`, or arrow-key movement they describe a
+   * pattern the widget does not actually implement — which is worse than no
+   * roles at all, because a screen-reader user is told to expect behaviour
+   * that is not there. Tab moves into and out of the strip; Left and Right
+   * move between tabs, which is what the role promises.
+   */
   private buildTabs(): void {
     this.tabsEl.innerHTML = TABS.map((t) =>
-      `<button class="tab" role="tab" data-tab="${t.id}" aria-selected="${t.id === this.tab}">${t.label}</button>`).join('');
+      `<button class="tab" role="tab" id="tab-${t.id}" data-tab="${t.id}"
+        aria-controls="margin-body" aria-selected="${t.id === this.tab}"
+        tabindex="${t.id === this.tab ? '0' : '-1'}">${t.label}</button>`).join('');
+
     this.tabsEl.addEventListener('click', (e) => {
       const t = (e.target as HTMLElement).closest('[data-tab]') as HTMLElement | null;
       if (t) this.selectTab(t.dataset['tab'] as TabId);
+    });
+
+    this.tabsEl.addEventListener('keydown', (e) => {
+      const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
+      if (!keys.includes(e.key)) return;
+      const i = TABS.findIndex((t) => t.id === this.tab);
+      const at = i < 0 ? 0 : i;
+      const next = e.key === 'Home' ? 0
+        : e.key === 'End' ? TABS.length - 1
+          : e.key === 'ArrowLeft' ? (at - 1 + TABS.length) % TABS.length
+            : (at + 1) % TABS.length;
+      e.preventDefault();
+      this.selectTab(TABS[next]!.id);
+      (this.tabsEl.querySelector(`#tab-${TABS[next]!.id}`) as HTMLElement | null)?.focus();
     });
   }
 
@@ -231,7 +258,20 @@ export class Hud {
     this.tab = tab;
     if (tab !== 'detail') this.detailId = null;
     for (const b of this.tabsEl.querySelectorAll('[data-tab]')) {
-      b.setAttribute('aria-selected', String(b.getAttribute('data-tab') === tab));
+      const on = b.getAttribute('data-tab') === tab;
+      b.setAttribute('aria-selected', String(on));
+      // Roving tabindex: one stop for the whole strip, arrows move within it.
+      b.setAttribute('tabindex', on ? '0' : '-1');
+    }
+    // A detail view is opened from a tile rather than from the strip, so no tab
+    // labels it; it names itself instead of pointing at a tab that is not there.
+    const labelled = TABS.some((t) => t.id === tab);
+    if (labelled) {
+      this.bodyEl.setAttribute('aria-labelledby', `tab-${tab}`);
+      this.bodyEl.removeAttribute('aria-label');
+    } else {
+      this.bodyEl.removeAttribute('aria-labelledby');
+      this.bodyEl.setAttribute('aria-label', 'Detail');
     }
     for (const [, el] of this.tiles) el.removeAttribute('aria-current');
     // Both of these cost network round trips; fetch only when asked for.
