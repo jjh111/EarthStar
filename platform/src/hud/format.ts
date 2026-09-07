@@ -37,18 +37,37 @@ export interface Staleness {
   state: 'fresh' | 'stale' | 'no-data';
   ageS: number | null;
   label: string;
+  /** A form that fits an instrument tile. */
+  short: string;
 }
 
+/**
+ * `label` is the full sentence, for a tooltip or the detail panel. `short` is
+ * what fits on a 128-pixel tile — the tile clipped "stale · no data since 18:13
+ * UTC (1.7 h old)" mid-word, which told the reader less than "stale · 1.7 h"
+ * would have while taking more room to do it.
+ */
 export function stalenessOf(meta: PartMeta | undefined, now = new Date()): Staleness {
   if (!meta || !meta.data_time) {
-    return { state: 'no-data', ageS: null, label: meta?.error ? `no data · ${meta.error}` : NO_DATA };
+    const label = meta?.error ? `no data · ${meta.error}` : NO_DATA;
+    return { state: 'no-data', ageS: null, label, short: NO_DATA };
   }
   const ageS = (now.getTime() - Date.parse(meta.data_time)) / 1000;
-  if (!Number.isFinite(ageS)) return { state: 'no-data', ageS: null, label: NO_DATA };
-  if (ageS > meta.stale_after_s) {
-    return { state: 'stale', ageS, label: `stale · no data since ${hhmmUTC(meta.data_time)} UTC (${formatAge(ageS)} old)` };
+  if (!Number.isFinite(ageS)) {
+    return { state: 'no-data', ageS: null, label: NO_DATA, short: NO_DATA };
   }
-  return { state: 'fresh', ageS, label: `${hhmmUTC(meta.data_time)} UTC · ${formatAge(ageS)} old` };
+  if (ageS > meta.stale_after_s) {
+    return {
+      state: 'stale', ageS,
+      label: `stale · no data since ${hhmmUTC(meta.data_time)} UTC (${formatAge(ageS)} old)`,
+      short: `stale · ${formatAge(ageS)}`,
+    };
+  }
+  return {
+    state: 'fresh', ageS,
+    label: `${hhmmUTC(meta.data_time)} UTC · ${formatAge(ageS)} old`,
+    short: `${formatAge(ageS)} old`,
+  };
 }
 
 export { hhmmUTC, formatAge };

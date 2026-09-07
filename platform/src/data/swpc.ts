@@ -20,7 +20,7 @@
  */
 
 import type {
-  AlertItem, AuroraNow, KpNow, ScaleValue, ScalesNow, SolarWindNow, SolarWindSeries, XrayNow,
+  AlertItem, AlertLevel, AuroraNow, KpNow, ScaleValue, ScalesNow, SolarWindNow, SolarWindSeries, XrayNow,
 } from '../contract/types.js';
 
 export const SWPC_BASE = 'https://services.swpc.noaa.gov';
@@ -257,13 +257,29 @@ export function parseAlerts(json: unknown, limit = 8): AlertItem[] {
       const issued = swpcTime(r['issue_datetime'] as string);
       const message = ((r['message'] as string) ?? '').replace(/\r/g, '');
       if (!issued) return null;
-      // The useful line is the ALERT/WARNING/WATCH/SUMMARY header, not the code block.
+      // The useful line is the ALERT/WARNING/WATCH/SUMMARY header, not the code
+      // block. When there is no such line, fall through to the first line that
+      // is not NOAA's own envelope boilerplate — "Space Weather Message Code:
+      // K04A" is a correct first line and a useless headline.
+      const lines = message.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
       const headline =
-        message.split('\n').map((l) => l.trim())
-          .find((l) => /^(ALERT|WARNING|WATCH|SUMMARY|EXTENDED WARNING|CANCEL)/i.test(l))
-        ?? message.split('\n').find((l) => l.trim().length > 0)?.trim()
+        lines.find((l) => /^(ALERT|WARNING|WATCH|SUMMARY|EXTENDED WARNING|CANCEL)/i.test(l))
+        ?? lines.find((l) => !/^(Space Weather Message Code|Serial Number|Issue Time|Valid From|Valid To)\b/i.test(l))
+        ?? lines[0]
         ?? '';
-      return { issued, product: (r['product_id'] as string) ?? '', message, headline };
+      const m = /^(EXTENDED WARNING|CANCEL WARNING|CANCEL|ALERT|WARNING|WATCH|SUMMARY)\s*:?\s*(.*)$/i
+        .exec(headline);
+      const word = (m?.[1] ?? '').toUpperCase();
+      const level: AlertLevel =
+        word.startsWith('CANCEL') ? 'cancel'
+          : word === 'ALERT' ? 'alert'
+            : word.includes('WARNING') ? 'warning'
+              : word === 'WATCH' ? 'watch'
+                : word === 'SUMMARY' ? 'summary' : 'other';
+      return {
+        issued, product: (r['product_id'] as string) ?? '', message, headline,
+        level, text: (m?.[2] ?? headline).trim(),
+      };
     })
     .filter((a): a is AlertItem => a !== null)
     .sort((a, b) => Date.parse(b.issued) - Date.parse(a.issued))

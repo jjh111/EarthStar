@@ -4,6 +4,7 @@
  */
 
 
+import type { AlertLevel } from '../contract/types.js';
 import type { PartMeta } from '../data/source.js';
 import type { StoreState } from '../data/store.js';
 import type { FrameStats } from '../scene/viewer.js';
@@ -13,9 +14,11 @@ import type { ForecastBundle } from '../data/forecast.js';
 import type { SolarCycle } from '../data/solar-cycle.js';
 import { LOOPS, type ImageLoop } from '../data/solar-imagery.js';
 import {
-  NO_DATA, badgeFor, badgeTitle, formatAge, hhmmUTC, stalenessOf,
+  NO_DATA, badgeFor, badgeTitle, hhmmUTC, stalenessOf,
 } from './format.js';
 import { INSTRUMENTS } from './instruments.js';
+import { tileSpark } from './tile-spark.js';
+import { inlineSpark } from './sparkline.js';
 import {
   BODY_PREFIX, TABS, escapeHtml, renderChecks, renderDetail, renderForecast, renderReport,
   renderSources, renderSun, type SunState, type TabId,
@@ -34,6 +37,16 @@ export interface HudCallbacks {
   onLoadCycle(): void;
 }
 
+/** Now, then expected, then possible, then over. */
+const LEVEL_RANK: Record<AlertLevel, number> = {
+  alert: 0, warning: 1, watch: 2, cancel: 3, summary: 4, other: 5,
+};
+
+const LEVEL_WORD: Record<AlertLevel, string> = {
+  alert: 'now', warning: 'expected', watch: 'possible',
+  cancel: 'cancelled', summary: 'ended', other: 'notice',
+};
+
 export class Hud {
   private instrumentsEl: HTMLElement;
   private tickerEl: HTMLElement;
@@ -43,9 +56,12 @@ export class Hud {
   private bodyEl: HTMLElement;
   private statusEl: HTMLElement;
   private perfEl: HTMLElement;
+  private headlineEl: HTMLAnchorElement;
   private copyEl: HTMLButtonElement;
   private downloadEl: HTMLButtonElement;
   private perfKey = '';
+  /** Last-drawn sparkline signature per tile, so an unchanged series is not redrawn. */
+  private sparkKeys = new Map<string, string>();
   /**
    * Which collapsible sections the reader has opened or closed. Held in memory
    * and mirrored to localStorage, because the panel re-renders on every store
@@ -92,6 +108,7 @@ export class Hud {
     this.bodyEl = document.getElementById('margin-body') as HTMLElement;
     this.statusEl = document.getElementById('status') as HTMLElement;
     this.perfEl = document.getElementById('perf') as HTMLElement;
+    this.headlineEl = document.getElementById('headline-alert') as HTMLAnchorElement;
     this.copyEl = document.getElementById('brief-copy') as HTMLButtonElement;
     this.downloadEl = document.getElementById('brief-download') as HTMLButtonElement;
     this.copyEl.addEventListener('click', () => void this.copyBriefing());
@@ -154,6 +171,7 @@ export class Hud {
       el.innerHTML = `
         <span class="tile-label">${escapeHtml(inst.label)}</span>
         <span class="tile-value"><span data-v>—</span><span class="tile-unit">${escapeHtml(inst.unit)}</span></span>
+        <span class="tile-spark" data-spark aria-hidden="true"></span>
         <span class="tile-meta"><span data-badge class="badge">E</span><span data-time>—</span></span>`;
       el.addEventListener('click', () => this.openDetail(inst.id));
       this.tiles.set(inst.id, el);
@@ -167,6 +185,7 @@ export class Hud {
     scales.innerHTML = `
       <span class="tile-label">NOAA scales</span>
       <span class="scales-row" data-scales></span>
+      <span class="tile-spark" aria-hidden="true"></span>
       <span class="tile-meta"><span class="badge badge-d">D</span><span data-time>—</span></span>`;
     this.tiles.set('scales', scales);
     this.instrumentsEl.appendChild(scales);
@@ -178,6 +197,7 @@ export class Hud {
     aurora.innerHTML = `
       <span class="tile-label">Aurora peak</span>
       <span class="tile-value"><span data-v>—</span><span class="tile-unit">%</span></span>
+      <span class="tile-spark" aria-hidden="true"></span>
       <span class="tile-meta"><span class="badge badge-d">D</span><span data-time>—</span></span>`;
     aurora.addEventListener('click', () => this.selectTab('report'));
     this.tiles.set('aurora', aurora);
@@ -323,12 +343,24 @@ export class Hud {
       badge.className = `badge badge-${b.toLowerCase()}`;
       const detail = inst.detail?.(d) ?? '';
       (el.querySelector('[data-time]') as HTMLElement).textContent =
-        s.state === 'fresh' && detail ? detail : s.state === 'fresh'
-          ? `${formatAge(s.ageS ?? 0)} old` : s.label;
+        s.state === 'fresh' && detail ? detail : s.short;
       el.setAttribute('title',
         `${inst.label}: ${raw === NO_DATA ? 'no data' : `${raw} ${inst.unit}`} · ${s.label} · ${badgeTitle(meta)}`);
       el.setAttribute('aria-label',
         `${inst.label}: ${raw === NO_DATA ? 'no data' : `${raw} ${inst.unit}`}, ${s.label}. Open detail.`);
+
+      // The trend behind the number. Redrawn on the store's cadence, not the
+      // frame's, and marked aria-hidden because the value above it already
+      // carries the reading — a screen reader gains nothing from a path.
+      const sparkEl = el.querySelector('[data-spark]') as HTMLElement;
+      const sp = tileSpark(inst.id, state);
+      const key = sp ? `${sp.series.time[sp.series.time.length - 1] ?? ''}:${sp.series.value.length}` : '';
+      if (key !== this.sparkKeys.get(inst.id)) {
+        this.sparkKeys.set(inst.id, key);
+        sparkEl.innerHTML = sp
+          ? inlineSpark(sp.series, { ...sp.opts, width: 108, height: 17, label: `${inst.label} trend` })
+          : '';
+      }
     }
 
     // NOAA scales
@@ -341,8 +373,10 @@ export class Hud {
         return `<span class="scale-chip scale-${n ?? 'na'}" title="${k} — ${escapeHtml(sc[k].text ?? 'no data')}">${k}${n ?? '–'}</span>`;
       }).join('')
       : NO_DATA;
-    (scalesEl.querySelector('[data-time]') as HTMLElement).textContent =
-      stalenessOf(env?.parts?.scales, now).label;
+    const scS = stalenessOf(env?.parts?.scales, now);
+    (scalesEl.querySelector('[data-time]') as HTMLElement).textContent = scS.short;
+    scalesEl.setAttribute('title', `NOAA scales · ${scS.label}`);
+    scalesEl.classList.toggle('is-stale', scS.state === 'stale');
     scalesEl.classList.toggle('is-nodata', !sc);
 
     // Aurora
@@ -359,18 +393,41 @@ export class Hud {
     (auEl.querySelector('[data-v]') as HTMLElement).textContent =
       au?.data ? String(au.data.max_probability) : NO_DATA;
     (auEl.querySelector('[data-time]') as HTMLElement).textContent =
-      au?.data ? `valid ${hhmmUTC(au.data.forecast_time)}` : auS.label;
+      au?.data ? `valid ${hhmmUTC(au.data.forecast_time)}` : auS.short;
     auEl.classList.toggle('is-stale', auS.state === 'stale');
     auEl.classList.toggle('is-nodata', !au?.data);
 
-    // Ticker
+    // Notices. Ordered by what NOAA's own words mean rather than by clock:
+    // something happening now outranks something expected, which outranks
+    // something possible, which outranks something already over.
+    const alerts = [...(d?.alerts ?? [])].sort(
+      (a, b) => (LEVEL_RANK[a.level] ?? 9) - (LEVEL_RANK[b.level] ?? 9)
+        || Date.parse(b.issued) - Date.parse(a.issued),
+    );
+
+    // The most consequential one goes in the header, where the space was empty.
+    const top = alerts[0];
+    this.headlineEl.hidden = !top;
+    if (top) {
+      this.headlineEl.className = `headline-alert level-${top.level}`;
+      this.headlineEl.innerHTML =
+        `<span class="alert-level">${escapeHtml(LEVEL_WORD[top.level] ?? 'notice')}</span>`
+        + `<span class="alert-text">${escapeHtml(top.text || top.product)}</span>`
+        + `<span class="alert-time">${hhmmUTC(top.issued)} UTC</span>`;
+      this.headlineEl.title = top.message.slice(0, 400);
+    }
+
     this.tickerEl.innerHTML =
       '<span class="ticker-tag">NOAA</span><span class="ticker-items" data-t></span>';
     const t = this.tickerEl.querySelector('[data-t]') as HTMLElement;
-    t.innerHTML = d?.alerts?.length
-      ? d.alerts.slice(0, 6).map((a) =>
-        `<span class="ticker-item">${hhmmUTC(a.issued)} ${escapeHtml(a.headline || a.product)}</span>`).join('')
-      : `<span class="ticker-item">${d ? 'No alerts, watches or warnings in the feed.' : NO_DATA}</span>`;
+    t.innerHTML = alerts.length
+      ? alerts.slice(0, 6).map((a) =>
+        `<span class="ticker-item level-${a.level}" title="${escapeHtml(a.message.slice(0, 400))}">`
+        + `<span class="alert-level">${escapeHtml(LEVEL_WORD[a.level] ?? 'notice')}</span>`
+        + `<span class="alert-text">${escapeHtml(a.text || a.product)}</span>`
+        + `<span class="alert-time">${hhmmUTC(a.issued)}</span></span>`).join('')
+      : `<span class="ticker-item level-none"><span class="alert-text">${
+        d ? 'No watches, warnings or alerts outstanding.' : NO_DATA}</span></span>`;
     this.fitTicker();
 
     // Status
