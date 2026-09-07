@@ -7,6 +7,7 @@
  */
 
 import type { NowEnvelope } from '../data/source.js';
+import { VIEWS } from '../scene/camera-rig.js';
 import type { SpacecraftPos } from '../data/ephemerides.js';
 import { hhmmUTC, formatAge } from '../contract/types.js';
 import type { AuroraNow, Envelope } from '../contract/types.js';
@@ -332,7 +333,8 @@ export function buildSituationReport(
     lines.push('The magnetic shield is hidden.');
   }
   lines.push(
-    `${scaleLabel(scene.mode)}. Camera: ${scene.view} view. ` +
+    `${scaleLabel(scene.mode)}. Camera: ${VIEWS.find((v) => v.id === scene.view)?.label
+      ?? scene.view} — ${VIEWS.find((v) => v.id === scene.view)?.title ?? ''}. ` +
     `${scene.reducedMotion ? 'Reduced motion is on — the corona is still and camera moves cut rather than glide.' : 'Motion is enabled.'}`,
   );
   if (scene.wind !== false && d?.solar_wind?.speed != null) {

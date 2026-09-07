@@ -468,7 +468,9 @@ export class Viewer {
     if (this.shieldVisible && this.spacecraftPos.length > 0) {
       this.spacecraft.setVisible(true);
       this.spacecraft.setScale(earthRadius);
-      this.spacecraft.update(this.spacecraftPos, gseBasis(date), this.mode);
+      this.spacecraft.update(
+        this.spacecraftPos, gseBasis(date), this.mode, this.rig.camera.position,
+      );
     } else {
       this.spacecraft.setVisible(false);
     }
