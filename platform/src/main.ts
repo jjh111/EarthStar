@@ -16,6 +16,7 @@ import { MotionPreference } from './a11y/motion.js';
 import { announce, installKeyboard } from './a11y/keyboard.js';
 import { runChecks, type CheckResult } from './data/checks.js';
 import { fetchForecast, type ForecastBundle } from './data/forecast.js';
+import { fetchSolarCycle } from './data/solar-cycle.js';
 import { LOOPS, fetchLoop, preloadLoop, type ImageLoop } from './data/solar-imagery.js';
 import { scaleLabel, type ScaleMode } from './scene/scales.js';
 import type { ViewName } from './scene/camera-rig.js';
@@ -98,8 +99,14 @@ async function loadForecast(): Promise<void> {
   hud.setForecast(forecast, false);
 }
 
+async function loadCycle(): Promise<void> {
+  hud.setCycle(null, true);
+  hud.setCycle(await fetchSolarCycle(), false);
+}
+
 const hud = new Hud({
   onSelectLoop: (id) => void selectLoop(id),
+  onLoadCycle: () => void loadCycle(),
   onLoadForecast: () => void loadForecast(),
   onToggleSunPlay: () => void toggleSunPlay(),
   onScrubSun: (i) => { hud.setSunPlaying(false); hud.setSunFrame(i); },
@@ -202,6 +209,7 @@ installKeyboard({
 store.subscribe((state) => {
   viewer.setNow(state.now?.data ?? null);
   viewer.setAurora(state.aurora?.data ?? null);
+  viewer.setRegions(state.regions?.data ?? [], state.regions?.data?.[0]?.observed ?? null);
   syncNarration();
 });
 

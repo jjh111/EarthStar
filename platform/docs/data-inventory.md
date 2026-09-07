@@ -16,7 +16,7 @@ the upstream traps.
 | ✅ | `json/rtsw/rtsw_mag_1m` — Bx/By/Bz/Bt GSM+GSE | 146 KB | 1 min | Bz, Bt, sparklines |
 | ✅ | `json/rtsw/rtsw_wind_1m` — speed, density, temperature | 95 KB | 1 min | speed, density, sparklines |
 | ✅ | `products/summary/solar-wind-mag-field`, `-speed` | 61 B | 1 min | independent cross-check |
-| ◻ | `products/geospace/propagated-solar-wind-1-hour` | 6 KB | 1 min | **wind propagated to the bow shock nose** — removes the L1→Earth lag from every derived number. The one clear accuracy upgrade left in this section. Arrays-of-arrays with a header row, the only feed we have found in that format. |
+| ✅ | `products/geospace/propagated-solar-wind-1-hour` | 6 KB | 1 min | **wind propagated to the bow shock nose.** Drives the magnetopause and the wind stream, so the scene shows what is arriving rather than what is still an hour out at L1. Arrays-of-arrays with a header row — the only feed we have found in that format. |
 | ◻ | `json/rtsw/rtsw_ephemerides_1m` | — | 1 min | actual spacecraft position, for a truthful L1 marker |
 
 ## 2. Geomagnetic response at the ground
@@ -40,11 +40,11 @@ the upstream traps.
 | ✅ | `products/animations/suvi-primary-{094,131,171,195,284,304}` | 1.1 MB **per frame** | 4 min | EUV loops, 4 bands shown |
 | ✅ | `products/animations/lasco-c{2,3}` | 94 KB per frame | 12 min | coronagraph loops |
 | ✅ | `products/summary/10cm-flux` | 47 B | daily | F10.7 |
-| ◻ | `json/goes/primary/integral-protons-6-hour` | 60 KB | 5 min | **proton flux — the S-scale driver.** A radiation storm is the one space-weather effect that endangers people (aviation crews, EVA) and this is the number that says so. Highest-value unshipped feed. |
-| ◻ | `json/goes/primary/integral-electrons-6-hour` | 7 KB | 5 min | ≥2 MeV electrons — satellite deep-charging risk |
-| ◻ | `json/solar_regions` | — | daily | active-region positions, class, spot count → could place real regions on the rendered Sun |
+| ✅ | `json/goes/primary/integral-protons-6-hour` | 60 KB | 5 min | **proton flux — the S-scale driver.** The one space-weather hazard that endangers people rather than equipment. |
+| ✅ | `json/goes/primary/integral-electrons-6-hour` | 7 KB | 5 min | ≥2 MeV electrons — satellite deep-charging risk |
+| ✅ | `json/solar_regions` | 25 KB | daily | active-region positions drawn on the rendered Sun, sized by area and brightened by NOAA's own M-class odds for that region |
 | ◻ | `json/sunspot_report` | 183 KB | daily | per-observatory spot counts |
-| ◻ | `json/solar-cycle/observed-solar-cycle-indices` | 512 KB | monthly | sunspot number back to **1749** — the long context almost nothing shows |
+| ✅ | `json/solar-cycle/observed-solar-cycle-indices` | **35 KB** | monthly | sunspot number back to **1749**, 278 years — the century-scale context nothing else on the panel provides. Fetched once, when the Sun panel is first opened. |
 | ⛔ | Helioviewer JSON API | — | — | no CORS. Its *images* work; only the API is blocked |
 
 ## 4. Forecasts — NOAA's, consumed as products
@@ -80,22 +80,29 @@ the upstream traps.
 
 ## What is worth doing next, in order
 
-1. **Proton and electron flux** (§3). Cheap, and they carry the two hazards currently
-   missing from the panel entirely: radiation storms and satellite charging. The S-scale
-   tile is a hole in the HUD today.
-2. **Propagated solar wind** (§1). Every derived number — the magnetopause, the wind
-   stream, the whole shield — is currently driven by wind measured at L1, roughly an hour
-   upstream. NOAA already publishes it propagated to the bow shock nose. Using it would
-   make the scene show *now* rather than *an hour ago*, and the difference is honest to
-   state either way.
-3. **CME cones from DONKI** (§6). Already fetchable without a key; the geometry work is
-   the remaining part. This is the only feature that would let the Viewer show something
-   *coming*.
-4. **Active regions on the Sun** (§3). We render a smooth sphere; NOAA publishes where the
-   spots actually are.
-5. **Solar cycle context** (§3). A single sparkline of sunspot number since 1749 would put
-   every other number on the page in a century-scale frame — the cheapest large gain in
-   meaning available here, at the cost of one 512 KB file fetched once.
+1. **CME cones from DONKI** (§6). Fetchable today without a key; the geometry is the
+   remaining work. This is the only feature that would let the Viewer show something
+   *coming* rather than something present — the difference between an instrument and a
+   forecast.
+2. **GOES magnetometer** (§2). The field measured *at geostationary orbit*, which is where
+   a magnetopause crossing would actually be felt. It would turn the modelled standoff into
+   something checkable against a measurement, the way the aurora overlay is checked against
+   the dipole axis today.
+3. **Spacecraft markers** (§6). The Viewer says "measured by SOLAR1 at L1" but draws no L1.
+   `rtsw_ephemerides_1m` gives the real position without needing Horizons.
+4. **Enlil imagery** (§4). NOAA's full heliospheric wind forecast, as an animation — the
+   context for every CME the cone model would draw.
+5. **Ground magnetometers and Dst** (§2, stage B). The canonical storm index is still
+   missing, and it is why the panel talks about Kp instead.
+
+## What shipped in this pass
+
+Propagated wind, proton and electron flux, active regions, and the solar cycle — the first,
+second, fourth and fifth items on the previous list. The propagation change is the one that
+altered existing numbers rather than adding new ones: the magnetopause standoff, the wind
+stream and the field-line confinement are now driven by plasma that has arrived, not by
+plasma still in transit. Where the propagation feed is unavailable the L1 reading is used
+instead, and the Situation Report names which one it used.
 
 ## What is blocked, and on what
 

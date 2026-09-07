@@ -138,14 +138,29 @@ export function panelSpark(
 
   const fmt = o.format ?? ((v: number) => v.toFixed(1));
   const inv = (v: number) => (o.log ? Math.pow(10, v) : v);
-  const hours = s.time.length > 1
-    ? (Date.parse(s.time[s.time.length - 1]!) - Date.parse(s.time[0]!)) / 3.6e6
+  const ms = s.time.length > 1
+    ? Date.parse(s.time[s.time.length - 1]!) - Date.parse(s.time[0]!)
     : 0;
 
   return `${inlineSpark(s, { ...o, label: o.label ?? 'history' })}
     <p class="tile-meta">${fmt(inv(p.lo!.v))} to ${fmt(inv(p.hi!.v))}${o.unit ? ` ${o.unit}` : ''}
-    over the last ${hours.toFixed(0)} h · <span class="spark-key-last">●</span> now
+    over the last ${humanSpan(ms)} · <span class="spark-key-last">●</span> now
     <span class="spark-key-ex">●</span> range</p>`;
+}
+
+/**
+ * A span in the largest sensible unit. These sparklines cover anything from six
+ * hours of solar wind to 278 years of sunspots, and "2 433 216 h" is not a
+ * span a reader can hold.
+ */
+export function humanSpan(ms: number): string {
+  const h = ms / 3.6e6;
+  if (h < 48) return `${h.toFixed(0)} h`;
+  const d = h / 24;
+  if (d < 60) return `${d.toFixed(0)} days`;
+  const mo = d / 30.44;
+  if (mo < 24) return `${mo.toFixed(0)} months`;
+  return `${(d / 365.25).toFixed(0)} years`;
 }
 
 function escapeAttr(s: string): string {

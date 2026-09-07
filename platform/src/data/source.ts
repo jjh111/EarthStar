@@ -6,7 +6,7 @@
  */
 
 import type { AuroraNow, Envelope, ModelRef, Now, SolarWindSeries, Tier } from '../contract/types.js';
-import type { Series } from './swpc.js';
+import type { ActiveRegion, Series } from './swpc.js';
 
 /**
  * Per-sub-object provenance for a `tier: 'mixed'` envelope.
@@ -34,6 +34,8 @@ export interface Snapshot {
   /** Kp and X-ray history, parsed from the same responses as `now`. */
   kpSeries: Series;
   xraySeries: Series;
+  protonSeries: Series;
+  electronSeries: Series;
 }
 
 export interface Source {
@@ -47,4 +49,5 @@ export interface Source {
   fetchNow(signal?: AbortSignal): Promise<NowEnvelope>;
   fetchSolarWindSeries(signal?: AbortSignal): Promise<Envelope<SolarWindSeries>>;
   fetchAurora(signal?: AbortSignal): Promise<Envelope<AuroraNow | null>>;
+  fetchRegions(signal?: AbortSignal): Promise<Envelope<ActiveRegion[]>>;
 }

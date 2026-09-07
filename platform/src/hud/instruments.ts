@@ -75,6 +75,38 @@ export const INSTRUMENTS: Instrument[] = [
       + 'at the speed of light, so there is no warning.',
   },
   {
+    id: 'protons', label: 'Radiation (S)', unit: 'pfu ≥10 MeV', part: 'particles',
+    value: (d) => {
+      const p = d?.particles;
+      if (!p || p.proton_10mev === null) return NO_DATA;
+      return `S${p.s_scale ?? 0}`;
+    },
+    detail: (d) => {
+      const p = d?.particles;
+      return p?.proton_10mev === null || p?.proton_10mev === undefined
+        ? '' : `${p.proton_10mev.toFixed(2)} pfu · ${p.s_text ?? ''}`;
+    },
+    meaning: 'Integral proton flux above 10 MeV at geostationary orbit, and the NOAA S '
+      + 'scale it defines. S1 begins at 10 particle flux units, and each step up is ten '
+      + 'times the last. This is the one space-weather hazard that endangers people rather '
+      + 'than equipment: at S3 and above, aviation crews on polar routes accumulate real '
+      + 'dose and astronauts outside a hull are at risk. Protons from a flare can arrive '
+      + 'within tens of minutes, far ahead of any CME.',
+  },
+  {
+    id: 'electrons', label: 'Electron flux', unit: 'pfu ≥2 MeV', part: 'particles',
+    value: (d) => fmtInt(d?.particles?.electron_2mev ?? null),
+    detail: (d) => {
+      const e = d?.particles?.electron_2mev;
+      return e === null || e === undefined ? '' : e >= 1000 ? 'above NOAA alert level' : 'normal';
+    },
+    meaning: 'Integral electron flux above 2 MeV at geostationary orbit. Sustained flux '
+      + 'above 1000 particle flux units drives deep dielectric charging — electrons bury '
+      + 'themselves inside insulating materials until the material discharges through the '
+      + 'spacecraft. It is a leading cause of satellite anomalies, and it builds over days '
+      + 'rather than minutes.',
+  },
+  {
     id: 'mpause', label: 'Magnetopause', unit: 'Rₑ', part: 'magnetopause',
     value: (d) => fmt(d?.magnetopause?.standoff_re ?? null, 1),
     detail: () => 'Shue 1998',

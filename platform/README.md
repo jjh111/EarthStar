@@ -16,6 +16,8 @@ npm test         # model, parser and contract tests
 ```
 src/contract/    Envelope<T> and the payload types — plans/DATA_CONTRACT.md in TypeScript
 src/data/        source adapters (DirectSource = stage A), SWPC parsers, polling store
+src/data/        also: particles.ts (S scale), geospace.ts (propagated wind),
+                 forecast.ts, solar-cycle.ts, solar-imagery.ts
 src/models/      ephemeris (astronomy-engine), IGRF-14 synthesis + field-line tracing,
                  Shue 1998 magnetopause, Farris & Russell bow shock, X-ray class
 src/scene/       Three.js scene: Earth + terminator, Sun, planets, camera rig, scale modes
@@ -84,6 +86,18 @@ maximum-magnitude rather than by stride, so a one-sample flare survives.
 The **Ahead** tab aggregates NOAA's own predictions: observed and predicted Kp, C/M/X flare
 odds, recent flares, F10.7, and the 3-day forecast and forecaster discussion reproduced
 **verbatim** — a summary of a forecast is a different claim from the forecast.
+
+## L1 lag
+
+Solar wind is measured at L1, about 1.5 million km sunward — roughly an hour upstream at
+typical speeds. A magnetopause computed from the L1 reading therefore describes an hour
+from now, not now. NOAA publishes the same wind propagated to the bow shock nose, and the
+scene uses that: the boundary, the wind stream and the field-line confinement all respond
+to plasma that has *arrived*. The panel also reports how many minutes of already-measured
+wind are still in flight — the warning currently in hand.
+
+If the propagation feed is unavailable the L1 reading is used instead, and the Situation
+Report names which one it used.
 
 ## What moves, and why
 

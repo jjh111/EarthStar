@@ -23,6 +23,8 @@ import {
 import { moonGeo, planetState, sunGeo, toScene } from '../models/ephemeris.js';
 import { FieldLines, Magnetosphere } from './magnetosphere.js';
 import { SolarWind } from './solar-wind.js';
+import { ActiveRegions } from './active-regions.js';
+import type { ActiveRegion } from '../data/swpc.js';
 import { magnetopause } from '../models/shue1998.js';
 import { gastDegrees } from '../models/ephemeris.js';
 import type { PlanetName } from '../models/ephemeris.js';
@@ -43,6 +45,8 @@ export class Viewer {
   private fieldLines = new FieldLines();
   private magnetosphere = new Magnetosphere();
   private solarWind: SolarWind;
+  private activeRegions = new ActiveRegions();
+  private regionsObservedAt: string | null = null;
   private shieldVisible = true;
   private windVisible = true;
   private sunDirEarthFixed = new Vector3(1, 0, 0);
@@ -72,6 +76,7 @@ export class Viewer {
 
     this.scene.add(makeStarfield());
     this.scene.add(this.sun.group);
+    this.sun.group.add(this.activeRegions.group);
     this.scene.add(this.earth.group);
     this.scene.add(this.moon.mesh);
     this.scene.add(this.sunLight);
@@ -101,6 +106,13 @@ export class Viewer {
   setNow(now: Now | null): void { this.now = now; }
 
   setAurora(aurora: AuroraNow | null): void { this.aurora = aurora; }
+
+  setRegions(regions: ActiveRegion[], observedAt: string | null): void {
+    this.activeRegions.setRegions(regions);
+    this.regionsObservedAt = observedAt;
+  }
+
+  get regionCount(): number { return this.activeRegions.count; }
 
   setAuroraVisible(v: boolean): void { this.auroraVisible = v; }
 
@@ -177,6 +189,7 @@ export class Viewer {
     // Sun at the origin; its rendered radius follows the scale mode.
     this.sun.setRadius(radiusToScene('Sun', this.mode));
     this.sun.update(elapsed, this.now?.xray?.flux_long ?? null);
+    this.activeRegions.update(date, this.regionsObservedAt, radiusToScene('Sun', this.mode));
     this.sunLight.position.set(0, 0, 0);
 
     for (const p of this.planets.values()) p.update(date, this.mode, this.rig.camera.position);
@@ -189,8 +202,14 @@ export class Viewer {
     // The live Shue solution drives the boundary surfaces, the confinement of
     // the field lines, and where the wind stream parts. One computation, three
     // consumers, so they cannot disagree on screen.
+    // Prefer the propagated wind: the scene should show what is hitting Earth
+    // now, not what is still an hour out at L1. Falls back to the L1 reading.
     const sw = this.now?.solar_wind;
-    const mp = magnetopause(sw?.bz_gsm ?? null, sw?.density ?? null, sw?.speed ?? null);
+    const arriving = this.now?.propagated;
+    const bz = arriving?.bz ?? sw?.bz_gsm ?? null;
+    const density = arriving?.density ?? sw?.density ?? null;
+    const speed = arriving?.speed ?? sw?.speed ?? null;
+    const mp = magnetopause(bz, density, speed);
 
     // Field lines live in the Earth-fixed frame, so the inertial Sun direction
     // must be counter-rotated by GAST before they can use it.
@@ -215,8 +234,7 @@ export class Viewer {
       this.solarWind.setVisible(true);
       this.solarWind.setScale(earthRadius);
       this.solarWind.update(
-        elapsed, sunDir, sw?.speed ?? null, sw?.density ?? null,
-        mp?.r0Re ?? null, mp?.alpha ?? null,
+        elapsed, sunDir, speed, density, mp?.r0Re ?? null, mp?.alpha ?? null,
       );
     }
 
@@ -257,6 +275,7 @@ export class Viewer {
     this.fieldLines.dispose();
     this.magnetosphere.dispose();
     this.solarWind.dispose();
+    this.activeRegions.dispose();
     this.rig.dispose();
     this.renderer.dispose();
   }

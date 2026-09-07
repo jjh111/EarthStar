@@ -77,6 +77,45 @@ export function buildSituationReport(
       );
     }
 
+    /* --- propagation: how much warning is left --- */
+    if (d.propagated) {
+      const lead = d.propagated.lead_minutes;
+      lines.push(
+        `That wind was measured at L1, about 1.5 million kilometres sunward, and takes ` +
+        `roughly an hour to arrive. NOAA propagates it to the bow shock nose [D · NOAA]: ` +
+        `what is reaching Earth right now was observed at ` +
+        `${hhmmUTC(d.propagated.observed_at)} UTC, with Bz ` +
+        `${d.propagated.bz === null ? 'no data' : `${d.propagated.bz.toFixed(1)} nT`} and ` +
+        `speed ${d.propagated.speed === null ? 'no data' : `${Math.round(d.propagated.speed)} km/s`}. ` +
+        (lead !== null && lead > 0
+          ? `There are about ${Math.round(lead)} minutes of already-measured wind still in ` +
+            `flight — that is the warning currently in hand.`
+          : 'No further measured wind is in flight.'),
+      );
+    }
+
+    /* --- particles: the hazard to people and satellites --- */
+    const pt = d.particles;
+    if (pt) {
+      const sTxt = pt.s_scale === null ? 'no data'
+        : `S${pt.s_scale}${pt.s_text ? ` (${pt.s_text})` : ''}`;
+      lines.push(
+        `Energetic particles at geostationary orbit, measured by GOES [E], ` +
+        `${hhmmUTC(pt.time)} UTC: protons above 10 MeV at ` +
+        `${pt.proton_10mev === null ? 'no data' : `${pt.proton_10mev.toFixed(2)} pfu`}, ` +
+        `radiation storm level ${sTxt}` +
+        (pt.s_scale !== null && pt.s_scale >= 3
+          ? ' — at this level aviation crews on polar routes take real dose.' : '.') +
+        ` Electrons above 2 MeV at ` +
+        `${pt.electron_2mev === null ? 'no data' : `${Math.round(pt.electron_2mev)} pfu` }` +
+        (pt.electron_2mev !== null && pt.electron_2mev >= 1000
+          ? ', above NOAA\u2019s alert level for satellite charging.'
+          : ', below the level that charges satellites.'),
+      );
+    } else {
+      lines.push('Energetic particle flux: no data. No radiation storm level is shown.');
+    }
+
     /* --- Kp ------------------------------------------------------------ */
     const ks = stalenessOf(p.kp, now);
     if (!d.kp || ks.state === 'no-data') {
@@ -124,7 +163,7 @@ export function buildSituationReport(
       lines.push(
         `Modeled [D] magnetopause standoff: ${mp.standoff_re.toFixed(1)} Earth radii on the ` +
         `sunward side, with flaring parameter ${mp.alpha?.toFixed(2) ?? 'no data'}, computed from ` +
-        `the solar wind above (dynamic pressure ` +
+        `the ${d.propagated ? 'propagated' : 'L1'} solar wind above (dynamic pressure ` +
         `${mp.dyn_pressure_npa?.toFixed(2) ?? 'no data'} nanopascals) using Shue et al. 1998, ` +
         `doi:10.1029/98JA01103.${compressed}` +
         (mp.bow_shock_re != null

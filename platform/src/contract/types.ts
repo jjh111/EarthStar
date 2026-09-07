@@ -106,8 +106,33 @@ export interface MagnetopauseNow {
   model: string;
 }
 
+/** CONTRACT ADDITION: energetic particles at geostationary orbit. */
+export interface ParticlesNow {
+  time: string;
+  proton_10mev: number | null;
+  proton_100mev: number | null;
+  electron_2mev: number | null;
+  satellite: number | null;
+  s_scale: number | null;
+  s_text: string | null;
+}
+
+/** CONTRACT ADDITION: NOAA's L1 wind propagated to the bow shock nose. */
+export interface PropagatedNow {
+  observed_at: string;
+  arrives_at: string;
+  speed: number | null;
+  density: number | null;
+  bz: number | null;
+  bt: number | null;
+  /** Minutes of measured wind not yet arrived — the warning still in the pipe. */
+  lead_minutes: number | null;
+}
+
 export interface Now {
   solar_wind: SolarWindNow | null;
+  particles: ParticlesNow | null;
+  propagated: PropagatedNow | null;
   kp: KpNow | null;
   xray: XrayNow | null;
   scales: ScalesNow | null;

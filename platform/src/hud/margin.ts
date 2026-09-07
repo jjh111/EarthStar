@@ -16,6 +16,8 @@ import { panelSpark } from './sparkline.js';
 import { stateSentence, stateSentenceText } from './state-sentence.js';
 import type { ForecastBundle } from '../data/forecast.js';
 import { stripProductHeader } from '../data/forecast.js';
+import type { SolarCycle } from '../data/solar-cycle.js';
+import { tail } from '../data/solar-cycle.js';
 import { INSTRUMENTS } from './instruments.js';
 import { buildSituationReport, type SceneNarration } from './situation-report.js';
 
@@ -236,7 +238,40 @@ function mb(bytes: number | null, frames: number): string {
   return `~${((bytes * frames) / 1_048_576).toFixed(0)} MB`;
 }
 
-export function renderSun(sun: SunState, specs: Array<{ id: string; label: string }>): string {
+/**
+ * Century-scale context. Two sparklines: the whole record, and the last three
+ * cycles. The point of the first is that today's number is unremarkable, which
+ * only a 275-year line can say.
+ */
+function solarCyclePanel(c: SolarCycle | null, loading: boolean): string {
+  if (!c) {
+    return loading
+      ? '<h3>Solar cycle</h3><p class="tile-meta">Loading the sunspot record…</p>'
+      : '';
+  }
+  const now = c.latest;
+  const years = c.ssn.time.length / 12;
+  return `
+    <h3>Solar cycle</h3>
+    <p>Monthly sunspot number since ${escapeHtml(c.ssn.time[0]!.slice(0, 4))} —
+    ${Math.round(years)} years, the longest continuous record in science.</p>
+    ${panelSpark(c.ssn, { extremes: true, format: (v) => v.toFixed(0), unit: 'spots',
+      label: 'monthly sunspot number, full record' })}
+    <p>The last three cycles:</p>
+    ${panelSpark(tail(c.ssn, 33 * 12), { extremes: true, format: (v) => v.toFixed(0),
+      unit: 'spots', label: 'monthly sunspot number, last 33 years' })}
+    <p class="tile-meta">
+      ${now?.ssn !== null && now !== null ? `Now <b class="sentence-num">${now.ssn.toFixed(0)}</b>
+        for ${escapeHtml(now.month)}` : 'Latest month unavailable'}${
+      c.allTimeMax ? ` · record <b class="sentence-num">${c.allTimeMax.ssn.toFixed(0)}</b>
+        in ${escapeHtml(c.allTimeMax.month)}` : ''}.
+      <span class="badge badge-e">E</span> NOAA SWPC solar-cycle indices.</p>`;
+}
+
+export function renderSun(
+  sun: SunState, specs: Array<{ id: string; label: string }>,
+  cycle: SolarCycle | null = null, cycleLoading = false,
+): string {
   const picker = specs.map((s) =>
     `<button class="ctl" data-loop="${s.id}" aria-pressed="${s.id === sun.loopId}">${escapeHtml(s.label)}</button>`).join('');
 
@@ -272,10 +307,14 @@ export function renderSun(sun: SunState, specs: Array<{ id: string; label: strin
     </div>
     <div class="sun-transport">${transport}</div>
     <p><span class="badge badge-e">E</span> ${escapeHtml(L.instrument)}. ${escapeHtml(L.describes)}</p>
-    <p class="tile-meta">Showing the newest frame. Upstream published ${L.totalAvailable} frames
+    <p class="tile-meta">${L.skippedDropouts > 0
+      ? `The newest ${L.skippedDropouts} frame${L.skippedDropouts > 1 ? 's were' : ' was'} a
+         data dropout — a valid but near-empty image — so this is the newest usable one. `
+      : 'Showing the newest frame. '}Upstream published ${L.totalAvailable} frames
     over ${L.spanHours.toFixed(0)} hours; playback samples ${n} of them evenly, always keeping
     the newest. Each frame carries its own observation time.
-    <a href="${L.sourceUrl}" rel="noreferrer noopener" target="_blank">Frame list</a>.</p>`;
+    <a href="${L.sourceUrl}" rel="noreferrer noopener" target="_blank">Frame list</a>.</p>
+    ${solarCyclePanel(cycle, cycleLoading)}`;
 }
 
 /** Picks the right series and scaling for an instrument's detail sparkline. */
@@ -283,6 +322,14 @@ function detailSpark(inst: { id: string; series?: string; unit: string }, state:
   if (inst.id === 'kp' && state.kpSeries) {
     return panelSpark(state.kpSeries, { band: [0, 4], unit: 'Kp', format: (v) => v.toFixed(2),
       label: 'Kp history, quiet band shaded' });
+  }
+  if (inst.id === 'protons' && state.protonSeries) {
+    return panelSpark(state.protonSeries, { log: true, unit: 'pfu',
+      format: (v) => v.toFixed(2), label: 'proton flux above 10 MeV, logarithmic' });
+  }
+  if (inst.id === 'electrons' && state.electronSeries) {
+    return panelSpark(state.electronSeries, { log: true, unit: 'pfu',
+      format: (v) => v.toFixed(0), label: 'electron flux above 2 MeV, logarithmic' });
   }
   if (inst.id === 'xray' && state.xraySeries) {
     return panelSpark(state.xraySeries, { log: true, unit: 'W/m²',
