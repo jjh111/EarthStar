@@ -34,7 +34,145 @@ import { gastDegrees } from '../models/ephemeris.js';
 import type { PlanetName } from '../models/ephemeris.js';
 import type { AuroraNow, Now } from '../contract/types.js';
 
-export interface FrameStats { fps: number; frames: number; }
+/**
+ * Render-scale ladder.
+ *
+ * This scene's GPU cost is almost exactly linear in the number of pixels drawn:
+ * measured on an M2 Max it runs 0.29 ms per megapixel, from 0.78 ms at 2.5 MP to
+ * 2.87 ms at 10 MP. There is nothing clever to do about that — the scene is
+ * mostly large additively-blended surfaces, which is inherently fill-bound — so
+ * the honest lever is how many pixels to draw, and the right number depends
+ * entirely on the machine. A 10-megapixel frame is 3 ms on this GPU and could be
+ * 30 ms on an integrated one.
+ *
+ * So the resolution adapts, and the HUD says when it has been reduced. Quietly
+ * degrading quality without saying so would be the same class of dishonesty as
+ * quietly degrading data.
+ */
+const LADDER = [2, 1.75, 1.5, 1.25, 1, 0.85, 0.75];
+
+/**
+ * How far down the ladder it is reasonable to go.
+ *
+ * Without multisampling, one rendered pixel per CSS pixel is the floor: below
+ * that there is neither supersampling nor MSAA and the hairlines this scene is
+ * made of break up badly. A machine that cannot hold 60 fps at 1.0 with MSAA
+ * available can keep dropping, because it has antialiasing to fall back on.
+ */
+function ladderFloor(msaa: boolean): number {
+  return msaa ? LADDER.length - 1 : LADDER.indexOf(1);
+}
+
+/** Highest rung at or below `want`. */
+function nearestRung(want: number): number {
+  return LADDER.find((r) => r <= want + 1e-6) ?? LADDER[LADDER.length - 1]!;
+}
+
+/** 60 fps is the goal, not the display's maximum — 120 Hz panels need no more. */
+const TARGET_MS = 1000 / 60;
+/** Below ~45 fps, drop a rung. */
+const TOO_SLOW_MS = TARGET_MS * 1.35;
+/** Comfortably inside the budget, with margin, before climbing back. */
+const FAST_ENOUGH_MS = TARGET_MS * 1.05;
+const LADDER_INTERVAL_MS = 1000;
+
+export interface LadderState {
+  current: number;
+  medianFrameMs: number;
+  /** Highest rung the display itself can use. */
+  max: number;
+  msaa: boolean;
+  good: number;
+  bad: number;
+  /**
+   * Highest rung still worth trying. Ratchets down when a rung has proved too
+   * slow twice, so the ladder converges instead of cycling forever.
+   */
+  ceiling?: number;
+  /** The rung most recently stepped down from. */
+  demotedFrom?: number | null;
+}
+
+export interface LadderResult {
+  ratio: number;
+  good: number;
+  bad: number;
+  ceiling: number;
+  demotedFrom: number | null;
+}
+
+/**
+ * One step of the render-scale decision, as a pure function so the hysteresis
+ * can be tested without a GPU.
+ *
+ * Frame interval can only see a deficit, never headroom — a frame that finishes
+ * early still waits for vsync — and the rule leans on that asymmetry: a slow
+ * frame is direct evidence, so dropping a rung needs two consecutive seconds,
+ * while climbing back needs six.
+ *
+ * That alone is not enough. A machine that is comfortable at one rung and just
+ * short at the next settles into a permanent cycle: six good seconds, a step
+ * up, two bad seconds, a step down, forever — a quarter of its life at a
+ * resolution it cannot hold, and a buffer reallocation every few seconds. So a
+ * rung that has proved too slow *twice* is abandoned: the ceiling ratchets down
+ * and the ladder stops reaching for it. Convergence is worth more than the
+ * chance that conditions improved.
+ */
+export function nextRung(s: LadderState): LadderResult {
+  const ceiling = s.ceiling ?? s.max;
+  let demotedFrom = s.demotedFrom ?? null;
+  let { good, bad } = s;
+
+  if (s.medianFrameMs > TOO_SLOW_MS) { bad++; good = 0; }
+  else if (s.medianFrameMs < FAST_ENOUGH_MS) { good++; bad = 0; }
+  else { good = 0; bad = 0; }
+
+  const i = LADDER.indexOf(s.current);
+  if (i < 0) {
+    return { ratio: nearestRung(s.current), good: 0, bad: 0, ceiling, demotedFrom };
+  }
+
+  if (bad >= 2 && i < ladderFloor(s.msaa)) {
+    const ratio = LADDER[i + 1]!;
+    // Second time this rung has failed: stop offering it.
+    const nextCeiling = demotedFrom === s.current ? Math.min(ceiling, ratio) : ceiling;
+    return { ratio, good: 0, bad: 0, ceiling: nextCeiling, demotedFrom: s.current };
+  }
+  if (good >= 6 && i > 0) {
+    const up = LADDER[i - 1]!;
+    if (up <= s.max && up <= ceiling) {
+      return { ratio: up, good: 0, bad: 0, ceiling, demotedFrom };
+    }
+  }
+  return { ratio: s.current, good, bad, ceiling, demotedFrom };
+}
+
+const STAT_WINDOW = 120;
+
+function push(a: number[], v: number): void {
+  a.push(v);
+  if (a.length > STAT_WINDOW) a.shift();
+}
+
+function median(a: number[]): number {
+  if (a.length === 0) return 0;
+  const s = [...a].sort((x, y) => x - y);
+  return s[s.length >> 1]!;
+}
+
+export interface FrameStats {
+  fps: number;
+  frames: number;
+  /** Main-thread milliseconds spent building the frame, median of the window. */
+  cpuMs: number;
+  /** Of that, the part spent in ephemeris and scene update rather than draw submission. */
+  updateMs: number;
+  /** Current render scale. Below `maxPixelRatio` means quality was traded for frame rate. */
+  pixelRatio: number;
+  maxPixelRatio: number;
+  /** Megapixels drawn per frame — the quantity this scene's cost is linear in. */
+  megapixels: number;
+}
 
 export class Viewer {
   readonly scene = new Scene();
@@ -71,13 +209,35 @@ export class Viewer {
   // Frame-rate accounting for the performance budget (plan §5.4).
   private frameTimes: number[] = [];
   private lastFrame = performance.now();
-  stats: FrameStats = { fps: 0, frames: 0 };
+  stats: FrameStats = {
+    fps: 0, frames: 0, cpuMs: 0, updateMs: 0,
+    pixelRatio: 1, maxPixelRatio: 1, megapixels: 0,
+  };
+  private cpuTimes: number[] = [];
+  private updateTimes: number[] = [];
+  private pixelRatio = 1;
+  private maxPixelRatio = 1;
+  private msaa = false;
+  private lastLadderCheck = 0;
+  private goodStreak = 0;
+  private badStreak = 0;
+  private ladderCeiling = Infinity;
+  private demotedFrom: number | null = null;
 
   constructor(private canvas: HTMLCanvasElement) {
+    // Multisampling and a 2x pixel ratio buy the same thing — smoother edges —
+    // and buying it twice is what makes this scene expensive. At DPR 2 the
+    // buffer is already supersampled 4:1 against the CSS pixel, so MSAA on top
+    // costs a large multisample buffer and a resolve for very little. Below
+    // DPR 2 there is no supersampling to lean on and MSAA earns its place.
+    this.msaa = devicePixelRatio < 2;
     this.renderer = new WebGLRenderer({
-      canvas, antialias: true, powerPreference: 'high-performance',
+      canvas, antialias: this.msaa, powerPreference: 'high-performance',
     });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    this.pixelRatio = nearestRung(Math.min(devicePixelRatio, 2));
+    this.maxPixelRatio = this.pixelRatio;
+    this.ladderCeiling = this.pixelRatio;
+    this.renderer.setPixelRatio(this.pixelRatio);
     this.scene.background = new Color(0x05070d);
 
     this.rig = new CameraRig(canvas, canvas.clientWidth / Math.max(1, canvas.clientHeight));
@@ -203,7 +363,20 @@ export class Viewer {
     this.frameTimes.push(dt);
     if (this.frameTimes.length > 120) this.frameTimes.shift();
     const mean = this.frameTimes.reduce((a, b) => a + b, 0) / this.frameTimes.length;
-    this.stats = { fps: mean > 0 ? 1000 / mean : 0, frames: this.stats.frames + 1 };
+    // Frame interval alone cannot see the cost of a frame that finishes inside
+    // the vsync budget, so the work itself is timed too. Median, not mean: one
+    // garbage collection should not be reported as the steady-state cost.
+    this.stats = {
+      fps: mean > 0 ? 1000 / mean : 0,
+      frames: this.stats.frames + 1,
+      cpuMs: median(this.cpuTimes),
+      updateMs: median(this.updateTimes),
+      pixelRatio: this.pixelRatio,
+      maxPixelRatio: this.maxPixelRatio,
+      megapixels: (this.canvas.clientWidth * this.canvas.clientHeight
+        * this.pixelRatio * this.pixelRatio) / 1e6,
+    };
+    this.adaptResolution(t, median(this.frameTimes));
 
     const date = new Date();
     const elapsed = (t - this.clockStart) / 1000;
@@ -285,7 +458,11 @@ export class Viewer {
 
     this.rig.followTarget(earthPos);
     this.rig.update();
+    const updateDone = performance.now();
     this.renderer.render(this.scene, this.rig.camera);
+
+    push(this.updateTimes, updateDone - t);
+    push(this.cpuTimes, performance.now() - t);
     this.raf = requestAnimationFrame(this.frame);
   };
 
@@ -296,6 +473,46 @@ export class Viewer {
   }
 
   stop(): void { cancelAnimationFrame(this.raf); this.raf = 0; }
+
+/**
+   * Step the render scale to fit the frame budget.
+   *
+   * Frame interval can only see a deficit, never headroom — a frame that
+   * finishes early still waits for vsync — which is exactly the asymmetry
+   * needed: a slow frame is measurable, so dropping a rung is decisive, while
+   * climbing back is deliberately slower and needs sustained evidence. Stepping
+   * costs a buffer reallocation, so it is checked once a second, not per frame.
+   */
+  private adaptResolution(now: number, medianFrameMs: number): void {
+    if (now - this.lastLadderCheck < LADDER_INTERVAL_MS) return;
+    this.lastLadderCheck = now;
+    if (this.frameTimes.length < STAT_WINDOW / 2) return;
+
+    const next = nextRung({
+      current: this.pixelRatio, medianFrameMs, max: this.maxPixelRatio,
+      msaa: this.msaa, good: this.goodStreak, bad: this.badStreak,
+      ceiling: this.ladderCeiling, demotedFrom: this.demotedFrom,
+    });
+    this.goodStreak = next.good;
+    this.badStreak = next.bad;
+    this.ladderCeiling = next.ceiling;
+    this.demotedFrom = next.demotedFrom;
+    if (next.ratio !== this.pixelRatio) this.setPixelRatio(next.ratio);
+  }
+
+  private setPixelRatio(r: number): void {
+    if (r === this.pixelRatio) return;
+    this.pixelRatio = r;
+    this.badStreak = 0;
+    this.goodStreak = 0;
+    this.renderer.setPixelRatio(r);
+    this.resize();
+    // The window described the old resolution; judging the new one against it
+    // would step again before a single frame at the new size has been drawn.
+    this.frameTimes.length = 0;
+    this.cpuTimes.length = 0;
+    this.updateTimes.length = 0;
+  }
 
   private resize = (): void => {
     const w = this.canvas.clientWidth || window.innerWidth;

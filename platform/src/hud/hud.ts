@@ -6,6 +6,7 @@
 
 import type { PartMeta } from '../data/source.js';
 import type { StoreState } from '../data/store.js';
+import type { FrameStats } from '../scene/viewer.js';
 import type { CheckResult } from '../data/checks.js';
 import type { ForecastBundle } from '../data/forecast.js';
 import type { SolarCycle } from '../data/solar-cycle.js';
@@ -37,6 +38,8 @@ export class Hud {
   private tabsEl: HTMLElement;
   private bodyEl: HTMLElement;
   private statusEl: HTMLElement;
+  private perfEl: HTMLElement;
+  private perfKey = '';
   private clockEl: HTMLElement;
 
   private tiles = new Map<string, HTMLElement>();
@@ -74,6 +77,7 @@ export class Hud {
     this.tabsEl = document.getElementById('tabs') as HTMLElement;
     this.bodyEl = document.getElementById('margin-body') as HTMLElement;
     this.statusEl = document.getElementById('status') as HTMLElement;
+    this.perfEl = document.getElementById('perf') as HTMLElement;
     this.clockEl = document.getElementById('clock') as HTMLElement;
     this.buildTiles();
     this.buildTabs();
@@ -307,6 +311,25 @@ export class Hud {
     }
 
     this.renderMargin();
+  }
+
+/**
+   * The renderer trades resolution for frame rate on its own. Doing that
+   * silently would be the same kind of dishonesty as quietly degrading data, so
+   * it is said out loud — but only while it is happening, because a permanent
+   * frame-rate counter is noise the rest of the time.
+   */
+  setStats(s: FrameStats): void {
+    const reduced = s.pixelRatio < s.maxPixelRatio;
+    const key = reduced ? `${s.pixelRatio}/${s.maxPixelRatio}/${Math.round(s.fps)}` : '';
+    if (key === this.perfKey) return;
+    this.perfKey = key;
+    this.perfEl.hidden = !reduced;
+    if (!reduced) return;
+    this.perfEl.textContent =
+      `Rendering at ${s.pixelRatio}x rather than ${s.maxPixelRatio}x `
+      + `(${s.megapixels.toFixed(1)} MP) to hold the frame rate — `
+      + `${Math.round(s.fps)} fps. Geometry and data are unaffected.`;
   }
 
   private renderMargin(): void {

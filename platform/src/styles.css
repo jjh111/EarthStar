@@ -409,3 +409,9 @@ text.l1-idle { fill: var(--ink-faint); }
   border-radius: 2px; padding: 0 0.3em; cursor: pointer; white-space: nowrap;
 }
 .ticker-more:hover, .ticker-more:focus-visible { border-color: var(--accent); }
+
+.perf {
+  margin: 0; padding: 0.3rem 0.7rem 0.5rem;
+  font-size: 0.6rem; line-height: 1.45; color: var(--ink-faint);
+  border-top: 1px solid var(--line);
+}

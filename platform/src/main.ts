@@ -236,6 +236,11 @@ viewer.start();
 store.start();
 void selectLoop(LOOPS[0]!.id);
 
+// The render scale adapts on its own; sample it at 1 Hz so the HUD can say so.
+// Reading it per frame would put a DOM write in the animation loop to report on
+// the cost of the animation loop.
+window.setInterval(() => hud.setStats(viewer.stats), 1000);
+
 Object.assign(window as unknown as Record<string, unknown>, {
   __viewer: viewer,
   __stats: () => viewer.stats,
