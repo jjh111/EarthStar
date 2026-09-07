@@ -154,7 +154,7 @@ export class SolarWind {
         uSunDir: { value: new Vector3(1, 0, 0) },
         uStreak: { value: 1.4 },
         uColor: { value: new Color(0.62, 0.86, 1.0) },
-        uOpacity: { value: 0.5 },
+        uOpacity: { value: 0.28 },
       },
       vertexShader: vert,
       fragmentShader: frag,
@@ -205,7 +205,12 @@ export class SolarWind {
     const t = Math.max(0, Math.min(1, (densityCm3! - 1) / 19));
     const n = Math.round(this.maxCount * (0.25 + 0.75 * t));
     this.points.geometry.setDrawRange(0, n * 2);      // two vertices per streak
-    this.mat.uniforms['uOpacity']!.value = 0.40 + 0.32 * t;
+    // Toned down: these streaks are ambient [M], and at the old opacity they
+    // competed with the field lines and the boundary surfaces — the things that
+    // are actually modelled from measurements. Density still drives the value,
+    // so a dense wind still reads as a denser stream; it simply no longer
+    // shouts over the geometry it is meant to be flowing around.
+    this.mat.uniforms['uOpacity']!.value = 0.20 + 0.20 * t;
     // Streak length carries the speed directly: a fast wind draws long strokes.
     this.mat.uniforms['uStreak']!.value = 0.7 + (speedKms! / 1000) * 3.4;
   }

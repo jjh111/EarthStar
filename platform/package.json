@@ -3,13 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "The Viewer — Earth Star's 3D space-weather platform. Source; builds to ../viewer/.",
+  "description": "The Viewer \u2014 Earth Star's 3D space-weather platform. Source; builds to ../viewer/.",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "a11y": "node scripts/a11y.mjs"
   },
   "dependencies": {
     "astronomy-engine": "^2.1.19",
@@ -21,6 +22,7 @@
     "@types/node": "^26.4.1",
     "@types/three": "^0.180.0",
     "@types/topojson-client": "^3.1.5",
+    "axe-core": "^4.13.0",
     "playwright-core": "^1.63.0",
     "typescript": "^5.9.2",
     "vite": "^7.1.5",

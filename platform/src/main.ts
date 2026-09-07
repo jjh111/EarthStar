@@ -227,6 +227,33 @@ function setWind(on: boolean): void {
   syncNarration();
 }
 
+/**
+ * The header's real height, published to CSS.
+ *
+ * On a phone it wraps to two or three rows depending on whether a notice is
+ * outstanding, so anything that has to sit below it — the sticky tab bar —
+ * needs the measured value rather than the desktop constant.
+ */
+const headerEl = document.querySelector('header.top') as HTMLElement;
+function publishHeaderHeight(): void {
+  document.documentElement.style.setProperty(
+    '--header-real-h', `${Math.round(headerEl.getBoundingClientRect().height)}px`,
+  );
+}
+publishHeaderHeight();
+if (typeof ResizeObserver !== 'undefined') {
+  new ResizeObserver(publishHeaderHeight).observe(headerEl);
+}
+
+// On a phone the control clusters fold behind a disclosure; on a desktop the
+// button is not rendered and this does nothing.
+const controlsToggle = btn('controls-toggle');
+const controlsEl = document.getElementById('controls') as HTMLElement;
+controlsToggle.addEventListener('click', () => {
+  const open = controlsEl.classList.toggle('is-open');
+  controlsToggle.setAttribute('aria-expanded', String(open));
+});
+
 btnScaleGlobe.addEventListener('click', () => setScale('globe'));
 btnScaleTrue.addEventListener('click', () => setScale('true'));
 btnShield.addEventListener('click', () => setShield(!viewer.shieldOn));

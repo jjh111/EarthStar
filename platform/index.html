@@ -29,7 +29,10 @@
            hidden when NOAA has nothing outstanding. -->
       <a class="headline-alert" id="headline-alert" href="#margin-body" hidden></a>
 
-      <nav class="controls" aria-label="View and layer controls">
+      <button class="ctl controls-toggle" id="controls-toggle" type="button"
+        aria-expanded="false" aria-controls="controls">Controls</button>
+
+      <nav class="controls" id="controls" aria-label="View and layer controls">
         <span class="ctl-set">
           <span class="ctl-legend" id="lg-scale">Scale</span>
           <span class="ctl-group" role="group" aria-labelledby="lg-scale">
@@ -72,7 +75,10 @@
 
     <aside class="margin" aria-label="Detail panel">
       <nav class="tabs" id="tabs" role="tablist" aria-label="Detail sections"></nav>
-      <div class="margin-body" id="margin-body" tabindex="-1"></div>
+      <!-- tabindex="0", not -1: this region scrolls, and a keyboard user needs
+           to be able to reach it to scroll it. The skip link lands here too. -->
+      <div class="margin-body" id="margin-body" role="tabpanel" tabindex="0"
+           aria-labelledby="tab-report"></div>
       <div class="margin-actions">
         <button class="ctl ctl-sm" id="brief-copy" type="button"
                 title="Copy the whole panel as Markdown, with every timestamp and source">Copy briefing</button>
