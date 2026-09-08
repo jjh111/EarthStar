@@ -21,13 +21,32 @@
  *     them on. Projecting them anyway would smear the limb into a bright ring
  *     that is not on the Sun's surface, so anything beyond the limb is
  *     discarded rather than clamped.
+ *
+ * A coronagraph is the other case entirely. LASCO blocks the Sun on purpose and
+ * photographs what is left: C2 out to 6 solar radii, C3 to 30. None of that is
+ * on the sphere, so it is drawn where it actually is — on a plane through the
+ * Sun's centre, perpendicular to the line the picture was taken along, in the
+ * same orthographic frame as the disc and at the same solar-radius scale. The
+ * occulted centre is discarded so the Sun shows through it, which also removes
+ * the drawn limb circle: an annotation, not a measurement, and rendering it
+ * would put a ring around the Sun that no instrument saw.
+ *
+ * Being a real image plane, it is genuinely edge-on from a viewpoint at right
+ * angles to the Sun–Earth line. That is not a defect. It is what a photograph
+ * taken from Earth looks like from the side, and the Sunward view exists to
+ * look down that line.
  */
 
 import {
-  AdditiveBlending, BackSide, Color, Group, Mesh, ShaderMaterial, SphereGeometry,
-  SRGBColorSpace, Texture, Vector2, Vector3,
+  AdditiveBlending, BackSide, Color, DoubleSide, Group, Mesh, PlaneGeometry,
+  ShaderMaterial, SphereGeometry, SRGBColorSpace, Texture, Vector2, Vector3,
 } from 'three';
 import type { DiskCalibration } from './disk-calibration.js';
+import type { CoronagraphCalibration } from './coronagraph-calibration.js';
+import { AU_KM, BODY_RADIUS_KM, distanceToScene, type ScaleMode } from './scales.js';
+
+/** One solar radius in AU — the unit a coronagraph's field of view is quoted in. */
+const SUN_RADIUS_AU = BODY_RADIUS_KM.Sun / AU_KM;
 
 const discVert = /* glsl */ `
   varying vec3 vLocal;
@@ -77,6 +96,70 @@ const discFrag = /* glsl */ `
     // sphere maps to a whole pixel — and a hard edge would read as a feature.
     float lit = smoothstep(-0.02, 0.20, facing);
     gl_FragColor = vec4(mix(uUnobserved, img, lit), 1.0);
+    #include <colorspace_fragment>
+  }
+`;
+
+const cgVert = /* glsl */ `
+  uniform vec3 uEarthDir;
+  uniform vec3 uNorth;
+  uniform float uExtent;      // half-width of the quad, scene units
+  varying vec2 vRsun;         // position on the image plane, in solar radii
+  uniform float uCover;       // half-width of the quad, solar radii
+
+  void main() {
+    // The same image plane the disc projects through: up is solar north with
+    // the line-of-sight component removed, right completes the set about the
+    // direction to Earth. Built here rather than by orienting the mesh, so the
+    // two can never drift apart.
+    vec3 up = normalize(uNorth - uEarthDir * dot(uNorth, uEarthDir));
+    vec3 right = normalize(cross(up, uEarthDir));
+
+    vRsun = position.xy * uCover;
+    vec3 local = (right * position.x + up * position.y) * uExtent;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(local, 1.0);
+  }
+`;
+
+const cgFrag = /* glsl */ `
+  uniform sampler2D uImage;
+  uniform vec2 uCentre;       // Sun centre in texture coordinates
+  uniform float uRsun;        // one solar radius, fraction of image width
+  uniform float uOcculter;    // occulted radius, solar radii
+  uniform float uEdge;        // field of view radius, solar radii
+  uniform vec3 uFloor;        // sky pedestal of the palette, per channel
+  uniform float uIntensity;
+  varying vec2 vRsun;
+
+  void main() {
+    float r = length(vRsun);
+
+    // Inside the occulter the instrument saw nothing. Discarding rather than
+    // dimming keeps the Sun and its own imagery visible through the hole, and
+    // takes the drawn limb circle with it.
+    if (r < uOcculter) discard;
+
+    // The field of view is a circle. The frame it arrives in is a square, and
+    // rendering the square would draw a rectangle of sky around the corona
+    // whose corners are the vignette, not the Sun.
+    if (r > uEdge) discard;
+
+    vec2 uv = uCentre + vRsun * uRsun;
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) discard;
+
+    vec3 c = texture2D(uImage, uv).rgb;
+
+    // Subtract the palette's own zero, per channel. These renderings are
+    // false-colour and their empty sky is a solid mid-blue, which added as
+    // light becomes a slab the size of the inner solar system — a picture of
+    // the colour table, not of the corona. Each channel is then restretched
+    // over what is left, so the corona keeps its structure and its hue.
+    c = max(c - uFloor, vec3(0.0)) / max(vec3(1e-3), vec3(1.0) - uFloor);
+
+    // Soft at both ends, so neither discard reads as a cut circle.
+    float edge = smoothstep(uOcculter, uOcculter * 1.15, r)
+               * (1.0 - smoothstep(uEdge * 0.88, uEdge, r));
+    gl_FragColor = vec4(c * uIntensity * edge, 1.0);
     #include <colorspace_fragment>
   }
 `;
@@ -132,6 +215,13 @@ export class Sun {
   private coronaMat: ShaderMaterial;
   private reducedMotion = false;
 
+  /** The coronagraph image plane — null texture until a LASCO frame is shown. */
+  private cg: Mesh;
+  private cgMat: ShaderMaterial;
+  private cgTexture: Texture | null = null;
+  private cgCal: CoronagraphCalibration | null = null;
+  private scaleMode: ScaleMode = 'globe';
+
   constructor(radius = 1) {
     this.discMat = new ShaderMaterial({
       uniforms: {
@@ -167,6 +257,37 @@ export class Sun {
     });
     this.corona = new Mesh(new SphereGeometry(radius * 2.2, 48, 32), this.coronaMat);
     this.group.add(this.corona);
+
+    this.cgMat = new ShaderMaterial({
+      uniforms: {
+        uImage: { value: null },
+        uEarthDir: { value: new Vector3(1, 0, 0) },
+        uNorth: { value: new Vector3(0, 1, 0) },
+        uCentre: { value: new Vector2(0.5, 0.5) },
+        uRsun: { value: 0.02 },
+        uOcculter: { value: 2.2 },
+        uEdge: { value: 6 },
+        uFloor: { value: new Vector3(0, 0, 0) },
+        uExtent: { value: 1 },
+        uCover: { value: 1 },
+        uIntensity: { value: 1.15 },
+      },
+      vertexShader: cgVert,
+      fragmentShader: cgFrag,
+      transparent: true, blending: AdditiveBlending,
+      // Additive and unwritten to depth, like every other glow in the scene:
+      // it is light arriving, not a surface. DoubleSide because the plane is
+      // seen from whichever side the camera happens to be on.
+      depthWrite: false, side: DoubleSide,
+    });
+    // Local coordinates run -1..1; the vertex shader places them on the image
+    // plane, so the geometry itself needs no orientation.
+    this.cg = new Mesh(new PlaneGeometry(2, 2), this.cgMat);
+    this.cg.name = 'sun-coronagraph';
+    this.cg.visible = false;
+    // Drawn after the sphere so the two blend in a predictable order.
+    this.cg.renderOrder = 2;
+    this.group.add(this.cg);
   }
 
   setRadius(radius: number): void {
@@ -174,7 +295,68 @@ export class Sun {
     this.corona.scale.setScalar(radius);
   }
 
+  /**
+   * How big the corona is drawn — which is a question about *distance*, not
+   * about body size, and so follows the scene's distance scale.
+   *
+   * The tempting answer is to multiply by the rendered Sun radius, keeping the
+   * ratio to the Sun exactly right. At Globe scale that is a disaster: the Sun
+   * is exaggerated ten times, so C3's thirty solar radii land three times
+   * further out than Earth's orbit and the corona swallows the solar system.
+   * The corona's extent is a distance from the Sun — 0.009 to 0.14 AU — and
+   * every other distance in this scene is compressed the same way, which the
+   * HUD already declares.
+   *
+   * The image itself stays linear inside that radius. The compression chooses
+   * how far the outer edge sits; it does not warp what is drawn within it.
+   */
+  private applyCoronagraphScale(): void {
+    if (!this.cgCal) return;
+    const edge = this.cgCal.halfWidthRsun;
+    this.cgMat.uniforms['uExtent']!.value =
+      distanceToScene(edge * SUN_RADIUS_AU, this.scaleMode);
+    this.cgMat.uniforms['uCover']!.value = edge;
+    this.cgMat.uniforms['uEdge']!.value = edge;
+  }
+
+  /** Distance compression follows the scene's mode, so the Sun must be told. */
+  setScaleMode(mode: ScaleMode): void {
+    this.scaleMode = mode;
+    this.applyCoronagraphScale();
+  }
+
   setReducedMotion(on: boolean): void { this.reducedMotion = on; }
+
+  /**
+   * Show a coronagraph frame on the image plane. Without a calibration there is
+   * no way to know where the Sun sits in the frame or how far the field of view
+   * reaches, and a guess would put the corona somewhere the instrument never
+   * looked — so nothing is drawn.
+   */
+  setCoronagraph(image: HTMLImageElement | null, cal: CoronagraphCalibration | null): void {
+    if (!image || !cal) {
+      this.cg.visible = false;
+      this.cgCal = null;
+      return;
+    }
+    const tex = new Texture(image);
+    tex.colorSpace = SRGBColorSpace;
+    tex.needsUpdate = true;
+    this.cgTexture?.dispose();
+    this.cgTexture = tex;
+    this.cgCal = cal;
+
+    this.cgMat.uniforms['uImage']!.value = tex;
+    this.cgMat.uniforms['uCentre']!.value.set(cal.centre.u, cal.centre.v);
+    this.cgMat.uniforms['uRsun']!.value = cal.rsun;
+    this.cgMat.uniforms['uOcculter']!.value = cal.occulterRsun;
+    (this.cgMat.uniforms['uFloor']!.value as Vector3)
+      .set(cal.background.r, cal.background.g, cal.background.b);
+    this.applyCoronagraphScale();
+    this.cg.visible = true;
+  }
+
+  get hasCoronagraph(): boolean { return this.cg.visible; }
 
   /** `xrayFluxLong` in W/m²; null leaves the corona at its baseline. */
   update(elapsed: number, xrayFluxLong: number | null): void {
@@ -239,6 +421,9 @@ export class Sun {
   setViewGeometry(earthDir: Vector3, north: Vector3): void {
     (this.discMat.uniforms['uEarthDir']!.value as Vector3).copy(earthDir).normalize();
     (this.discMat.uniforms['uNorth']!.value as Vector3).copy(north).normalize();
+    // The same two vectors, because it is the same projection.
+    (this.cgMat.uniforms['uEarthDir']!.value as Vector3).copy(earthDir).normalize();
+    (this.cgMat.uniforms['uNorth']!.value as Vector3).copy(north).normalize();
   }
 
   dispose(): void {
@@ -247,5 +432,8 @@ export class Sun {
     this.disc.geometry.dispose();
     this.corona.geometry.dispose();
     this.coronaMat.dispose();
+    this.cgTexture?.dispose();
+    this.cgMat.dispose();
+    this.cg.geometry.dispose();
   }
 }

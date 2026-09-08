@@ -17,6 +17,7 @@ import {
   NO_DATA, badgeFor, badgeTitle, hhmmUTC, stalenessOf,
 } from './format.js';
 import { INSTRUMENTS } from './instruments.js';
+import type { CoronagraphCalibration } from '../scene/coronagraph-calibration.js';
 import { tileSpark } from './tile-spark.js';
 import { inlineSpark } from './sparkline.js';
 import {
@@ -89,6 +90,7 @@ export class Hud {
   private sun: SunState = {
     loop: null, loopId: LOOPS[0]!.id, frameIndex: 0,
     playing: false, loading: true, preloaded: 0, preloading: false,
+    coronagraph: null,
   };
   private narration: SceneNarration = {
     mode: 'globe', view: 'deck', reducedMotion: false,
@@ -156,6 +158,28 @@ export class Hud {
     if (this.tab === 'sun') this.updateSunFrame();
   }
   setSunPlaying(p: boolean): void { this.sun.playing = p; if (this.tab === 'sun') this.renderMargin(); }
+
+  /**
+   * What the scene measured out of a coronagraph frame, for the panel to state.
+   *
+   * Re-renders only on a *change*, and the guard is load-bearing rather than an
+   * optimisation. Rendering the panel puts the current frame into the scene
+   * (`updateSunFrame` → `onSunFrame`), which measures it, which lands back
+   * here: re-rendering unconditionally is an infinite recursion that hangs the
+   * page the moment a coronagraph is selected while the Sun tab is open.
+   *
+   * The calibration is a pure function of the frame's pixels, so the second
+   * pass produces identical numbers and the cycle stops on the first
+   * comparison.
+   */
+  setCoronagraphCalibration(c: CoronagraphCalibration | null): void {
+    const prev = this.sun.coronagraph;
+    const unchanged = prev === c || (!!prev && !!c
+      && prev.rsun === c.rsun && prev.occulterRsun === c.occulterRsun
+      && prev.centre.u === c.centre.u && prev.centre.v === c.centre.v);
+    this.sun.coronagraph = c;
+    if (!unchanged && this.tab === 'sun') this.renderMargin();
+  }
   get sunState(): SunState { return this.sun; }
   get activeTab(): TabId { return this.tab; }
 

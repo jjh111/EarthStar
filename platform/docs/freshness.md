@@ -109,6 +109,11 @@ was GOES-19. Every attribution is therefore read from the data at runtime — th
 `satellite` field for X-rays, particles and the magnetometer; the `_g19_` token in the
 filename for SUVI imagery. Nothing here needs maintaining, which is the point.
 
+The same applies to the coronagraphs. LASCO's field of view is measured off the limb circle
+drawn into each frame rather than taken from the instrument paper, so a frame published at
+a different size or crop calibrates itself; the published values are only used as the check
+that the measurement is reading what it thinks it is.
+
 The same applies at L1: DSCOVR has already left the ephemeris feed, and the table adapted
 with no code change. A genuinely new monitor gets a live position and no descriptive note
 until someone adds one line to `SPACECRAFT_NOTE` — an omission, never an invention.

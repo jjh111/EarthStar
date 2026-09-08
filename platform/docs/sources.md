@@ -510,6 +510,57 @@ caught.
 
 ---
 
+## 5g. Coronagraphs — LASCO C2 and C3, and where they belong
+
+A coronagraph is not a picture of the Sun. It is a picture of the Sun being *blocked*, so
+that the corona beside it — thousands of times fainter than the disk — can be exposed at
+all. Projecting one onto the rendered sphere, as SUVI frames are, carpets the Sun with an
+image of its own occultation, complete with the drawn limb circle and a scattering of
+background stars. So these two go on a plane through the Sun instead, perpendicular to the
+line the picture was taken along and at the scale it was taken at.
+
+**The scale is not published with the frames**, and both numbers needed — where the Sun is,
+and how many pixels a solar radius spans — are drawn into the image. SWPC's LASCO
+renderings carry a thin white circle marking the solar limb, inside the occulted zone where
+there is no data for it to obscure. Measured on the live product, 2026-09-08, 512×512
+frames:
+
+| | limb radius | Sun centre offset | half-width | occulter |
+|---|---|---|---|---|
+| C2 | 40.45 px ±0.6 | (0.0, +3.1) px | **6.32 R☉** | 2.30 R☉ |
+| C3 | 8.51 px ±0.5 | (+2.5, −9.8) px | **30.28 R☉** | 4.49 R☉ |
+
+Those half-widths agree with the published fields of view — C2 to 6 R☉, C3 to 30
+(Brueckner et al. 1995, Sol. Phys. 162, 357) — which is the check that the drawn circle
+means what it appears to mean. It is measured per frame rather than hard-coded from the
+paper so that a frame published at a different size or crop calibrates itself.
+
+**The Sun is not at the frame centre**, and in C3 it is 9.8 px out — 1.15 solar radii. A
+frame-centred assumption would misplace the whole corona by more than the Sun is wide.
+
+Three things about these renderings that only show up once they are put in a 3-D scene:
+
+- **The palette's zero is not black.** C3's empty sky is a solid (0, 71, 190) and C2's is
+  (90, 0, 0). Added into the scene as light, that becomes a luminous slab the size of the
+  inner solar system — a picture of the colour table rather than of the corona. The
+  pedestal is measured per frame *per channel* and subtracted; a scalar will not do, since
+  the luminance of C3's sky is 0.34 and taking that off a 0.67 blue channel leaves half of
+  it standing.
+- **The field of view is a circle in a square frame.** Rendering the square draws a
+  rectangle of vignette around the corona.
+- **Everything inside the occulter must go**, the drawn limb circle with it. An annotation
+  rendered into the scene is a bright ring around the Sun that no instrument saw.
+
+**How large it is drawn is a question about distance, not about body size.** The corona's
+reach is 0.009–0.14 AU, so it follows the scene's distance scale like every other distance.
+Multiplying by the *rendered* Sun radius instead is wrong at Globe scale, where the Sun is
+exaggerated ten times: C3's thirty solar radii then land three times beyond Earth's orbit
+and the corona swallows the solar system.
+
+Being a real image plane, it is edge-on from any viewpoint at right angles to the
+Sun–Earth line — which is every view the Viewer had. The **Corona** view was added for it:
+from Earth, looking back down the line LASCO photographs along.
+
 ## 6. What the Viewer does with all this
 
 - Selection is **by timestamp and `active` flag**, never by array position.

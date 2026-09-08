@@ -58,15 +58,42 @@ async function selectLoop(id: string): Promise<void> {
  * thing visible on load. Once the panel is open its own frame takes over, so
  * scrubbing the loop scrubs the Sun too.
  *
- * Coronagraph loops are skipped. LASCO occults the disk — projecting it back
- * onto the sphere would paint the Sun with a picture of the Sun being hidden.
+ * The two instruments go to different places, because they are pictures of
+ * different things. A SUVI frame is the disk, and belongs on the sphere. A
+ * LASCO frame is the corona with the disk deliberately blocked, and belongs on
+ * a plane through the Sun at the scale it was taken at — painting it onto the
+ * sphere would carpet the Sun with a picture of the Sun being hidden.
  */
 function sunTexture(loop: ImageLoop | null): void {
   const f = loop?.frames[loop.newestGood];
-  if (!f || !loop!.id.startsWith('suvi')) { viewer.setSunImage(null); return; }
+  if (!f) { viewer.setSunImage(null); viewer.setCoronagraph(null); return; }
   const img = hud.images.acquire(f.url);
-  if (img.complete && img.naturalWidth > 0) viewer.setSunImage(img);
-  else img.addEventListener('load', () => viewer.setSunImage(img), { once: true });
+  const apply = (): void => showSunFrame(img, loop);
+  if (img.complete && img.naturalWidth > 0) apply();
+  else img.addEventListener('load', apply, { once: true });
+}
+
+/**
+ * Put one frame where it belongs.
+ *
+ * Both routes into the scene come through here — the newest frame on load, and
+ * whatever the panel is scrubbed to — because there are two of them and only
+ * one decision, and having made it twice is how a LASCO frame ended up
+ * projected onto the sphere: a blue ball wearing a picture of the Sun being
+ * hidden, complete with the drawn limb circle and a scattering of stars.
+ *
+ * Only one at a time. The disc and the coronagraph share the Sun, and showing
+ * both would stack two different exposures of the same minute.
+ */
+function showSunFrame(img: HTMLImageElement, loop: ImageLoop | null): void {
+  if (loop?.id.startsWith('lasco')) {
+    viewer.setSunImage(null);
+    hud.setCoronagraphCalibration(viewer.setCoronagraph(img));
+  } else {
+    viewer.setCoronagraph(null);
+    hud.setCoronagraphCalibration(null);
+    viewer.setSunImage(img);
+  }
 }
 
 function stepSun(): void {
@@ -144,7 +171,7 @@ const hud = new Hud({
   onToggleSunPlay: () => void toggleSunPlay(),
   onScrubSun: (i) => { hud.setSunPlaying(false); hud.setSunFrame(i); },
   onRunChecks: () => void doChecks(),
-  onSunFrame: (img) => viewer.setSunImage(img),
+  onSunFrame: (img) => showSunFrame(img, hud.sunState.loop),
 });
 
 /* ---------------- controls ---------------- */

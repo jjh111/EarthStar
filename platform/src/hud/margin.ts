@@ -16,6 +16,7 @@ import type { Cme } from '../data/cme.js';
 import { SPACECRAFT_NOTE, type SpacecraftPos } from '../data/ephemerides.js';
 import { instrumentFor, type ImageLoop } from '../data/solar-imagery.js';
 import { igrfCitation } from '../models/igrf14.js';
+import type { CoronagraphCalibration } from '../scene/coronagraph-calibration.js';
 import { NO_DATA, badgeFor, badgeTitle, formatAge, hhmmUTC, stalenessOf } from './format.js';
 import { panelSpark } from './sparkline.js';
 import { stateSentence, stateSentenceText } from './state-sentence.js';
@@ -445,6 +446,8 @@ export interface SunState {
   /** Frames cached so far; playback waits for the full set. */
   preloaded: number;
   preloading: boolean;
+  /** Measured from the frame when it is a coronagraph; null otherwise. */
+  coronagraph: CoronagraphCalibration | null;
 }
 
 function mb(bytes: number | null, frames: number): string {
@@ -528,6 +531,7 @@ export function renderSun(
     </div>
     <div class="sun-transport">${transport}</div>
     <p><span class="badge badge-e">E</span> ${escapeHtml(instrument)}. ${escapeHtml(L.describes)}</p>
+    ${coronagraphNote(sun)}
     <p class="tile-meta">${L.skippedDropouts > 0
       ? `The newest ${L.skippedDropouts} frame${L.skippedDropouts > 1 ? 's were' : ' was'} a
          data dropout — a valid but near-empty image — so this is the newest usable one. `
@@ -536,6 +540,33 @@ export function renderSun(
     the newest. Each frame carries its own observation time.
     <a href="${L.sourceUrl}" rel="noreferrer noopener" target="_blank">Frame list</a>.</p>
     ${solarCyclePanel(cycle, cycleLoading)}`;
+}
+
+/**
+ * What the scene did with a coronagraph frame, and how it knows.
+ *
+ * The field of view is not published with these images, so it is measured off
+ * the drawn limb circle in each frame — which is also why the number is worth
+ * showing: it is a measurement, and the reader can check it against the
+ * instrument's published reach.
+ */
+function coronagraphNote(sun: SunState): string {
+  if (!sun.loop || !sun.loop.id.startsWith('lasco')) return '';
+  const c = sun.coronagraph;
+  if (!c) {
+    return `<p class="tile-meta">This frame is not placed in the scene: the drawn limb
+      circle it is measured against could not be found, and a guessed field of view would
+      put the corona somewhere the instrument never looked.</p>`;
+  }
+  return `<p class="tile-meta">In the scene this is drawn where it actually is — on a plane
+    through the Sun, perpendicular to the line it was photographed along, reaching
+    <b>${c.halfWidthRsun.toFixed(1)} solar radii</b> from centre to edge. Measured from this
+    frame's own limb circle (±${c.residualPx.toFixed(1)} px), which agrees with the published
+    field of view for the instrument. The occulted centre, inside
+    ${c.occulterRsun.toFixed(1)} R☉, is left out: the Sun shows through it instead.
+    From anywhere else the plane is edge-on, because that is what a photograph taken from
+    Earth looks like from the side — the <b>Corona</b> view looks down the line LASCO
+    photographs along, and is the one to see this in.</p>`;
 }
 
 /** Picks the right series and scaling for an instrument's detail sparkline. */

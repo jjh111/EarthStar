@@ -30,7 +30,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
  * in the model to look at, and the view showed less than the profile does. A
  * vantage point that adds nothing is a control that costs attention.
  */
-export type ViewName = 'deck' | 'sunward' | 'profile' | 'polar' | 'system';
+export type ViewName = 'deck' | 'sunward' | 'profile' | 'polar' | 'corona' | 'system';
 
 /** Labels and the one-line reason each view exists. */
 export const VIEWS: Array<{ id: ViewName; label: string; title: string }> = [
@@ -43,6 +43,9 @@ export const VIEWS: Array<{ id: ViewName; label: string; title: string }> = [
   { id: 'polar', label: 'Polar',
     title: 'Over the north pole with noon at the top: the auroral oval as a ring, '
       + 'offset because it encircles the magnetic pole rather than this one' },
+  { id: 'corona', label: 'Corona',
+    title: 'The Sun from where we stand, framed for the coronagraphs: LASCO '
+      + 'photographs down this exact line, so its image plane is face-on here' },
   { id: 'system', label: 'System',
     title: 'The whole solar system, all eight planets at their true positions' },
 ];
@@ -87,11 +90,12 @@ export class CameraRig {
    */
   goTo(
     view: ViewName, earthPos: Vector3, earthRadius: number, sunDir: Vector3,
-    immediate = false,
+    coronaRadius: number, immediate = false,
   ): void {
     this.view = view;
     const NORTH = new Vector3(0, 1, 0);
-    let target = view === 'system' ? new Vector3(0, 0, 0) : earthPos.clone();
+    let target = view === 'system' || view === 'corona'
+      ? new Vector3(0, 0, 0) : earthPos.clone();
 
     let pos: Vector3;
     if (view === 'profile') {
@@ -118,6 +122,17 @@ export class CameraRig {
       // convention every auroral-oval plot is drawn in — and it puts the oval's
       // offset from the geographic pole where it can be seen.
       pos = earthPos.clone().addScaledVector(NORTH, earthRadius * 3.4);
+    } else if (view === 'corona') {
+      // From Earth, looking back at the Sun — the line SOHO photographs down,
+      // and the only direction from which a coronagraph frame is face-on
+      // rather than a plane seen edge-on.
+      //
+      // Framed on the widest coronagraph rather than on the Sun: C3 reaches
+      // thirty solar radii, and a frame that fits the Sun would hold about a
+      // thirtieth of the picture. `coronaRadius` is that reach in scene units,
+      // so the framing follows the scale mode without knowing about it.
+      const back = coronaRadius / Math.tan((this.camera.fov * Math.PI) / 360);
+      pos = sunDir.clone().negate().normalize().multiplyScalar(-back * 1.25);
     } else if (view === 'deck') {
       // Stand off from Earth, offset across the sun line so the terminator is
       // in frame rather than edge-on, and a little above the ecliptic.
