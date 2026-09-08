@@ -44,8 +44,8 @@ async function newPage(opts = {}) {
   await page.goto(BASE + '/#doc/earth-star-skill', { waitUntil: 'networkidle' });
   await page.waitForSelector('.archive-panel.open');
   await page.waitForSelector('.archive-md table');
-  const cell = await page.locator('.archive-md td').nth(1).textContent();
-  check('skill doc taxonomy table renders', cell.trim() === 'Empirical', cell.trim());
+  const taxonomyCells = await page.locator('.archive-md td', { hasText: /^Empirical$/ }).count();
+  check('skill doc taxonomy table renders', taxonomyCells === 1, `${taxonomyCells} cell(s) reading "Empirical"`);
   await page.keyboard.press('Escape');
 
   await page.evaluate(() => window.scrollTo(0, 0));
