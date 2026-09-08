@@ -25,7 +25,7 @@ async function newPage(opts = {}) {
   const { ctx, page } = await newPage();
   await page.goto(BASE + '/', { waitUntil: 'networkidle' });
   check('title', (await page.title()).includes('Earth Star'));
-  check('grid pre-rendered', await page.locator('.archive-card').count() === 3);
+  check('grid pre-rendered', await page.locator('.archive-card').count() >= 3);
 
   await page.locator('.archive-card').first().scrollIntoViewIfNeeded();
   await page.locator('.archive-card').first().click();

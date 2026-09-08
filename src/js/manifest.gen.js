@@ -37,16 +37,50 @@ export const DOCS = [
     "id": "earth-star-skill",
     "title": "Earth Star Framework",
     "category": "FRAMEWORK",
-    "description": "The complete operational specification — Gomens, Earth Stewards, five scales, kincentric worldview, seed equations, and the v3.0 epistemic-integrity protocols.",
+    "description": "The core framework — Gomens, Earth Stewards, five scales, kincentric worldview, seed equations, epistemic registers and failure modes. v3.1 of the skillset.",
     "tags": [
       "framework",
       "gomens",
       "spec"
     ],
     "provenance": {
-      "status": "Framework specification — vision & design document",
+      "status": "Framework specification — vision & design document (skill v3.1 core)",
       "author": "Earth Star / JHDesign",
-      "date": "2025–2026 · v3.0"
+      "date": "2025–2026 · v3.1"
+    }
+  },
+  {
+    "id": "research-veracity",
+    "title": "Research Veracity Protocol",
+    "category": "PROTOCOL",
+    "description": "The framework-agnostic truth-tending protocol: claim taxonomy, source ladder, adversarial verification loop, claim ledger, numbers discipline, attribution. Skill: earth-star-research.",
+    "tags": [
+      "protocol",
+      "research",
+      "provenance",
+      "skill"
+    ],
+    "provenance": {
+      "status": "Working protocol — applied to every analytic Earth Star deliverable",
+      "author": "Earth Star / JHDesign",
+      "date": "2026 · v3.1"
+    }
+  },
+  {
+    "id": "heliosphere-data",
+    "title": "Heliosphere Data Catalog",
+    "category": "DATA",
+    "description": "The live-verified catalog behind The Viewer: every space-weather feed with its CORS status, shape, cadence, latency and evidence tier, plus the model reference values the platform tests against. Skill: heliosphere-data.",
+    "tags": [
+      "data",
+      "space weather",
+      "viewer",
+      "skill"
+    ],
+    "provenance": {
+      "status": "Verified catalog — fetched live 2026-09-06/08; sources.md holds the records",
+      "author": "Earth Star skill track",
+      "date": "2026 · v3.1"
     }
   }
 ];

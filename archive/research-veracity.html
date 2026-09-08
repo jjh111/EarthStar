@@ -1,0 +1,174 @@
+<h1>Research Veracity &amp; Provenance Protocol</h1>
+<p><strong>Truth-tending is tending.</strong> Unverified claims are informational waste; this protocol
+metabolizes them. It is framework-agnostic: it works for a grant application, a policy
+memo, a data-journalism piece, a technical README, or a due-diligence report. It was born
+inside the Earth Star framework (whose Earth-Star-specific rules live in
+<code>references/research_veracity.md</code>), but nothing below requires that framework.</p>
+<h2>When this applies</h2>
+<p>Any deliverable a skeptical reader will check: research, analysis, policy, journalism,
+grant and funding applications, technical documentation, market or scientific due
+diligence, data-backed reports, and <strong>any request to verify, source, cite, or fact-check
+an existing draft</strong>. If the output contains a number, a date, a historical claim, or a
+&quot;studies show,&quot; this protocol runs. It is part of writing, not a follow-up.</p>
+<p>It does not apply to fiction, casual conversation, or opinion that makes no factual claim
+— though even there, a stray statistic pulls it back in.</p>
+<h2>1. The Claim Taxonomy</h2>
+<p>Every factual assertion carries exactly one class. Tag inline while drafting (or in a
+working copy) — the tags can be stripped before delivery, but the <em>knowledge of which is
+which</em> must survive.</p>
+<table>
+<thead>
+<tr>
+<th>Tag</th>
+<th>Class</th>
+<th>Definition</th>
+<th>Handling rule</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>[E]</code></td>
+<td><strong>Empirical</strong></td>
+<td>Measured, published, checkable now</td>
+<td>Citation with a date. Numbers need the <em>original measurement source</em>, not a repetition of it</td>
+</tr>
+<tr>
+<td><code>[H]</code></td>
+<td><strong>Historical / documented</strong></td>
+<td>Recorded practice or event, with sources</td>
+<td>Attribute to the documented source and, where known, the specific people/institution/nation involved</td>
+</tr>
+<tr>
+<td><code>[D]</code></td>
+<td><strong>Design proposal</strong></td>
+<td>Engineering or program intent — buildable maybe, built no</td>
+<td>Must read as proposal: &quot;designed to,&quot; &quot;would,&quot; &quot;targets&quot; — never &quot;does&quot;</td>
+</tr>
+<tr>
+<td><code>[P]</code></td>
+<td><strong>Policy draft</strong></td>
+<td>Proposed text, not enacted rule</td>
+<td>State the status: proposed, filed, enacted, in force. Never-filed = <em>model bill</em></td>
+</tr>
+<tr>
+<td><code>[M]</code></td>
+<td><strong>Mythopoetic / vision</strong></td>
+<td>Vision, dream, commitment device, ceremony, brand story</td>
+<td>May open, close, motivate, inspire. <strong>May never sit inside an evidentiary chain</strong></td>
+</tr>
+</tbody></table>
+<p><strong>The register rule, stated once and hard:</strong> <em>certainty is a stance, not evidence.</em> If
+removing a visionary sentence weakens an argument&#39;s <em>validity</em> (not its beauty), the
+argument was broken. Vision stays; vision is never a citation.</p>
+<h2>2. The Source Ladder</h2>
+<p>Prefer higher rungs; <strong>record the rung you actually reached</strong>, not the one you wish you had:</p>
+<ol>
+<li><strong>Primary</strong> — the original measurement, dataset, statute text, filing, firsthand account</li>
+<li><strong>Peer-reviewed</strong> — journal articles, systematic reviews, preprints with caveats noted</li>
+<li><strong>Institutional</strong> — government agencies, standards bodies, established NGOs, company filings</li>
+<li><strong>Journalistic</strong> — reputable outlets with editorial standards and corrections policies</li>
+<li><strong>Secondary web</strong> — blogs, aggregators, wikis, LLM output (a pointer to climb, never a resting place)</li>
+<li><strong>Unsourced</strong> — memory, vibes, &quot;everyone knows&quot; (not a rung; a flag)</li>
+</ol>
+<p>A load-bearing claim resting on rung 5–6 is <strong>flagged, not asserted</strong>. A claim you
+&quot;remember&quot; is rung 6 until you find it again.</p>
+<h2>3. The Verification Loop</h2>
+<pre><code>1. DRAFT with claims tagged
+   Write freely, in whatever voice the piece needs. Tag every factual assertion
+   [E]/[H]/[D]/[P]/[M] as you go.
+
+2. LEDGER the load-bearing claims
+   Extract every [E] and [H] claim the argument depends on into a claim ledger:
+   claim → source → ladder rung → confidence (high / med / low)
+
+3. VERIFY adversarially
+   For each row, try to REFUTE it: search for the counter-claim, the retraction,
+   the newer number, the misremembered detail, the definitional slip (per-year vs
+   cumulative, median vs mean, US vs global). Confirming a claim you already
+   believe is not verification.
+
+4. RESOLVE
+   - Verified   → keep, cite, date.
+   - Corrected  → fix the text, note what changed.
+   - Unverifiable → downgrade the language (&quot;reportedly,&quot; &quot;one estimate&quot;) or move
+     it out of the evidentiary chain — or cut it.
+   Never silently keep a claim that failed step 3.
+
+5. EMIT with provenance
+   Ship with citations; keep the ledger. It is the provenance record the next
+   reader, agent, or auditor inherits.
+</code></pre>
+<h3>Claim Ledger Format</h3>
+<pre><code>| # | Claim | Tag | Source | Rung | Confidence | Status |
+|---|-------|-----|--------|------|------------|--------|
+| 1 | US generated ~292M short tons MSW in 2018 | [E] | EPA, Facts and Figures about Materials, Waste and Recycling (2018 data, pub. 2020) | 3 | high | verified |
+| 2 | Microplastics detected in human blood | [E] | Leslie et al., Environment International 163 (2022) | 2 | high | verified |
+| 3 | SWPC solar-wind feed moved to json/rtsw/ | [E] | live fetch 2026-09-06T17:25Z, HTTP 404 on old path | 1 | high | verified |
+| 4 | Proposed reclamation fund would tax per item | [P] | project draft text | — | n/a | design intent |
+</code></pre>
+<p>Keep the ledger as a file beside the deliverable (or an appendix), not in your head.</p>
+<h2>4. Numbers Discipline</h2>
+<ul>
+<li>Every number carries a <strong>source and a date</strong>, or hedged language, or it does not ship.</li>
+<li><strong>Never interpolate</strong> a plausible-sounding figure to fill a gap. &quot;No reliable figure
+exists&quot; is a finding, and often the most useful one.</li>
+<li>State <strong>units and denominators</strong> (per year? per capita? which currency, which year&#39;s
+dollars?). Most &quot;wrong&quot; numbers are right numbers with the wrong denominator.</li>
+<li>Distinguish <strong>measured, modeled, and forecast</strong> values; a forecast is not a reading.</li>
+<li>When a value has a latency (live data, indices), the latency is part of the value.</li>
+<li>Composite or invented indices (a &quot;coherence score,&quot; a &quot;sustainability index&quot; you made up)
+never ship as measurements. Cite a real proxy or say &quot;not yet measurable, here is how it
+could be.&quot;</li>
+</ul>
+<h2>5. Attribution</h2>
+<ul>
+<li><strong>Cite the documented source, not the vibe.</strong> &quot;Ancient wisdom,&quot; &quot;studies show,&quot;
+&quot;experts agree&quot; are rung 6 until a name, a title, and a date are attached.</li>
+<li><strong>Indigenous and community knowledge</strong>: cite the documented source (author, work, year)
+and name the specific peoples, nations, or communities where the source does. Do not
+flatten distinct traditions into one adjective. Distinguish <em>documented practice</em> <code>[H]</code>
+from <em>your translation or application of it</em> <code>[D]</code>. Never speak <em>for</em> living
+communities or imply their endorsement of your project.</li>
+<li><strong>Quotations</strong> stay short, exact, and attributed. Paraphrase the rest.</li>
+<li><strong>LLM output, including your own earlier drafts</strong>, is rung 5. Re-verify before reuse.</li>
+</ul>
+<h2>6. Register Discipline in Mixed Documents</h2>
+<p>Many good documents braid voices — a stirring opening, an analytic core, a visionary
+close. The braid works <strong>only when the seams are honest</strong>:</p>
+<ul>
+<li>Shifts should be <em>felt</em> (voice, section breaks) or <em>marked</em> (labels like &quot;The Evidence&quot;
+/ &quot;The Proposal&quot; / &quot;The Vision&quot;).</li>
+<li>The analytic core must stand alone: strip every <code>[M]</code> sentence and the argument still holds.</li>
+<li>For skeptical audiences, lead with <em>their</em> values and the <code>[E]</code>/<code>[H]</code> material; let the
+vision close the door behind a finished argument, not hold it up.</li>
+</ul>
+<h2>7. Failure Modes to Watch For</h2>
+<ol>
+<li><strong>Confirmation search</strong> — googling the claim&#39;s own phrasing and stopping at the first
+agreement. <em>Fix</em>: search for the refutation first.</li>
+<li><strong>Citation laundering</strong> — citing a secondary source that cites a primary you never
+opened. <em>Fix</em>: climb to the primary or state the rung honestly.</li>
+<li><strong>Denominator drift</strong> — the right number with the wrong unit, year, or population.</li>
+<li><strong>Status inflation</strong> — a proposal described as built, a bill as law, a preprint as
+settled, a forecast as a measurement.</li>
+<li><strong>Precision theater</strong> — five significant figures on an estimate with one.</li>
+<li><strong>Register leakage</strong> — a vision statement doing evidentiary work.</li>
+<li><strong>Attribution wash</strong> — &quot;indigenous wisdom,&quot; &quot;the science,&quot; &quot;experts&quot; without names.</li>
+</ol>
+<h2>Quick Checklist (run at emit time)</h2>
+<ul>
+<li><input disabled="" type="checkbox"> Every load-bearing <code>[E]</code>/<code>[H]</code> claim has a citation with a date</li>
+<li><input disabled="" type="checkbox"> Adversarial pass done — I tried to refute, not confirm</li>
+<li><input disabled="" type="checkbox"> No <code>[D]</code> reads as if built; no <code>[P]</code> reads as if enacted; no forecast reads as a reading</li>
+<li><input disabled="" type="checkbox"> No <code>[M]</code> sits inside an evidentiary chain</li>
+<li><input disabled="" type="checkbox"> Numbers all sourced or hedged; units and denominators stated; no invented indices</li>
+<li><input disabled="" type="checkbox"> Sources attributed by name; community knowledge names its people and its source</li>
+<li><input disabled="" type="checkbox"> Ledger retained alongside the deliverable</li>
+</ul>
+<h2>Companion references</h2>
+<ul>
+<li><code>references/research_veracity.md</code> — the Earth-Star-specific layer: the framework&#39;s five
+registers and three voices, its historical spine (Anderson, <em>Tending the Wild</em>, 2005) and
+how to attribute it, the ∇(𝒞) rule, and the anti-patterns the framework is prone to.</li>
+<li>For space-weather numbers, the <code>heliosphere-data</code> skill&#39;s <code>references/sources.md</code> and
+<code>models.md</code> are pre-verified primary sources (rung 1–3) with fetch times.</li>
+</ul>

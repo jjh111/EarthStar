@@ -1,0 +1,129 @@
+<h1>Heliosphere Data — the verified catalog</h1>
+<p>This skill is the human-readable twin of <code>plans/DATA_CONTRACT.md</code>: what the upstream feeds
+<strong>actually</strong> return (fetched live, samples verbatim), and the formulas the platform
+implements with reference values to test against. Load it before touching any
+space-weather data path, before writing a parser, and before answering &quot;is this number
+right?&quot; about the Sun–Earth system.</p>
+<ul>
+<li><strong><code>references/sources.md</code></strong> — every source in the platform plan&#39;s data catalog: exact URL,
+HTTP status, CORS header, verbatim record, field names, units, sentinels, cadence,
+observed latency, tier, gotchas. Ends with the list of <strong>contract change requests</strong>.</li>
+<li><strong><code>references/models.md</code></strong> — IGRF-14, Shue et al. 1998, Farris &amp; Russell 1994, Parker
+spiral, DONKI cone/ETA, GOES flare classes, Kp ↔ G-scale: formula, citation, unit-test
+values (IGRF cross-checked against the BGS calculator to ≤ 1 nT).</li>
+</ul>
+<h2>When to load</h2>
+<ul>
+<li>Any space-weather / geomagnetic / heliophysics <strong>data</strong> task: fetching, parsing, caching,
+charting, alerting, mirroring, unit-testing.</li>
+<li>Work on the Earth Star Viewer (<code>platform/</code>, <code>viewer/</code>), its data spine, or the splash
+site&#39;s live widgets.</li>
+<li>Fact-checking a space-weather number or claim (pair with the <code>earth-star-research</code>
+skill&#39;s ledger: every value here already has a source and a fetch time).</li>
+<li>Writing or reviewing <code>plans/DATA_CONTRACT.md</code> changes.</li>
+</ul>
+<p>Do <strong>not</strong> load for terrestrial weather, climate, astrology, or astronomy questions with
+no data/model component. The Earth Star framework (<code>earth-star</code> skill) is <em>not</em> implied by
+this skill — load it only when the user wants the Star-scale framing.</p>
+<h2>The tiering rule (Accuracy Charter, made operational)</h2>
+<p>Every value belongs to exactly one tier, and the tier travels with it:</p>
+<table>
+<thead>
+<tr>
+<th>Tier</th>
+<th>Badge</th>
+<th>Test</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Measured</strong></td>
+<td><code>[E]</code></td>
+<td>read from an instrument or an official index; carries <code>data_time</code> and latency</td>
+</tr>
+<tr>
+<td><strong>Modeled</strong></td>
+<td><code>[D·model]</code></td>
+<td>computed deterministically from Measured inputs by a <strong>named, cited</strong> model (IGRF-14, Shue 1998, OVATION, WSA-ENLIL, ephemeris)</td>
+</tr>
+<tr>
+<td><strong>Ambient</strong></td>
+<td><code>[M]</code></td>
+<td>artistic, parameter-driven; may be <em>scaled by</em> real values but is not a physical quantity</td>
+</tr>
+</tbody></table>
+<p>Rules that follow: no fabricated values — missing renders as missing; stale is visible
+(<code>now − data_time &gt; stale_after_s</code> dims the element); units on everything (nT, km/s, cm⁻³,
+W m⁻², Kp, R_E); model names cited where the value is shown; Ambient never impersonates
+Measured. NOAA&#39;s own products (scales, OVATION, Enlil) are <strong>Modeled·NOAA</strong> even though
+NOAA is authoritative — they are forecasts, not readings. DONKI is a <em>NASA research
+product</em>, and its own disclaimer says so; label it.</p>
+<h2>Key facts that override prior knowledge (verified 2026-09-06/08)</h2>
+<ul>
+<li>SWPC <code>products/solar-wind/*.json</code> is <strong>gone (404)</strong>. Real-time wind is
+<code>json/rtsw/rtsw_mag_1m.json</code> / <code>rtsw_wind_1m.json</code>: objects, newest-first, three
+spacecraft interleaved (<code>SOLAR1</code> = SWFO-L1 active, <code>ACE</code>, <code>IMAP</code>), pick <code>&quot;active&quot;: true</code>.
+<strong>DSCOVR is not in the feed.</strong> Bow-shock-propagated wind: <code>products/geospace/propagated-solar-wind-1-hour.json</code>.</li>
+<li>CORS <code>*</code> <strong>is</strong> present on SWPC, DONKI (kauai), <code>api.nasa.gov</code>, USGS geomag,
+INTERMAGNET GIN, BGS IGRF, npm. CORS is <strong>absent</strong> on Helioviewer, JPL Horizons, Kyoto
+WDC, NASA eoimages — those need the stage-B mirror or vendoring.</li>
+<li>DONKI Enlil arrival times live <strong>only</strong> under <code>/get/CME → cmeAnalyses[].enlilList[]</code>;
+the flat <code>CMEAnalysis</code> endpoint has none. <code>api.nasa.gov</code> DEMO_KEY is rate-limited to 10.</li>
+<li>Dst is available as JSON with CORS at <code>products/kyoto-dst.json</code>; no scraping. SYM-H has
+no machine feed found.</li>
+<li>IGRF-14 SV is valid 2025.0–2030.0; the NCEI calculator API needs a registered key, the
+BGS one does not.</li>
+<li>Timestamps: SWPC <code>json/*</code> omit <code>Z</code>; <code>products/*</code> and GOES include it; DONKI is to the
+minute (<code>…T13:58Z</code>); alerts use <code>&quot;YYYY-MM-DD HH:MM:SS.mmm&quot;</code>; Helioviewer <code>&quot;YYYY-MM-DD HH:MM:SS&quot;</code>. Normalize everything to ISO-8601 UTC with <code>Z</code> before comparing.</li>
+<li>Sentinels: <code>null</code> (SWPC, USGS, INTERMAGNET), <code>-9999</code> only in SWPC flag fields, <code>9999</code>
+packed without separators in Kyoto fixed-width text, all-<code>null</code> days when INTERMAGNET
+embargoes a station (<code>embargo_applied: true</code>).</li>
+</ul>
+<h2>How to fetch responsibly</h2>
+<ol>
+<li><strong>Cache to the cadence.</strong> SWPC sets <code>cache-control: max-age=60</code>; poll 1-min products
+no faster than every 60 s, and only while the tab is visible. 5-min products (OVATION)
+every 5 min; daily products (regions, F10.7) once an hour is plenty; DONKI hourly.</li>
+<li><strong>Never hammer SWPC during storms.</strong> Storms are exactly when everyone reloads. Back off
+exponentially on any non-200, hold the last good value with a visible &quot;stale since&quot;
+label, and prefer the stage-B mirror (<code>raw.githubusercontent.com/jjh111/EarthStar/data/v1/</code>)
+for anything a page shows to many viewers.</li>
+<li><strong>Fetch the smallest file that answers the question.</strong> <code>xrays-6-hour.json</code> (not the
+4.6 MB 7-day file) for a current class; <code>propagated-solar-wind-1-hour.json</code> (6 KB) for
+the current wind; <code>xray-flares-latest.json</code> (452 B) for the flare in progress.</li>
+<li><strong>Keep DONKI windows ≤ 7 days</strong> and time out at 90 s — <code>mostAccurateOnly=true</code> over
+14 days twice exceeded 40 s.</li>
+<li><strong>Send an <code>Origin</code> header when you test CORS</strong> — that is what the browser does.</li>
+<li><strong>Vendor static assets</strong> (IGRF coefficients, Blue Marble) and cite their provenance;
+don&#39;t hot-link.</li>
+<li><strong>Record fetch time with every stored sample.</strong> A value without <code>fetched_at</code> cannot
+have a latency, and a latency-less value cannot be shown honestly.</li>
+<li><strong>Use system TLS.</strong> Anaconda&#39;s <code>curl</code> bundle rejected <code>ssd.jpl.nasa.gov</code> (&quot;self signed
+certificate in certificate chain&quot;); <code>/usr/bin/curl</code> and browsers accept it.</li>
+</ol>
+<h2>Parsing checklist</h2>
+<ul>
+<li>Reverse newest-first arrays (<code>rtsw_*</code>, <code>alerts</code>, <code>solar_regions</code>, <code>enlil_time_series</code>) to
+oldest→newest for the contract.</li>
+<li>Coerce NOAA scales&#39; string numbers (<code>&quot;Scale&quot;: &quot;1&quot;</code>, <code>&quot;MinorProb&quot;: &quot;20&quot;</code>) and lowercase
+<code>Text</code>; remember key <code>&quot;1&quot;</code> is <em>today&#39;s remainder</em>, <code>&quot;2&quot;</code>/<code>&quot;3&quot;</code> are +1/+2 days.</li>
+<li>Map Kp strings <code>1M/0P/1Z</code> → 1−/0+/0; <code>estimated_kp</code> is already in thirds.</li>
+<li>Two GOES records per minute — filter <code>energy == &quot;0.1-0.8nm&quot;</code>; the field is spelled
+<code>electron_contaminaton</code> upstream.</li>
+<li>DONKI longitude is Stonyhurst <strong>west-positive</strong>; SWPC <code>solar_regions.longitude</code> is
+<strong>east-positive</strong>; NOAA region 4524 = DONKI 14524.</li>
+<li>OVATION <code>coordinates</code> is lon-major (360 × 181), integer 0–100; keys contain spaces.</li>
+<li>USGS: <code>times[]</code> + <code>values[{id, values[]}]</code>; INTERMAGNET: <code>datetime[]</code> + <code>X/Y/Z/F[]</code>.</li>
+<li>Horizons: the ephemeris is plain text inside <code>result</code> between <code>$$SOE</code>/<code>$$EOE</code>, ecliptic
+J2000, AU — rotate to HEE yourself.</li>
+</ul>
+<h2>Contract pointer</h2>
+<p>The platform&#39;s interface is <code>plans/DATA_CONTRACT.md</code> (Director-owned). Code against the
+envelope (<code>source, source_url, tier, model, fetched_at, data_time, latency_s, stale_after_s, units, data</code>), never against a transport. Where this catalog and the
+contract disagree, <strong>the catalog reports reality and the contract is what needs a change
+request</strong> — the current list is at the end of <code>references/sources.md</code>. Never edit the
+contract from a data task; open a <code>contract: …</code> PR or put the request in your PR body.</p>
+<h2>Register note</h2>
+<p>Space-weather numbers are seductive: they look precise and arrive every minute. Treat a
+latency of 5 min as part of the value. A propagated arrival time is a model. A forecast Kp
+is not a Kp. &quot;The shield compresses to 6.9 R_E&quot; is Shue 1998 given Dp = 10 nPa and Bz =
+−10 nT — say so, every time. That is the veracity protocol, made visual.</p>

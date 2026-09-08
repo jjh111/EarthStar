@@ -44,6 +44,9 @@ Hard rules:
 - **Units on everything.** nT, km/s, cm⁻³, W/m², Kp (0–9), Rₑ.
 - **Model names cited in-app.** Shue et al. 1998; IGRF-14 (IAGA 2024); Parker 1958; DONKI cone parameters; astronomy-engine (VSOP87-derived).
 - **Scale honesty.** The snow globe compresses distances (log scale) by default and says so; a **True Scale** toggle exists and is not hidden.
+- **A modeled *time* on measured *values* is Modeled.** NOAA's propagated wind is the L1
+  measurement advanced ~66 min to the bow-shock nose; the values are `[E]`, the arrival
+  time is `[D·NOAA]`, and the shield is driven by the latter — the drawer says both.
 - **Ambient never impersonates Measured.** Particles are prettier than reality and are labeled `[M]`; their *rate and speed* come from real density and velocity, and the drawer explains exactly that.
 
 This is the veracity protocol, made visual.
@@ -65,9 +68,18 @@ You do not need MHD simulations for the MVP. Three tiers cover it:
 
 ## 4. Data Catalog
 
-> **Verification status:** this sandbox's network policy blocks every host below, so endpoint
-> shapes are from documentation and prior knowledge, tagged *verify on first fetch*. The
-> skill session's first deliverable (§8) is verifying and freezing these against live responses.
+> **Verification status (2026-09-08):** every source below has now been fetched live by the
+> skill and platform tracks. **The verified catalog is `skill_extract/heliosphere-data/references/sources.md`
+> (with `platform/docs/sources.md` as the in-repo working copy); the table here is the original
+> plan and is kept for history.** Corrections that reverse rows below: rows 1–2 — the
+> `products/solar-wind/*` family is gone (404); use `json/rtsw/rtsw_mag_1m` + `rtsw_wind_1m`,
+> select `active == true`, and **DSCOVR is not in the feed** (SWFO-L1 is the active monitor).
+> Row 10 — DONKI at CCMC *does* send CORS and needs no key; Enlil arrivals live only in `/get/CME`.
+> Row 12 — Helioviewer sends **no** CORS header (stage B); the Viewer uses GOES SUVI and LASCO
+> from SWPC instead. Rows 14–15 — USGS and INTERMAGNET *do* send CORS (stage A). Row 16 — Dst is
+> JSON with CORS at `products/kyoto-dst.json`; SYM-H has no machine feed. Row 17 — the L1
+> monitor position is `json/rtsw/rtsw_ephemerides_1h` (stage A); Horizons only for PSP/SolO.
+> All folded into `DATA_CONTRACT.md` v1.2.
 
 | # | What | Source / endpoint | Cadence · latency | Tier | Phase |
 |---|------|-------------------|-------------------|------|-------|
@@ -92,9 +104,9 @@ You do not need MHD simulations for the MVP. Three tiers cover it:
 | 19 | WSA-Enlil solar-wind forecast (imagery) | SWPC `images/animations/enlil/` | ~6-hourly | Modeled·NOAA | 3 (HUD reference only) |
 | 20 | Earth textures | NASA Blue Marble (day/night), public domain | static | — | 1 |
 
-**CORS reality:** SWPC, Helioviewer, and `api.nasa.gov` are widely used client-side and are
-believed to send `Access-Control-Allow-Origin: *`; the CCMC DONKI mirror, Horizons, Kyoto, and
-INTERMAGNET should be assumed not to. **Decision: stage the data layer** (§5.2) — direct
+**CORS reality (verified 2026-09-06/08 — the original assumption was inverted):** SWPC, DONKI
+(CCMC and api.nasa.gov), USGS geomag, INTERMAGNET GIN, and the BGS IGRF calculator send
+`Access-Control-Allow-Origin: *`; **Helioviewer and Horizons do not.** **Decision: stage the data layer** (§5.2) — direct
 browser fetch on GitHub Pages for phases 0–2, a GitHub Actions pipeline for the no-CORS
 sources in phase 4, Cloudflare only if a concrete need appears.
 
@@ -251,6 +263,7 @@ environment whose network policy allows at least:
 services.swpc.noaa.gov   api.helioviewer.org   kauai.ccmc.gsfc.nasa.gov   api.nasa.gov
 geomag.usgs.gov          imag-data.bgs.ac.uk   ssd.jpl.nasa.gov           www.ncei.noaa.gov
 www.ngdc.noaa.gov        wdc.kugi.kyoto-u.ac.jp   sdo.gsfc.nasa.gov       gong.nso.edu
+geomag.bgs.ac.uk         eoimages.gsfc.nasa.gov   (ngdc's IGRF calculator needs a key; BGS's does not)
 registry.npmjs.org       fonts.googleapis.com  fonts.gstatic.com
 ```
 
