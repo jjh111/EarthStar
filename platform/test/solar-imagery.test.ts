@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { MAX_FRAMES, frameTime } from '../src/data/solar-imagery.js';
+import { MAX_FRAMES, frameSatellite, frameTime, instrumentFor } from '../src/data/solar-imagery.js';
 
 describe('frame timestamps', () => {
   it('reads the SUVI convention', () => {
@@ -70,5 +70,43 @@ describe('subsampling', () => {
   it('bounds the download: 24 frames of SUVI is tens of MB, not hundreds', () => {
     const bytesPerFrame = 1_145_483;
     expect((MAX_FRAMES * bytesPerFrame) / 1_048_576).toBeLessThan(40);
+  });
+});
+
+/**
+ * The attribution has to come from the frame, because the product name does
+ * not carry it. `suvi-primary-304` is an alias NOAA repoints between GOES
+ * satellites, and it does not move the fleet together: on 2026-09-08 the X-ray
+ * primary was GOES-18 while SUVI's was GOES-19. A hard-coded number therefore
+ * survives the repointing and becomes a false citation, with the picture still
+ * correct — the failure mode the charter exists to prevent.
+ */
+describe('spacecraft attribution', () => {
+  it('reads the spacecraft out of a SUVI filename', () => {
+    expect(frameSatellite('/images/animations/suvi/primary/304/or_suvi-l2-ci304_g19_s20260908T143600Z_e20260908T144000Z_v1-0-2.png'))
+      .toBe(19);
+  });
+
+  it('follows the alias when NOAA repoints it', () => {
+    expect(frameSatellite('/images/animations/suvi/primary/304/or_suvi-l2-ci304_g18_s20260908T143600Z_e20260908T144000Z_v1-0-2.png'))
+      .toBe(18);
+  });
+
+  it('returns null for LASCO, whose filenames name no spacecraft', () => {
+    expect(frameSatellite('/images/animations/lasco-c2/20260906_0336_c2_512.jpg')).toBeNull();
+  });
+
+  it('substitutes the number into the instrument family', () => {
+    expect(instrumentFor('GOES SUVI', 19)).toBe('GOES-19 SUVI');
+    expect(instrumentFor('GOES SUVI', 18)).toBe('GOES-18 SUVI');
+  });
+
+  it('never invents a number the filename did not carry', () => {
+    expect(instrumentFor('SOHO LASCO', null)).toBe('SOHO LASCO');
+    expect(instrumentFor('GOES SUVI', null)).toBe('GOES SUVI');
+  });
+
+  it('keeps an unfamiliar family intact rather than mangling it', () => {
+    expect(instrumentFor('SOHO LASCO', 19)).toBe('SOHO LASCO (GOES-19)');
   });
 });

@@ -8,6 +8,7 @@
  * `null` + an `error` on its PartMeta, which the HUD renders as "no data".
  */
 
+import { getJson, servedFromMirror } from './fetch-json.js';
 import type { AuroraNow, Envelope, Now, SolarWindSeries } from '../contract/types.js';
 import { PARTICLE_URL, parseParticles, seriesFor } from './particles.js';
 import { PROPAGATED_URL, parsePropagated } from './geospace.js';
@@ -49,27 +50,6 @@ export const STALE_AFTER = {
   spacecraft: 3 * 60 * 60,
 } as const;
 
-const FETCH_TIMEOUT_MS = 15_000;
-
-interface Fetched<T> { json: T | null; error?: string; }
-
-async function getJson<T>(url: string, signal?: AbortSignal): Promise<Fetched<T>> {
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(new Error('timeout')), FETCH_TIMEOUT_MS);
-  const onAbort = () => ctl.abort(signal?.reason);
-  signal?.addEventListener('abort', onAbort, { once: true });
-  try {
-    const res = await fetch(url, { cache: 'no-store', signal: ctl.signal });
-    if (!res.ok) return { json: null, error: `HTTP ${res.status}` };
-    return { json: (await res.json()) as T };
-  } catch (e) {
-    return { json: null, error: e instanceof Error ? e.message : String(e) };
-  } finally {
-    clearTimeout(timer);
-    signal?.removeEventListener('abort', onAbort);
-  }
-}
-
 function latency(fetchedAt: string, dataTime: string | null): number | null {
   if (!dataTime) return null;
   const l = (Date.parse(fetchedAt) - Date.parse(dataTime)) / 1000;
@@ -85,6 +65,9 @@ function meta(
     tier, source, source_url: url, model,
     data_time: dataTime, latency_s: latency(fetchedAt, dataTime),
     stale_after_s: staleAfter, ...(error ? { error } : {}),
+    // Keyed by the upstream URL, which is the one this function is given —
+    // so provenance costs nothing at fifteen call sites.
+    ...(servedFromMirror(url) ? { mirrored: true } : {}),
   };
 }
 

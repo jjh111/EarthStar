@@ -34,6 +34,20 @@ export function igrfInValidity(date: Date): boolean {
   return t >= IGRF_EPOCH && t <= IGRF_VALID_UNTIL;
 }
 
+/**
+ * How the model should be cited *today*. Outside the published window the
+ * synthesis still returns numbers — it extrapolates the secular variation —
+ * and the honest thing is to keep drawing the field while saying plainly that
+ * the citation has outrun its warranty. Both places that name the model use
+ * this, so they cannot drift apart.
+ */
+export function igrfCitation(date: Date): string {
+  const base = `IGRF-14 (IAGA, epoch ${IGRF_EPOCH.toFixed(1)}`;
+  return igrfInValidity(date)
+    ? `${base}, secular variation to now)`
+    : `${base}, extrapolated past its ${IGRF_VALID_UNTIL.toFixed(1)} validity limit)`;
+}
+
 /** Coefficients extrapolated to `year` by the published secular variation. */
 function coefficientsAt(year: number): { g: Float64Array; h: Float64Array } {
   const dt = year - IGRF_EPOCH;

@@ -8,6 +8,7 @@
  */
 
 import { swpcTime, SWPC_BASE } from './swpc.js';
+import { getJson, getText } from './fetch-json.js';
 import { fetchEnlil, type EnlilRun } from './enlil.js';
 
 export const FORECAST_URL = {
@@ -55,19 +56,11 @@ export interface ForecastBundle {
   fetchedAt: string;
 }
 
-const txt = async (u: string, signal?: AbortSignal): Promise<string | null> => {
-  try {
-    const r = await fetch(u, { cache: 'no-store', signal });
-    return r.ok ? await r.text() : null;
-  } catch { return null; }
-};
+const txt = async (u: string, signal?: AbortSignal): Promise<string | null> =>
+  (await getText(u, signal)).json;
 
-const json = async (u: string, signal?: AbortSignal): Promise<unknown> => {
-  try {
-    const r = await fetch(u, { cache: 'no-store', signal });
-    return r.ok ? await r.json() : null;
-  } catch { return null; }
-};
+const json = async (u: string, signal?: AbortSignal): Promise<unknown> =>
+  (await getJson<unknown>(u, signal)).json;
 
 function parseKpForecast(j: unknown): KpPoint[] {
   if (!Array.isArray(j)) return [];

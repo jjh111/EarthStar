@@ -104,10 +104,18 @@ async function doChecks(): Promise<void> {
   } catch (e) {
     checkResult = {
       rows: [{
-        name: 'Checks could not run', ours: 'error', theirs: '—', ok: false,
-        note: e instanceof Error ? e.message : String(e),
+        name: 'Checks could not run', ours: 'no data', theirs: '—', ok: false,
+        // Not a failed check — an absent one. The checks deliberately fetch
+        // NOAA by their own path, so an outage stops them while the page may
+        // still be serving good bytes from the mirror. Reporting that as a
+        // failure would tell a reader their numbers are wrong at the exact
+        // moment the numbers are fine.
+        inconclusive: true,
+        note: `NOAA could not be reached to compare against (${
+          e instanceof Error ? e.message : String(e)
+        }). This is the comparison being unavailable, not a disagreement with it.`,
       }],
-      ranAt: new Date().toISOString(), passed: 0, inconclusive: 0,
+      ranAt: new Date().toISOString(), passed: 0, inconclusive: 1,
     };
   }
   hud.setChecks(checkResult, false);

@@ -23,6 +23,9 @@ export interface PartMeta {
   stale_after_s: number;
   /** Populated when the upstream fetch failed; the element renders "no data". */
   error?: string;
+  /** These bytes came from Earth Star's mirror because upstream was
+   *  unreachable. The timestamps inside them are still upstream's own. */
+  mirrored?: boolean;
 }
 
 export interface NowEnvelope extends Envelope<Now> {

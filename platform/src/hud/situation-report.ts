@@ -15,6 +15,7 @@ import type { Cme } from '../data/cme.js';
 import { stalenessOf } from './format.js';
 import { scaleLabel, type ScaleMode } from '../scene/scales.js';
 import { subsolarPoint } from '../models/ephemeris.js';
+import { igrfCitation } from '../models/igrf14.js';
 
 export interface SceneNarration {
   mode: ScaleMode;
@@ -318,7 +319,7 @@ export function buildSituationReport(
   if (scene.shield) {
     lines.push(
       `The magnetic shield is drawn: ${scene.fieldLines.lines} field lines traced through ` +
-      `IGRF-14 (IAGA, epoch 2025.0 with secular variation to now) [D], blue where they close ` +
+      `${igrfCitation(new Date())} [D], blue where they close ` +
       `between hemispheres and violet where they stay open toward the solar wind. The ` +
       `teal boundary is the Shue et al. 1998 magnetopause and the orange one the ` +
       `Farris & Russell 1994 bow shock, both re-shaped by the live solar wind above. ` +

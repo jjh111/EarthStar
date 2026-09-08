@@ -14,7 +14,8 @@ import { l1Inset } from './l1-inset.js';
 import { CLOUD_ARRIVAL, enlilSeries, type EnlilRun } from '../data/enlil.js';
 import type { Cme } from '../data/cme.js';
 import { SPACECRAFT_NOTE, type SpacecraftPos } from '../data/ephemerides.js';
-import type { ImageLoop } from '../data/solar-imagery.js';
+import { instrumentFor, type ImageLoop } from '../data/solar-imagery.js';
+import { igrfCitation } from '../models/igrf14.js';
 import { NO_DATA, badgeFor, badgeTitle, formatAge, hhmmUTC, stalenessOf } from './format.js';
 import { panelSpark } from './sparkline.js';
 import { stateSentence, stateSentenceText } from './state-sentence.js';
@@ -333,7 +334,7 @@ export function renderSources(
     ${section('prov-models', 'Models cited', `
       <p>Shue et al. 1998 (doi:10.1029/98JA01103) — magnetopause.<br>
       Farris &amp; Russell 1994 — bow shock.<br>
-      IGRF-14 (IAGA, epoch 2025.0) — the geomagnetic field and its lines.<br>
+      ${igrfCitation(new Date())} — the geomagnetic field and its lines.<br>
       OVATION Prime (NOAA SWPC) — aurora probability.<br>
       NOAA Geospace (Univ. Michigan BATS-R-US/RCM) — Dst.<br>
       WSA-Enlil (NOAA SWPC) — the heliospheric wind forecast.<br>
@@ -498,6 +499,9 @@ export function renderSun(
 
   const L = sun.loop;
   const f = L.frames[sun.frameIndex] ?? L.frames[L.frames.length - 1]!;
+  // Resolved per frame, not per loop: a loop can span a spacecraft handover,
+  // and the label belongs to the image on screen.
+  const instrument = instrumentFor(L.instrument, f.satellite);
   const ageMin = Math.round((Date.now() - Date.parse(f.time)) / 60000);
   const n = L.frames.length;
 
@@ -519,11 +523,11 @@ export function renderSun(
            cache and moved into this slot after render, so that rebuilding the
            panel does not throw away a decode that costs 380 ms. -->
       <div class="sun-slot" id="sun-slot" data-frame="${escapeHtml(f.url)}"
-           data-alt="${escapeHtml(L.instrument)} image of the Sun at ${hhmmUTC(f.time)} UTC"></div>
+           data-alt="${escapeHtml(instrument)} image of the Sun at ${hhmmUTC(f.time)} UTC"></div>
       <div class="sun-stamp"><span>${hhmmUTC(f.time)} UTC</span><span>${ageMin} min ago</span></div>
     </div>
     <div class="sun-transport">${transport}</div>
-    <p><span class="badge badge-e">E</span> ${escapeHtml(L.instrument)}. ${escapeHtml(L.describes)}</p>
+    <p><span class="badge badge-e">E</span> ${escapeHtml(instrument)}. ${escapeHtml(L.describes)}</p>
     <p class="tile-meta">${L.skippedDropouts > 0
       ? `The newest ${L.skippedDropouts} frame${L.skippedDropouts > 1 ? 's were' : ' was'} a
          data dropout — a valid but near-empty image — so this is the newest usable one. `
@@ -628,6 +632,8 @@ export function renderDetail(
       <tr><td>Data time</td><td class="num">${meta.data_time ? `${hhmmUTC(meta.data_time)} UTC` : NO_DATA}</td></tr>
       <tr><td>Latency</td><td class="num">${meta.latency_s === null ? NO_DATA : `${meta.latency_s}s`}</td></tr>
       <tr><td>Stale after</td><td class="num">${Math.round(meta.stale_after_s / 60)} min</td></tr>
+      ${meta.mirrored ? `<tr><td>Transport</td><td class="warn">Earth Star mirror (stage B) —
+        NOAA was unreachable; these are its bytes and its timestamps, copied</td></tr>` : ''}
       ${meta.error ? `<tr><td>Error</td><td class="err">${escapeHtml(meta.error)}</td></tr>` : ''}
     </tbody></table>` : '<p>No provenance recorded.</p>'}`;
 }

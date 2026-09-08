@@ -13,6 +13,7 @@
  */
 
 import { SWPC_BASE } from './swpc.js';
+import { getJson } from './fetch-json.js';
 import type { Series } from './swpc.js';
 
 export const SOLAR_CYCLE_URL = `${SWPC_BASE}/json/solar-cycle/observed-solar-cycle-indices.json`;
@@ -65,9 +66,9 @@ export function tail(s: Series, months: number): Series {
 
 export async function fetchSolarCycle(signal?: AbortSignal): Promise<SolarCycle | null> {
   try {
-    const r = await fetch(SOLAR_CYCLE_URL, { cache: 'no-store', signal });
-    if (!r.ok) return null;
-    return parseSolarCycle(await r.json());
+    const r = await getJson<unknown>(SOLAR_CYCLE_URL, signal);
+    if (r.json === null) return null;
+    return parseSolarCycle(r.json);
   } catch {
     return null;
   }

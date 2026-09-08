@@ -1,0 +1,90 @@
+# Watches the feeds The Viewer runs on, the deployed page, and the stage-B mirror.
+#
+# The Viewer has no server: it is a static bundle that fetches NOAA SWPC and
+# NASA DONKI from the reader's own browser. That is why it costs nothing to
+# run, and it is also why nothing on our side notices when an upstream product
+# is renamed. The app degrades honestly — the lane reads `no data`, the last
+# good value ages visibly, nothing is substituted — but an honest failure that
+# nobody is looking at is indistinguishable from no failure. This looks.
+#
+# Every six hours, because the failures it catches are structural (a renamed
+# product, a withdrawn CORS header, a dead deploy, a mirror that has stopped)
+# and those persist until someone fixes them. Minute-scale gaps are the app's
+# own business and it already shows them to the reader.
+name: Upstream health
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'   # offset from the hour; every service crons on :00
+  workflow_dispatch:
+  push:
+    paths:
+      - 'platform/src/**'
+      - 'platform/scripts/health.mjs'
+      - 'platform/scripts/endpoints.mjs'
+      - '.github/workflows/upstream-health.yml'
+
+# The probe reads public URLs and writes nothing. It is given no more than that.
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.probe.outputs.status }}
+      report: ${{ steps.probe.outputs.report }}
+    steps:
+      # Nothing here pushes, so the checkout is told not to leave a credential
+      # in .git/config for the rest of the job to inherit.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # No install step: the probe is dependency-free on purpose, so a broken
+      # lockfile can never be the reason we stopped watching the feeds.
+      - name: Probe feeds, deployment and mirror
+        id: probe
+        working-directory: platform
+        run: |
+          set +e
+          node scripts/health.mjs | tee /tmp/health.txt
+          echo "status=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+          {
+            echo 'report<<HEALTH_EOF'
+            grep -E '^(DEAD|WARN|UNCHECKED)' -A1 /tmp/health.txt | head -40
+            tail -3 /tmp/health.txt
+            echo HEALTH_EOF
+          } >> "$GITHUB_OUTPUT"
+
+  failing:
+    needs: probe
+    if: needs.probe.outputs.status != '0'
+    uses: ./.github/workflows/notify.yml
+    permissions:
+      issues: write
+    secrets: inherit
+    with:
+      label: upstream-health
+      title: 'Upstream health: something The Viewer depends on is failing'
+      body: |
+        ```
+        ${{ needs.probe.outputs.report }}
+        ```
+
+  clear:
+    needs: probe
+    if: needs.probe.outputs.status == '0'
+    uses: ./.github/workflows/notify.yml
+    permissions:
+      issues: write
+    secrets: inherit
+    with:
+      failing: false
+      label: upstream-health
+      title: 'Upstream health'
+      body: 'All feeds answering.'

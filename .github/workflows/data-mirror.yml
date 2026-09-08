@@ -1,0 +1,127 @@
+# Stage B — Earth Star's own copy of the feeds The Viewer reads.
+#
+# The Viewer fetches NOAA directly from the reader's browser, which is why it
+# needs no server of its own. The price is a single point of failure we do not
+# own: if services.swpc.noaa.gov goes down, or stops sending
+# Access-Control-Allow-Origin, every reading on the page goes dark at once.
+# This writes the fallback, and the page uses it only after a direct fetch has
+# failed — so a healthy reader never touches it and never sees a stale byte.
+#
+# Copies are byte-for-byte and keep NOAA's own timestamps, so a reader on the
+# mirror still sees the true age of every measurement and the page still marks
+# it stale on schedule. The only age the mirror could hide is its own, which is
+# why the manifest records that separately and `npm run health` checks it.
+name: Data mirror
+
+on:
+  schedule:
+    # Every half hour. GitHub runs scheduled workflows on a best-effort basis
+    # and delays them under load, which is fine: this is a fallback, and the
+    # page reports the real age of whatever it finds here.
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+  push:
+    paths:
+      - 'platform/scripts/mirror.mjs'
+      - 'platform/scripts/endpoints.mjs'
+      - '.github/workflows/data-mirror.yml'
+
+# Only `contents`, and only because this job pushes a branch. No issues token
+# here: the notify job below asks for that separately.
+permissions:
+  contents: write
+
+concurrency:
+  group: data-mirror
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.result.outputs.status }}
+      summary: ${{ steps.result.outputs.summary }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Copy the feeds
+        id: copy
+        run: node platform/scripts/mirror.mjs "$RUNNER_TEMP/v1" | tee "$RUNNER_TEMP/mirror.log"
+
+      # The mirror is consulted only when NOAA is unreachable — the one day
+      # nobody can check it against upstream. So it is checked here instead,
+      # by running the app's real parsers over the bytes just written. A
+      # snapshot the Viewer cannot read never reaches the branch.
+      - name: Verify the app can read it
+        working-directory: platform
+        env:
+          MIRROR_DIR: ${{ runner.temp }}/v1
+        run: |
+          npm ci --no-audit --no-fund
+          npx vitest run test/mirror.test.ts
+
+      # Published from a worktree, which inherits the credentials
+      # actions/checkout already configured. The token is never interpolated
+      # into a URL, a remote, or a command line, so it cannot end up in the log.
+      - name: Publish to the data branch
+        run: |
+          git config user.name  'earth-star-mirror[bot]'
+          git config user.email 'mirror@earthstar.space'
+          git worktree add --detach "$RUNNER_TEMP/pub"
+          cd "$RUNNER_TEMP/pub"
+          # An orphan branch, force-pushed: one commit, no history. A feed
+          # copied every half hour would otherwise grow the repository without
+          # limit, and nobody wants to read last Tuesday's solar wind twice.
+          git checkout --orphan data
+          git rm -rq --cached . || true
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -r "$RUNNER_TEMP/v1" ./v1
+          cat > README.md <<'EOF'
+          # Earth Star — data branch (stage B)
+
+          Byte-for-byte copies of the NOAA SWPC payloads The Viewer reads,
+          refreshed every half hour by `.github/workflows/data-mirror.yml`.
+          Long fast-moving arrays are cut to their newest rows; archives are
+          copied whole. Every record keeps upstream's own timestamps.
+
+          The Viewer reads this **only** when NOAA itself is unreachable. It is
+          not a cache in front of upstream and must not be used as one.
+
+          Generated. Force-pushed. Do not commit here by hand.
+          EOF
+          git add -A
+          git commit -qm "Mirror $(date -u +%FT%TZ)"
+          git push -q --force origin data
+
+      - name: Summarise
+        id: result
+        if: always()
+        run: |
+          echo "status=${{ job.status }}" >> "$GITHUB_OUTPUT"
+          {
+            echo 'summary<<EOF'
+            tail -1 "$RUNNER_TEMP/mirror.log" 2>/dev/null || echo 'the copy step did not run'
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+
+  notify:
+    needs: mirror
+    if: always() && needs.mirror.result != 'success'
+    uses: ./.github/workflows/notify.yml
+    permissions:
+      issues: write
+    secrets: inherit
+    with:
+      label: data-mirror
+      title: 'Data mirror: stage B has stopped updating'
+      body: |
+        The mirror run failed, so the `data` branch is no longer being
+        refreshed. Nothing is broken for readers *yet* — The Viewer reads NOAA
+        directly and only falls back here — but the fallback is now ageing and
+        will be useless if NOAA goes down while this is unfixed.
+
+        ${{ needs.mirror.outputs.summary }}
