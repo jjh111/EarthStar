@@ -41,6 +41,20 @@ npm run images     # additionally regenerate responsive AVIF/WebP images (slow)
 - Built output is committed so GitHub Pages serves the branch root directly — no deploy
   workflow needed. Commit the rebuilt files alongside source changes.
 
+## The Viewer
+
+`earthstar.space/viewer/` — a live 3D view of Earth's space-weather environment: solar
+wind at L1, the magnetosphere shaped by it, aurora, X-rays, particle hazards, CMEs, and
+the Sun's own imagery — every value carrying its source, timestamp, and evidence tier
+(`[E]` measured · `[D]` modeled · `[M]` ambient). No server: the page reads NOAA and
+NASA directly from your browser, with a mirror on the `data` branch as a fallback.
+
+- Source in `platform/` (Vite + TypeScript + Three.js); built output committed to `viewer/`
+- `cd platform && npm install && npm run dev` · `npm test` · `npm run build`
+- Read `platform/README.md` for the six rules the code is built around, and
+  `platform/docs/sources.md` before touching any data source
+- Roadmap: `plans/VIEWER_NEXT_PLAN.md`; charter: `plans/VIEWER_PLATFORM_PLAN.md`
+
 ## Links
 
 - [Read More](https://earthstar111.substack.com) - Substack writings

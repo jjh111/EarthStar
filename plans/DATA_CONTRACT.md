@@ -1,8 +1,9 @@
-# Earth Star Data Contract — v1 (DRAFT)
+# Earth Star Data Contract — v1.1
 
 **Owner:** Director / platform track. **Consumers:** the Viewer platform, the splash site's
 live teaser widgets, and the skill track's `heliosphere-data` reference (its human-readable
-twin). **Freeze:** when Viewer phase 0 ships; until then, changes go through the Director.
+twin). **Status:** v1.1 — v1 frozen at Viewer phase 0; v1.1 accepts the five change requests raised
+in `platform/docs/sources.md` §3 after live verification. Changes still go through the Director.
 
 Transport is adapter-selected (see platform plan §5.2): **stage A** — the browser fetches
 upstream directly and a `DirectSource` adapter produces this envelope client-side;
@@ -27,8 +28,18 @@ envelope and the TypeScript interface in §3, never against a transport.
 }
 ```
 
-Rules: `data_time` is always UTC ISO-8601 with `Z`; numeric fields are numbers (never
-strings); missing values are `null` (never `-999`, never `0`); arrays are oldest → newest.
+Rules: `data_time` is always UTC ISO-8601 with `Z` (upstream publishes three formats —
+bare, `Z`-suffixed, and space-separated with milliseconds — all normalised on the way in);
+numeric fields are numbers (never strings); missing values are `null` (never `-999`,
+`-9999`, or `0`); **series arrays are emitted oldest → newest, but adapters must never
+assume upstream order** — upstream direction varies per endpoint, so parsers select by
+timestamp, not by position (v1.1, from sources.md §3.3).
+
+Upstream reality (v1.1): NOAA's `products/solar-wind/*` family is gone (404); real-time
+solar wind is `json/rtsw/rtsw_mag_1m.json` + `rtsw_wind_1m.json`, which interleave
+ACE / IMAP / SOLAR1 records behind an `active` flag — **only `active: true` is the
+operational wind.** `products/*` are arrays of objects (not header-row arrays) except
+`propagated-solar-wind-1-hour`, which is the one header-row feed in use.
 
 ## 2. Endpoints
 
@@ -37,7 +48,8 @@ strings); missing values are `null` (never `-999`, never `0`); arrays are oldest
 ```jsonc
 {
   "data": {
-    "solar_wind": { "time": "…Z", "bz_gsm": -4.2, "bt": 6.1, "speed": 412, "density": 5.3, "temperature": 84000 },
+    "solar_wind": { "time": "…Z", "spacecraft": "SOLAR1", "bz_gsm": -4.2, "bt": 6.1, "speed": 412, "density": 5.3, "temperature": 84000 },
+    "propagated_wind": { "time": "…Z", "bz_gsm": -3.1, "speed": 405, "density": 5.0, "minutes_in_flight": 57, "source": "NOAA propagated-solar-wind-1-hour" },  // [D·NOAA]; drives the magnetopause
     "kp":         { "time": "…Z", "estimated_kp": 3.33, "kp": "3+" },
     "xray":       { "time": "…Z", "flux_long": 2.1e-6, "class": "C2.1" },
     "scales":     { "R": 0, "S": 0, "G": 1, "text": { "G": "Minor" } },
@@ -52,7 +64,7 @@ The envelope's `tier` for `/now` is `"mixed"`; each sub-object carries its own
 `tier`/`data_time` when they differ (the proxy fills them in).
 
 ### `GET /v1/solar-wind?range=1d|7d`
-`data: { "time": [...], "bx_gsm": [...], "by_gsm": [...], "bz_gsm": [...], "bt": [...], "density": [...], "speed": [...], "temperature": [...] }` — column arrays, aligned; mag and plasma merged on `time` (1-min).
+`data: { "time": [...], "spacecraft": [...], "bx_gsm": [...], "by_gsm": [...], "bz_gsm": [...], "bt": [...], "density": [...], "speed": [...], "temperature": [...] }` — column arrays, aligned; mag and plasma merged on `time` (1-min); `spacecraft` names the instrument for every sample (v1.1) — a value whose instrument is unidentified is not fully provenanced.
 
 ### `GET /v1/kp?range=1d|7d`
 `data: { "time": [...], "estimated_kp": [...], "kp": [...] }` plus `data.official_3h: [{ "time", "kp" }]`.
@@ -80,6 +92,12 @@ Base64 keeps the 65k-cell grid at ~25 KB. `tier: "modeled"`, `model: { "name": "
 
 ### `GET /v1/sun/image?instrument=aia193|aia171|aia304|hmi_mag|lasco_c2`
 `data: { "image_url": "…png", "image_time": "…Z", "instrument": "SDO/AIA 193", "width": 1024 }` — proxied/cached PNG via Helioviewer; `source_url` is the Helioviewer request.
+
+### `GET /v1/dst` (v1.1)
+`data: { "time": [...], "dst": [...], "arrived_through": "…Z" }` nT — NOAA Geospace *modelled* Dst (`json/geospace/geospace_dst_1_hour`), `tier: "modeled"`; roughly half of each upstream response is forecast — only samples ≤ now are "now"; Kyoto's measured Dst remains stage B.
+
+### `GET /v1/enlil` (v1.1)
+`data: { "run_time": "…Z", "time": [...], "v_r": [...], "density": [...], "temperature": [...], "b": [...], "polarity": [...], "cloud": [...] }` — WSA-Enlil at Earth as numbers (`json/enlil_time_series`), `tier: "modeled"`, NOAA's; the hindcast half is comparable with measured wind and the forecast half is the check on the cone model.
 
 ### `GET /v1/geomag/:obs` (phase 4)
 `data: { "station": "BOU", "lat": 40.14, "lon": -105.24, "time": [...], "x": [...], "y": [...], "z": [...], "f": [...] }` nT, 1-min variation.

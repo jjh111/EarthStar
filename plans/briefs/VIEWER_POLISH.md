@@ -1,0 +1,47 @@
+# Session Brief — Viewer Phase P: Polish
+
+**Repo:** `jjh111/EarthStar` · **Branch:** `claude/viewer-polish` (from `main`)
+**You own:** `platform/`, `viewer/` (rebuild and commit both). **Do not edit:** `src/`,
+`index.html`, `assets/`, `archive/`, `skill_extract/`, `plans/*` (propose in PR).
+**Environment:** local with network access (NOAA hosts + `earthobservatory.nasa.gov` /
+`visibleearth.nasa.gov` for Blue/Black Marble downloads). Node 22.
+
+## Read first
+`plans/VIEWER_NEXT_PLAN.md` §0–1 (the review and this phase), `platform/README.md` (the
+six rules — they are not style preferences), `platform/docs/sources.md` §3 (the upstream
+traps). Run `npm test` and `npm run a11y` before you change anything, and again before
+you open the PR.
+
+## Tasks (in this order)
+
+1. **Raster Earth base.** Vendor NASA Blue Marble Next Generation (day, public domain) at
+   4096×2048 → WebP (~600 KB) plus a 2048 phone variant, and Black Marble 2016 night
+   lights at 2048 → WebP (~250 KB). Feed both through the existing terminator shader in
+   `src/scene/earth.ts`: day texture on the lit side, city lights emissive on the night
+   side, blended across the real twilight band. Keep `earth-texture.ts` coastlines as an
+   optional overlay (a registry toggle later; a boolean now). Lazy-load after first
+   paint; choose the size by `devicePixelRatio × viewport`. Tier `[E]` with the
+   composite's acquisition period stated in the provenance drawer and the Situation
+   Report ("surface: NASA Blue Marble, 2004 composite; lights: Black Marble 2016").
+2. **Field-line legibility.** In `src/scene/magnetosphere.ts` / `models/fieldlines.ts`:
+   seed count and line opacity as a function of camera distance; beyond ~100 Rₑ draw the
+   magnetopause + bow-shock silhouette and ~12 signature lines only; depth-fade lines
+   behind the globe (cheap: opacity by view-space z). Halve the Kp shiver amplitude.
+3. **Deck view framing.** Default camera: Earth on the lower-left third, Moon clear of
+   the limb at Globe scale, sunward side toward the light. Check all five vantage points
+   still make sense on a 390-px phone.
+4. **Fonts, meta, brand.** Replace the Google Fonts links in `platform/index.html` with
+   `@font-face` rules pointing at `../assets/fonts/CormorantGaramond.woff2`,
+   `CormorantGaramond-italic.woff2`, `DMSans.woff2` (variable; weights 400–600 /
+   300–500 — copy the rules from `src/fonts/fonts.css` in the splash). Add OG/Twitter
+   card (`viewer/og.jpg`, 1200×630 deck-view screenshot), canonical
+   `https://earthstar.space/viewer/`, `theme-color`. Use the splash gold (`#ffd700`
+   accent, `#C8960C` label) for the brand mark, focus rings, and the primary action only.
+5. **Hold the line.** Frame-time budget unchanged (see commit `9a5c807`); `npm run a11y`
+   zero violations; Lighthouse mobile ≥ 90 perf / 100 a11y on `/viewer/`; `viewer/`
+   ≤ 3 MB including the new textures.
+
+## Acceptance
+Screenshots (deck, orbit, system, phone) in `platform/docs/screenshots/`; test + a11y
+output and Lighthouse numbers in the PR body; no fabricated values introduced (the
+texture is imagery, labelled and dated).

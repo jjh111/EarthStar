@@ -5,8 +5,10 @@
 tree-ship in the hero painting. URL target: `earthstar.space/viewer/`. (Rename freely;
 everything below uses "Viewer" as the name.)
 
-**Status:** PLAN. No platform code exists yet. This document is the coordination hub for
-three parallel sessions — see §8.
+**Status:** phases 0–2 SHIPPED (2026-09-06/08), far beyond this plan's MVP. **The live
+roadmap is now `plans/VIEWER_NEXT_PLAN.md`** (polish → quick wins → the whole-Earth layer
+cycle); this document remains the charter (§1–§3), the hosting decision (§5.2), and the
+ownership rules (§8).
 
 ---
 
