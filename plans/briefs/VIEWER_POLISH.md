@@ -27,9 +27,16 @@ you open the PR.
    seed count and line opacity as a function of camera distance; beyond ~100 Rₑ draw the
    magnetopause + bow-shock silhouette and ~12 signature lines only; depth-fade lines
    behind the globe (cheap: opacity by view-space z). Halve the Kp shiver amplitude.
-3. **Deck view framing.** Default camera: Earth on the lower-left third, Moon clear of
-   the limb at Globe scale, sunward side toward the light. Check all five vantage points
-   still make sense on a 390-px phone.
+3. **Deck view framing and the Sun panel.** PR #12 already put Deck behind Earth looking
+   sunward; keep it, check the Moon clears the limb at Globe scale and the five vantage
+   points make sense on a 390-px phone. Then two Sun-panel fixes: (a) `margin.ts` returns
+   the disk loop's failure text *before* the coronagraph section renders, so a SUVI
+   outage hides a working LASCO — render both sections in every state, each with its own
+   loading / no data / error text per task 4; (b) the Corona view frames on the bare
+   sphere when no plane is loaded (the Sun fills the viewport in its base colour) — give
+   it a default framing distance. The image planes were re-blended by the Director
+   (normal blend, circular mask as alpha, `SKY_OPACITY` / `PEDESTAL_LIFT` in `sun.ts`);
+   tune those two constants by eye against live C2/C3 frames, don't return to additive.
 4. **Label states — loading is not "no data".** Today a cold visitor sees `no data` on
    every tile and the Sun panel until first fetches land. Define and implement four
    mutually exclusive states for every tile, the Sun panel, the layer toggles, and every

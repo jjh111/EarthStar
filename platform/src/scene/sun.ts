@@ -43,11 +43,11 @@
  */
 
 import {
-  AdditiveBlending, Color, DoubleSide, Group, Mesh, PlaneGeometry,
+  Color, DoubleSide, Group, Mesh, NormalBlending, PlaneGeometry,
   ShaderMaterial, SphereGeometry, SRGBColorSpace, Texture, Vector2, Vector3,
 } from 'three';
 import type { DiskCalibration } from './disk-calibration.js';
-import type { SunPlaneCalibration } from './sun-plane.js';
+import type { PlaneKind, SunPlaneCalibration } from './sun-plane.js';
 import { AU_KM, BODY_RADIUS_KM, distanceToScene, type ScaleMode } from './scales.js';
 
 /** One solar radius in AU — the unit a coronagraph's field of view is quoted in. */
@@ -134,6 +134,8 @@ const cgFrag = /* glsl */ `
   uniform float uInnerSoft;   // ...fading in to here
   uniform float uEdge;        // field of view radius, solar radii
   uniform vec3 uFloor;        // sky pedestal of the palette, per channel
+  uniform float uFloorMix;    // how much of that pedestal to lift, 0..1
+  uniform float uSkyOpacity;  // opacity of the darkest sky; bright detail is opaque
   uniform float uIntensity;
   varying vec2 vRsun;
 
@@ -156,23 +158,44 @@ const cgFrag = /* glsl */ `
 
     vec3 c = texture2D(uImage, uv).rgb;
 
-    // Subtract the palette's own zero, per channel. These renderings are
-    // false-colour and their empty sky is a solid mid-blue, which added as
-    // light becomes a slab the size of the inner solar system — a picture of
-    // the colour table, not of the corona. Each channel is then restretched
-    // over what is left, so the corona keeps its structure and its hue.
-    c = max(c - uFloor, vec3(0.0)) / max(vec3(1e-3), vec3(1.0) - uFloor);
+    // The exposure is shown as the instrument rendered it. A fraction of the
+    // palette's own zero can be lifted so the empty sky sits a little quieter
+    // than the corona in it, but the picture stays a picture: this is a
+    // mask, not a re-exposure.
+    c = max(c - uFloor * uFloorMix, vec3(0.0)) / max(vec3(1e-3), vec3(1.0) - uFloor * uFloorMix);
 
-    // Soft at both ends, so neither discard reads as a cut circle.
-    // The inner fade is wide for an occulter, whose edge is genuinely soft, and
-    // nearly nothing for a limb, where the card has to meet the sphere without
-    // a gap of missing light between them.
-    float edge = smoothstep(uInner, uInnerSoft, r)
-               * (1.0 - smoothstep(uEdge * 0.88, uEdge, r));
-    gl_FragColor = vec4(c * uIntensity * edge, 1.0);
+    // The circle is the alpha. Soft at both ends, so neither cut reads as an
+    // edge: wide at an occulter, whose rim is genuinely soft; nearly nothing at
+    // a limb, where the card has to meet the sphere without a gap.
+    float mask = smoothstep(uInner, uInnerSoft, r)
+               * (1.0 - smoothstep(uEdge * 0.90, uEdge, r));
+
+    // Bright structure is opaque; the darkest sky lets a little of the scene
+    // through, so stars and the wind read faintly behind the empty parts of
+    // the frame and the plane sits in space rather than on top of it.
+    float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    float alpha = mask * mix(uSkyOpacity, 1.0, clamp(lum * 1.5, 0.0, 1.0));
+
+    gl_FragColor = vec4(c * uIntensity, alpha);
     #include <colorspace_fragment>
   }
 `;
+
+/**
+ * How much of the palette's zero to lift out of the frame. Small: the picture
+ * is meant to be seen as published, and lifting the whole pedestal (the earlier
+ * additive treatment) left nothing but the streamers. A coronagraph's
+ * false-colour sky gets a touch of quieting; a disk card's sky is already black.
+ */
+const PEDESTAL_LIFT: Record<PlaneKind, number> = { coronagraph: 0.2, disk: 0 };
+
+/**
+ * Opacity of the darkest sky in the frame; bright structure is always opaque.
+ * A coronagraph keeps most of its sky, because the sky is part of the exposure.
+ * The disk card's black surround is mostly let through, so the off-limb light
+ * it exists to carry stands off the sphere without a dark halo around it.
+ */
+const SKY_OPACITY: Record<PlaneKind, number> = { coronagraph: 0.8, disk: 0.3 };
 
 /**
  * One solar frame, hung on the plane it was projected onto.
@@ -200,16 +223,21 @@ class ImagePlane {
         uInnerSoft: { value: 1.05 },
         uEdge: { value: 6 },
         uFloor: { value: new Vector3(0, 0, 0) },
+        uFloorMix: { value: PEDESTAL_LIFT.coronagraph },
+        uSkyOpacity: { value: SKY_OPACITY.coronagraph },
         uExtent: { value: 1 },
         uCover: { value: 1 },
-        uIntensity: { value: 1.15 },
+        uIntensity: { value: 1 },
       },
       vertexShader: cgVert,
       fragmentShader: cgFrag,
-      transparent: true, blending: AdditiveBlending,
-      // Additive and unwritten to depth, like every other glow in the scene:
-      // it is light arriving, not a surface. DoubleSide because the plane is
-      // seen from whichever side the camera happens to be on.
+      // Blended normally, with the circular field of view as its alpha: a
+      // photograph hung in space, shown as the instrument rendered it. It was
+      // additive once, with the palette's pedestal subtracted — which kept the
+      // bright streamers and lost the exposure around them. Unwritten to depth
+      // so the wind and the field lines still draw through it; DoubleSide
+      // because the plane is seen from whichever side the camera is on.
+      transparent: true, blending: NormalBlending,
       depthWrite: false, side: DoubleSide,
     });
     // Local coordinates run -1..1; the vertex shader places them on the image
@@ -245,6 +273,8 @@ class ImagePlane {
     // A limb has to meet the sphere; an occulter edge does not meet anything.
     u['uInnerSoft']!.value = cal.innerRsun * (cal.kind === 'disk' ? 1.015 : 1.15);
     (u['uFloor']!.value as Vector3).set(cal.background.r, cal.background.g, cal.background.b);
+    u['uFloorMix']!.value = PEDESTAL_LIFT[cal.kind];
+    u['uSkyOpacity']!.value = SKY_OPACITY[cal.kind];
     this.applyScale();
     this.mesh.visible = true;
   }

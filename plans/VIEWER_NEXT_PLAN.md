@@ -1,7 +1,7 @@
 # The Viewer — Next Plan
 ## Director's review of what shipped, and the road to a whole-Earth viewer
 
-**Date:** 2026-09-08 · **Status:** PLAN · **Supersedes** the phase table in
+**Date:** 2026-09-08 (rev. 2, after PR #12 merged) · **Status:** PLAN · **Supersedes** the phase table in
 `VIEWER_PLATFORM_PLAN.md` §6 (phases 0–2 shipped; phase 3–4 items are re-sequenced here).
 
 Every phase below is written so that a fresh agent in this repo can execute it from its
@@ -13,7 +13,16 @@ brief in `plans/briefs/` without this session. Ownership rules from `VIEWER_PLAT
 
 ## 0. State of the Viewer (director's review, `main` @ 7393857)
 
-**Shipped — well beyond the MVP plan.** Phases 0–2 plus most of 4: live L1 wind selected
+**Shipped — well beyond the MVP plan.** Phases 0–2 plus most of 4 — and, merged since
+this plan's first revision, PR #12 *"solar imagery — sphere, card and plane"*: a SUVI frame
+is now the whole exposure (disk wrapped on the sphere, the off-limb third on a card at
+its own plane), LASCO C2/C3 hang on planes at the scale they were taken at, self-calibrated
+from the frames' own limb circles, the invented corona shader is gone, and Deck now looks
+back down the Sun–Earth line with both bodies in frame. Q1 below is therefore done.
+The Director then re-blended the image planes: they were additive with the palette's
+pedestal subtracted, which kept the streamers and lost the exposure; they are now drawn
+normally with the circular field of view as their alpha, mostly shown, with a slight
+see-through in the darkest sky (`PEDESTAL_LIFT`, `SKY_OPACITY` in `sun.ts`). live L1 wind selected
 by the `active` spacecraft, NOAA-propagated wind driving a Shue-1998 magnetopause and
 Farris–Russell bow shock, IGRF-14 field lines clamped at the boundary, OVATION aurora,
 GOES X-rays/protons/electrons with the S scale, the GOES magnetometer as a *falsifying*
@@ -76,9 +85,14 @@ first-time visitor on a laptop and a phone, before any new data lands.
 - **Field-line legibility.** Seed count and line opacity scale with camera distance; at
   System scale draw only the magnetopause/bow-shock silhouette and ~12 signature lines.
   Depth-fade lines behind the globe. Keep the Kp "shiver" but lower its amplitude.
-- **Deck view framing.** Default camera separates Earth and Moon (the Moon currently
-  overlaps the limb at Globe scale); Earth sits on the lower-left third with the sunward
-  side toward the light; the first thing seen is the planet, not the tangle.
+- **Deck view framing.** PR #12 moved Deck behind Earth looking sunward with both bodies
+  in frame; keep that, but check the Moon clears Earth's limb at Globe scale and the
+  first thing seen is the planet, not the tangle.
+- **Sun panel independence.** `margin.ts` returns the disk loop's failure text before
+  rendering the coronagraph section, so a SUVI outage hides a working LASCO (found while
+  mocking imagery in a sandbox with no NOAA access). The two selections are independent
+  by design; render both sections in every state. The Corona view also frames on the
+  bare sphere when nothing is loaded — give it a sensible default distance instead.
 - **Label states: loading ≠ no data ≠ error ≠ stale.** Every tile, the Sun panel, and
   every Situation Report sentence distinguishes four states, each visually and textually
   distinct, none of them a number:
@@ -111,7 +125,7 @@ marked ✓ (verified live by the platform agent).
 
 | id | Ticket | Source · tier | Why it's cheap |
 |----|--------|---------------|----------------|
-| Q1 | **Finish and merge `claude/coronagraph`** (the platform agent's in-flight sphere/card/plane work) | — | 2 commits ahead, tests included; just needs rebase + review |
+| ~~Q1~~ | ~~Finish and merge `claude/coronagraph`~~ — **done, PR #12** | — | — |
 | Q2 | **Earthquakes on the globe** — last 24 h / 7 d, sized by magnitude, click → depth/place/time; feeds the Situation Report ("3 quakes ≥ M5 in the last day") | USGS `earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson` (CORS `*` per USGS docs; 1-min updates) · `[E]` | GeoJSON points → sprites; ~150 lines |
 | Q3 | **Earth from L1** — DSCOVR EPIC's latest natural-colour image in the Sources panel next to the L1 monitors ("this is what the monitors see") | `epic.gsfc.nasa.gov/api/natural` + `/archive/natural/YYYY/MM/DD/png/…` · `[E]` | Same image-tile pattern as SUVI; ties the L1 story together |
 | Q4 | **South Atlantic Anomaly + magnetic poles + pole wander** — SAA contour (F < 26 000 nT at 400 km) from the vendored IGRF-14, both dip poles, and the 1900→2025 north-pole track (the vendored file already carries every epoch) | IGRF-14, in-browser · `[D·IGRF-14]` | Zero new data; the geology story starts here |
