@@ -30,12 +30,13 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
  * in the model to look at, and the view showed less than the profile does. A
  * vantage point that adds nothing is a control that costs attention.
  */
-export type ViewName = 'deck' | 'sunward' | 'profile' | 'polar' | 'system';
+export type ViewName = 'deck' | 'sunward' | 'profile' | 'polar' | 'corona' | 'system';
 
 /** Labels and the one-line reason each view exists. */
 export const VIEWS: Array<{ id: ViewName; label: string; title: string }> = [
   { id: 'deck', label: 'Deck',
-    title: 'Earth from a standoff, with the day/night terminator in frame' },
+    title: 'Behind Earth looking back down the Sun–Earth line: both bodies in '
+      + 'frame, with the wind and the field lines running between them' },
   { id: 'sunward', label: 'Sunward',
     title: 'Looking down the Sun–Earth line from the Sun: the magnetopause face-on' },
   { id: 'profile', label: 'Profile',
@@ -43,6 +44,9 @@ export const VIEWS: Array<{ id: ViewName; label: string; title: string }> = [
   { id: 'polar', label: 'Polar',
     title: 'Over the north pole with noon at the top: the auroral oval as a ring, '
       + 'offset because it encircles the magnetic pole rather than this one' },
+  { id: 'corona', label: 'Corona',
+    title: 'The Sun from where we stand, framed for the coronagraphs: LASCO '
+      + 'photographs down this exact line, so its image plane is face-on here' },
   { id: 'system', label: 'System',
     title: 'The whole solar system, all eight planets at their true positions' },
 ];
@@ -87,11 +91,12 @@ export class CameraRig {
    */
   goTo(
     view: ViewName, earthPos: Vector3, earthRadius: number, sunDir: Vector3,
-    immediate = false,
+    coronaRadius: number, immediate = false,
   ): void {
     this.view = view;
     const NORTH = new Vector3(0, 1, 0);
-    let target = view === 'system' ? new Vector3(0, 0, 0) : earthPos.clone();
+    let target = view === 'system' || view === 'corona'
+      ? new Vector3(0, 0, 0) : earthPos.clone();
 
     let pos: Vector3;
     if (view === 'profile') {
@@ -118,16 +123,45 @@ export class CameraRig {
       // convention every auroral-oval plot is drawn in — and it puts the oval's
       // offset from the geographic pole where it can be seen.
       pos = earthPos.clone().addScaledVector(NORTH, earthRadius * 3.4);
+    } else if (view === 'corona') {
+      // From Earth, looking back at the Sun — the line SOHO photographs down,
+      // and the only direction from which a coronagraph frame is face-on
+      // rather than a plane seen edge-on.
+      //
+      // Framed on the widest coronagraph rather than on the Sun: C3 reaches
+      // thirty solar radii, and a frame that fits the Sun would hold about a
+      // thirtieth of the picture. `coronaRadius` is that reach in scene units,
+      // so the framing follows the scale mode without knowing about it.
+      // `sunDir` runs Earth -> Sun, so the Sun-to-Earth direction is its
+      // negation. Getting that sign wrong puts the camera on the *far* side of
+      // the Sun, looking at the hemisphere no instrument has seen — which
+      // renders as the flat unobserved grey it is supposed to, and reads as a
+      // blank Sun rather than as a camera in the wrong place.
+      const back = coronaRadius / Math.tan((this.camera.fov * Math.PI) / 360);
+      pos = sunDir.clone().negate().normalize().multiplyScalar(back * 1.25);
     } else if (view === 'deck') {
-      // Stand off from Earth, offset across the sun line so the terminator is
-      // in frame rather than edge-on, and a little above the ecliptic.
-      // Stand off outside the Moon's (compressed) orbit so it cannot sit
-      // between the camera and the subject in the default framing.
+      // The mirror of Sunward: behind Earth, looking back along the Sun–Earth
+      // line, so the Sun is *in the frame* rather than behind the camera.
+      //
+      // Which is the whole point of an opening view. From here the two bodies
+      // this instrument is about are both visible at once, in their real
+      // relationship: the Sun at the far end of the line, Earth near, and the
+      // wind and the field lines running between them. Standing sunward of
+      // Earth — where this used to be — showed the subject with its cause out
+      // of shot.
+      //
+      // Offset across and above so Earth does not sit dead centre on the Sun
+      // and eclipse it, and so the terminator is in frame rather than edge-on.
+      // The offset is small on purpose. Earth is held at frame centre and the
+      // Sun sits far beyond it, so the two separate by roughly the offset times
+      // (1/d − 1/(d + D)) — about 3° per Earth radius at this standoff. Two
+      // radii puts the Sun just clear of Earth's limb; six flings it across the
+      // frame and the pair stops reading as one line.
       const across = new Vector3().crossVectors(sunDir, NORTH).normalize();
       pos = earthPos.clone()
-        .add(across.multiplyScalar(earthRadius * 8))
-        .add(sunDir.clone().multiplyScalar(earthRadius * 3.5))
-        .add(new Vector3(0, earthRadius * 2.5, 0));
+        .addScaledVector(sunDir, -earthRadius * 14)
+        .add(across.multiplyScalar(earthRadius * 1.5))
+        .add(new Vector3(0, earthRadius * 1.5, 0));
     } else {
       // Framed for the whole system, not just the inner four. Globe scale puts
       // Mercury at 2.6 units and Neptune at 8.3 — a range of 3.2:1 for a true

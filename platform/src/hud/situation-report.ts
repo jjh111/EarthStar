@@ -336,7 +336,7 @@ export function buildSituationReport(
   lines.push(
     `${scaleLabel(scene.mode)}. Camera: ${VIEWS.find((v) => v.id === scene.view)?.label
       ?? scene.view} — ${VIEWS.find((v) => v.id === scene.view)?.title ?? ''}. ` +
-    `${scene.reducedMotion ? 'Reduced motion is on — the corona is still and camera moves cut rather than glide.' : 'Motion is enabled.'}`,
+    `${scene.reducedMotion ? 'Reduced motion is on — camera moves cut rather than glide.' : 'Motion is enabled.'}`,
   );
   if (scene.wind !== false && d?.solar_wind?.speed != null) {
     lines.push(
@@ -354,9 +354,10 @@ export function buildSituationReport(
     );
   }
   lines.push(
-    `Colour, starfield and the corona's texture are ambient [M] — they are ` +
-    `parameter-driven artwork, not measurements. The corona's brightness follows the ` +
-    `measured X-ray flux; its turbulence does not represent anything physical.`,
+    `Colour and the starfield are ambient [M] — parameter-driven artwork, not ` +
+    `measurements. There is no invented glow around the Sun: the region a painted ` +
+    `corona would have occupied is the region the LASCO coronagraphs actually ` +
+    `photograph, and that imagery is shown there instead when it is switched on.`,
   );
 
   return lines;

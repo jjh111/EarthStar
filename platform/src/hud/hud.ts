@@ -17,6 +17,7 @@ import {
   NO_DATA, badgeFor, badgeTitle, hhmmUTC, stalenessOf,
 } from './format.js';
 import { INSTRUMENTS } from './instruments.js';
+import type { SunPlaneCalibration } from '../scene/sun-plane.js';
 import { tileSpark } from './tile-spark.js';
 import { inlineSpark } from './sparkline.js';
 import {
@@ -34,6 +35,8 @@ export interface HudCallbacks {
   onRunChecks(): void;
   /** The solar frame now on screen, for the Sun in the scene. */
   onSunFrame?(image: HTMLImageElement): void;
+  onCoronaFrame?(image: HTMLImageElement): void;
+  onSelectCorona?(id: string | null): void;
   onLoadCycle(): void;
 }
 
@@ -89,6 +92,8 @@ export class Hud {
   private sun: SunState = {
     loop: null, loopId: LOOPS[0]!.id, frameIndex: 0,
     playing: false, loading: true, preloaded: 0, preloading: false,
+    corona: null, coronaId: null, coronaLoading: false,
+    diskPlane: null, coronaPlane: null,
   };
   private narration: SceneNarration = {
     mode: 'globe', view: 'deck', reducedMotion: false,
@@ -156,6 +161,36 @@ export class Hud {
     if (this.tab === 'sun') this.updateSunFrame();
   }
   setSunPlaying(p: boolean): void { this.sun.playing = p; if (this.tab === 'sun') this.renderMargin(); }
+
+  /**
+   * What the scene measured out of each frame, for the panel to state.
+   *
+   * Re-renders only on a *change*, and the guard is load-bearing rather than an
+   * optimisation. Rendering the panel puts the current frames into the scene
+   * (`updateSunFrame` → `onSunFrame`), which measures them, which lands back
+   * here: re-rendering unconditionally is an infinite recursion that hangs the
+   * page the moment a frame is placed while the Sun tab is open.
+   *
+   * A calibration is a pure function of the frame's pixels, so the second pass
+   * produces identical numbers and the cycle stops on the first comparison.
+   */
+  setPlaneCalibration(which: 'disk' | 'corona', c: SunPlaneCalibration | null): void {
+    const key = which === 'disk' ? 'diskPlane' : 'coronaPlane';
+    const prev = this.sun[key];
+    const same = prev === c || (!!prev && !!c
+      && prev.rsun === c.rsun && prev.innerRsun === c.innerRsun
+      && prev.centre.u === c.centre.u && prev.centre.v === c.centre.v);
+    this.sun[key] = c;
+    if (!same && this.tab === 'sun') this.renderMargin();
+  }
+
+  /** The coronagraph is its own selection, loaded and shown alongside the disk. */
+  setCoronaLoop(loop: ImageLoop | null, loading: boolean): void {
+    this.sun.corona = loop;
+    this.sun.coronaLoading = loading;
+    this.renderMargin();
+  }
+
   get sunState(): SunState { return this.sun; }
   get activeTab(): TabId { return this.tab; }
 
@@ -246,6 +281,9 @@ export class Hud {
       const el = e.target as HTMLElement;
       const loop = el.closest('[data-loop]') as HTMLElement | null;
       if (loop) { this.cb.onSelectLoop(loop.dataset['loop']!); return; }
+      const corona = el.closest('[data-corona]') as HTMLElement | null;
+      // An empty value is the "Off" button: a real choice, not a missing one.
+      if (corona) { this.cb.onSelectCorona?.(corona.dataset['corona'] || null); return; }
       if (el.closest('#sun-play')) { this.cb.onToggleSunPlay(); return; }
     });
     this.bodyEl.addEventListener('input', (e) => {
@@ -574,20 +612,29 @@ export class Hud {
    * this URL, so this is a DOM move: no network, no decode, no flash of an
    * empty box while the browser catches up.
    */
-  private placeSunFrame(): void {
-    const slot = document.getElementById('sun-slot');
+  /**
+   * Move a cached, decoded image into a slot and hand it to the scene. Shared
+   * by the disk frame and the coronagraph because the handling is identical —
+   * and because doing it twice is how a LASCO frame once ended up on the
+   * sphere.
+   */
+  private fillSlot(id: string, hand: (img: HTMLImageElement) => void): void {
+    const slot = document.getElementById(id);
     const url = slot?.dataset['frame'];
     if (!slot || !url) return;
     const img = this.images.acquire(url);
     img.alt = slot.dataset['alt'] ?? '';
     img.className = 'sun-img';
     if (img.parentElement !== slot) slot.replaceChildren(img);
-    // The scene shows whatever the panel shows, so scrubbing the loop scrubs
-    // the Sun as well. A frame still loading is announced on completion.
-    if (this.cb.onSunFrame) {
-      if (img.complete && img.naturalWidth > 0) this.cb.onSunFrame(img);
-      else img.addEventListener('load', () => this.cb.onSunFrame?.(img), { once: true });
-    }
+    if (img.complete && img.naturalWidth > 0) hand(img);
+    else img.addEventListener('load', () => hand(img), { once: true });
+  }
+
+  private placeSunFrame(): void {
+    this.fillSlot('sun-slot', (img) => this.cb.onSunFrame?.(img));
+    // The coronagraph rides along: same decode cache, same "announce on load",
+    // and it is placed whenever it is on rather than only when it changes.
+    this.fillSlot('corona-slot', (img) => this.cb.onCoronaFrame?.(img));
     // A short lookahead so playback and scrubbing do not stall on the next one.
     const frames = this.sun.loop?.frames;
     if (frames) {

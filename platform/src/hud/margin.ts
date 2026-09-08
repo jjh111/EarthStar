@@ -14,8 +14,9 @@ import { l1Inset } from './l1-inset.js';
 import { CLOUD_ARRIVAL, enlilSeries, type EnlilRun } from '../data/enlil.js';
 import type { Cme } from '../data/cme.js';
 import { SPACECRAFT_NOTE, type SpacecraftPos } from '../data/ephemerides.js';
-import { instrumentFor, type ImageLoop } from '../data/solar-imagery.js';
+import { instrumentFor, type ImageLoop, type LoopKind } from '../data/solar-imagery.js';
 import { igrfCitation } from '../models/igrf14.js';
+import type { SunPlaneCalibration } from '../scene/sun-plane.js';
 import { NO_DATA, badgeFor, badgeTitle, formatAge, hhmmUTC, stalenessOf } from './format.js';
 import { panelSpark } from './sparkline.js';
 import { stateSentence, stateSentenceText } from './state-sentence.js';
@@ -445,6 +446,20 @@ export interface SunState {
   /** Frames cached so far; playback waits for the full set. */
   preloaded: number;
   preloading: boolean;
+
+  /**
+   * The coronagraph is a *second, independent*selection, not an alternative
+   * to the disk image. They are pictures of different regions — SUVI to 1.6
+   * solar radii, C2 from 2.3 to 6.3, C3 from 4.5 to 30 — so they stack rather
+   * than replace, and the panel offers them as two control sets.
+   */
+  corona: ImageLoop | null;
+  coronaId: string | null;
+  coronaLoading: boolean;
+
+  /** What the scene measured out of each frame; null when it could not. */
+  diskPlane: SunPlaneCalibration | null;
+  coronaPlane: SunPlaneCalibration | null;
 }
 
 function mb(bytes: number | null, frames: number): string {
@@ -483,17 +498,40 @@ function solarCyclePanel(c: SolarCycle | null, loading: boolean): string {
 }
 
 export function renderSun(
-  sun: SunState, specs: Array<{ id: string; label: string }>,
+  sun: SunState, specs: Array<{ id: string; label: string; kind: LoopKind }>,
   cycle: SolarCycle | null = null, cycleLoading = false,
 ): string {
-  const picker = specs.map((s) =>
-    `<button class="ctl" data-loop="${s.id}" aria-pressed="${s.id === sun.loopId}">${escapeHtml(s.label)}</button>`).join('');
+  /**
+   * Two control sets, because the two instruments answer different questions
+   * and can be answered at once. The disk image is always one of four; the
+   * coronagraph is one of two or none, and "Off" is a real choice rather than
+   * the absence of one.
+   */
+  const btn = (id: string, label: string, on: boolean, attr: string): string =>
+    `<button class="ctl" ${attr}="${id}" aria-pressed="${on}">${escapeHtml(label)}</button>`;
+
+  const disks = specs.filter((x) => x.kind === 'disk');
+  const coronas = specs.filter((x) => x.kind === 'coronagraph');
+
+  const picker = `
+    <div class="sun-set">
+      <span class="sun-set-label">Disk · sphere and card</span>
+      <div class="sun-picker">${disks.map((x) =>
+        btn(x.id, x.label, x.id === sun.loopId, 'data-loop')).join('')}</div>
+    </div>
+    <div class="sun-set">
+      <span class="sun-set-label">Corona · plane</span>
+      <div class="sun-picker">${
+        btn('', 'Off', sun.coronaId === null, 'data-corona')
+      }${coronas.map((x) =>
+        btn(x.id, x.label, x.id === sun.coronaId, 'data-corona')).join('')}</div>
+    </div>`;
 
   if (sun.loading && !sun.loop) {
-    return `<h2>The Sun</h2><div class="sun-picker">${picker}</div><p>Loading frames…</p>`;
+    return `<h2>The Sun</h2>${picker}<p>Loading frames…</p>`;
   }
   if (!sun.loop) {
-    return `<h2>The Sun</h2><div class="sun-picker">${picker}</div>
+    return `<h2>The Sun</h2>${picker}
       <p>That imagery did not load. Nothing is shown in its place.</p>`;
   }
 
@@ -517,7 +555,7 @@ export function renderSun(
 
   return `
     <h2>The Sun</h2>
-    <div class="sun-picker">${picker}</div>
+    ${picker}
     <div class="sun-frame">
       <!-- The image element is not written here. It is owned by the image
            cache and moved into this slot after render, so that rebuilding the
@@ -528,6 +566,8 @@ export function renderSun(
     </div>
     <div class="sun-transport">${transport}</div>
     <p><span class="badge badge-e">E</span> ${escapeHtml(instrument)}. ${escapeHtml(L.describes)}</p>
+    ${diskCardNote(sun)}
+    ${coronaPanel(sun)}
     <p class="tile-meta">${L.skippedDropouts > 0
       ? `The newest ${L.skippedDropouts} frame${L.skippedDropouts > 1 ? 's were' : ' was'} a
          data dropout — a valid but near-empty image — so this is the newest usable one. `
@@ -536,6 +576,72 @@ export function renderSun(
     the newest. Each frame carries its own observation time.
     <a href="${L.sourceUrl}" rel="noreferrer noopener" target="_blank">Frame list</a>.</p>
     ${solarCyclePanel(cycle, cycleLoading)}`;
+}
+
+/**
+ * What the sphere cannot hold, and where it went.
+ *
+ * A disk image is wrapped onto the sphere, and by construction the wrap can only
+ * carry the disk: a point outside the limb has no sphere to land on. On a SUVI
+ * frame the limb sits at about six tenths of the half-width, so roughly a third
+ * of the exposure — every prominence, and the low corona the disk sits in — was
+ * being measured, downloaded, and thrown away at the last step.
+ *
+ * It is now also drawn on a card: the same frame on the plane it was actually
+ * projected onto, with everything inside the limb discarded because the sphere
+ * already has it. Neither half is faked into the other.
+ */
+function diskCardNote(sun: SunState): string {
+  const c = sun.diskPlane;
+  if (!sun.loop || sun.loop.kind !== 'disk' || !c) return '';
+  return `<p class="tile-meta">The disk is wrapped onto the sphere; the light
+    <i>outside</i> the limb has no sphere to land on, so it is drawn flat on the
+    image plane instead — a card reaching <b>${c.halfWidthRsun.toFixed(1)} solar radii</b>,
+    measured from this frame's own limb. Prominences and the low corona are on that card.
+    Nothing is extrapolated across the two: inside the limb belongs to the sphere,
+    outside it to the plane.</p>`;
+}
+
+/**
+ * The coronagraph, when one is switched on — a second exposure of a region the
+ * disk imagers cannot reach, so it is shown alongside rather than instead.
+ */
+function coronaPanel(sun: SunState): string {
+  if (!sun.coronaId) return '';
+  if (sun.coronaLoading && !sun.corona) {
+    return '<p class="tile-meta">Loading the coronagraph…</p>';
+  }
+  const L = sun.corona;
+  if (!L) {
+    return `<p class="tile-meta">That coronagraph did not load. Nothing is shown in
+      its place.</p>`;
+  }
+  const f = L.frames[L.newestGood]!;
+  const c = sun.coronaPlane;
+  const ageMin = Math.round((Date.now() - Date.parse(f.time)) / 60000);
+
+  const geometry = c
+    ? `Drawn on a plane through the Sun, perpendicular to the line it was photographed
+       along, reaching <b>${c.halfWidthRsun.toFixed(1)} solar radii</b> — measured from this
+       frame's own limb circle (±${(c.residualPx ?? 0).toFixed(1)} px), which agrees with the
+       published field of view for the instrument. The occulted centre, inside
+       ${c.innerRsun.toFixed(1)} R☉, is left out, so the Sun and the disk card show through
+       it. From anywhere else the plane is edge-on, because that is what a photograph taken
+       from Earth looks like from the side — the <b>Corona</b> view looks down the line
+       LASCO photographs along.`
+    : `This frame is not placed in the scene: the drawn limb circle it is measured against
+       could not be found, and a guessed field of view would put the corona somewhere the
+       instrument never looked.`;
+
+  return `
+    <div class="sun-frame sun-frame-sm">
+      <div class="sun-slot" id="corona-slot" data-frame="${escapeHtml(f.url)}"
+           data-alt="${escapeHtml(L.instrument)} coronagraph image at ${hhmmUTC(f.time)} UTC"></div>
+      <div class="sun-stamp"><span>${hhmmUTC(f.time)} UTC</span><span>${ageMin} min ago</span></div>
+    </div>
+    <p><span class="badge badge-e">E</span> ${escapeHtml(L.instrument)}.
+      ${escapeHtml(L.describes)}</p>
+    <p class="tile-meta">${geometry}</p>`;
 }
 
 /** Picks the right series and scaling for an instrument's detail sparkline. */
