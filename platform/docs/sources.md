@@ -510,7 +510,46 @@ caught.
 
 ---
 
-## 5g. Coronagraphs — LASCO C2 and C3, and where they belong
+## 5g. Where each solar image goes, and why
+
+Three surfaces now carry solar imagery, and each holds only what it can hold
+honestly.
+
+**The sphere** takes a disk image, projected back on from the direction it was
+taken. By construction it can carry nothing else: a point outside the limb has
+no sphere to land on.
+
+**The card** takes the rest of that same frame. On a SUVI 304 Å frame the limb
+sits at about six tenths of the half-width, so roughly a third of the exposure —
+every prominence, and the low corona the disk sits in — was being measured,
+downloaded, decoded, and then discarded at the last step because there was
+nowhere to put it. It is now drawn flat on the plane it was actually projected
+onto, with everything inside the limb dropped because the sphere already has it.
+Neither half is extrapolated into the other.
+
+The card stops short of the **burned-in caption**. SUVI writes "GOES-19 SUVI
+Composite 304 Angstroms <timestamp>" across the bottom of every frame; on the
+sphere it never mattered, because the projection dropped it with everything else
+past the limb. On a plane it appeared as a band of text floating in space beside
+the corona, which reads as a label the Viewer put there rather than as pixels
+from NOAA. The circular cut is pulled in to the largest circle clearing the
+caption line, measured from *this frame's* Sun centre — the disk is 51 px off
+centre on a real frame, and a circle sized from the middle of the image either
+clips real corona or keeps the text.
+
+**The plane** takes a coronagraph, starting outside the occulter.
+
+The three nest rather than overlap: sphere to 1 R☉, card to about 1.4, C2 from
+2.3 to 6.3, C3 from 4.5 to 30. Any disk image and any coronagraph can be shown
+together, because they are exposures of different regions rather than
+alternatives — the panel offers them as two independent control sets.
+
+There is no longer an ambient glow around the Sun. It was `[M]` artwork driven by
+X-ray flux, its own narration said its turbulence "does not represent anything
+physical", and it occupied exactly the region the coronagraphs photograph. It was
+invented light drawn over the place where real light is measured.
+
+## 5h. Coronagraphs — LASCO C2 and C3, and where they belong
 
 A coronagraph is not a picture of the Sun. It is a picture of the Sun being *blocked*, so
 that the corona beside it — thousands of times fainter than the disk — can be exposed at

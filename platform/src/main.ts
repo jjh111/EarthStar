@@ -33,7 +33,7 @@ let sunTimer: number | null = null;
 const loopCache = new Map<string, ImageLoop | null>();
 
 async function selectLoop(id: string): Promise<void> {
-  const spec = LOOPS.find((l) => l.id === id) ?? LOOPS[0]!;
+  const spec = LOOPS.find((l) => l.id === id && l.kind === 'disk') ?? LOOPS[0]!;
   hud.sunState.loopId = spec.id;
   if (loopCache.has(spec.id)) {
     const cached = loopCache.get(spec.id) ?? null;
@@ -48,6 +48,33 @@ async function selectLoop(id: string): Promise<void> {
     hud.setSunLoop(loop, false);
     sunTexture(loop);
   }
+}
+
+/**
+ * The coronagraph is a second, independent selection — SUVI on the sphere and
+ * its card, LASCO on its own plane further out, both at once or either alone.
+ * They photograph different regions, so replacing one with the other would
+ * throw away half the picture to show the other half.
+ */
+async function selectCorona(id: string | null): Promise<void> {
+  hud.sunState.coronaId = id;
+  if (id === null) {
+    hud.setCoronaLoop(null, false);
+    viewer.setCoronaPlane(null);
+    hud.setPlaneCalibration('corona', null);
+    viewer.syncCoronaFraming();
+    return;
+  }
+  const spec = LOOPS.find((l) => l.id === id && l.kind === 'coronagraph');
+  if (!spec) return;
+  if (loopCache.has(spec.id)) {
+    hud.setCoronaLoop(loopCache.get(spec.id) ?? null, false);
+    return;
+  }
+  hud.setCoronaLoop(null, true);
+  const loop = await fetchLoop(spec);
+  loopCache.set(spec.id, loop);
+  if (hud.sunState.coronaId === spec.id) hud.setCoronaLoop(loop, false);
 }
 
 /**
@@ -66,34 +93,37 @@ async function selectLoop(id: string): Promise<void> {
  */
 function sunTexture(loop: ImageLoop | null): void {
   const f = loop?.frames[loop.newestGood];
-  if (!f) { viewer.setSunImage(null); viewer.setCoronagraph(null); return; }
+  if (!f) { showSunFrame(null); return; }
   const img = hud.images.acquire(f.url);
-  const apply = (): void => showSunFrame(img, loop);
+  const apply = (): void => showSunFrame(img);
   if (img.complete && img.naturalWidth > 0) apply();
   else img.addEventListener('load', apply, { once: true });
 }
 
 /**
- * Put one frame where it belongs.
+ * A disk frame goes to two places at once.
+ *
+ * The sphere carries the disk, wrapped back on from the direction it was taken
+ * from. The card carries everything outside the limb — which the sphere cannot
+ * hold, because a point off the limb has no sphere to land on, and which is
+ * about a third of the exposure. Together they are the whole frame, each part
+ * drawn where it belongs and neither faked into the other.
  *
  * Both routes into the scene come through here — the newest frame on load, and
  * whatever the panel is scrubbed to — because there are two of them and only
  * one decision, and having made it twice is how a LASCO frame ended up
- * projected onto the sphere: a blue ball wearing a picture of the Sun being
- * hidden, complete with the drawn limb circle and a scattering of stars.
- *
- * Only one at a time. The disc and the coronagraph share the Sun, and showing
- * both would stack two different exposures of the same minute.
+ * projected onto the sphere.
  */
-function showSunFrame(img: HTMLImageElement, loop: ImageLoop | null): void {
-  if (loop?.id.startsWith('lasco')) {
-    viewer.setSunImage(null);
-    hud.setCoronagraphCalibration(viewer.setCoronagraph(img));
-  } else {
-    viewer.setCoronagraph(null);
-    hud.setCoronagraphCalibration(null);
-    viewer.setSunImage(img);
-  }
+function showSunFrame(img: HTMLImageElement | null): void {
+  viewer.setSunImage(img);
+  hud.setPlaneCalibration('disk', viewer.setSunCard(img));
+  viewer.syncCoronaFraming();
+}
+
+/** A coronagraph frame, on its own plane starting outside the occulter. */
+function showCoronaFrame(img: HTMLImageElement | null): void {
+  hud.setPlaneCalibration('corona', viewer.setCoronaPlane(img));
+  viewer.syncCoronaFraming();
 }
 
 function stepSun(): void {
@@ -166,12 +196,14 @@ async function loadCycle(): Promise<void> {
 
 const hud = new Hud({
   onSelectLoop: (id) => void selectLoop(id),
+  onSelectCorona: (id) => void selectCorona(id),
   onLoadCycle: () => void loadCycle(),
   onLoadForecast: () => void loadForecast(),
   onToggleSunPlay: () => void toggleSunPlay(),
   onScrubSun: (i) => { hud.setSunPlaying(false); hud.setSunFrame(i); },
   onRunChecks: () => void doChecks(),
-  onSunFrame: (img) => showSunFrame(img, hud.sunState.loop),
+  onSunFrame: (img) => showSunFrame(img),
+  onCoronaFrame: (img) => showCoronaFrame(img),
 });
 
 /* ---------------- controls ---------------- */

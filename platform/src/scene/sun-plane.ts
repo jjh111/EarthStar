@@ -1,5 +1,9 @@
 /**
- * Where the Sun is inside a coronagraph frame, and how big it would be.
+ * Where the Sun is inside a solar image, how big it is, and how far the frame
+ * reaches — the three numbers needed to hang that image on a plane through the
+ * Sun at the scale it was taken at.
+ *
+ * Two kinds of frame arrive here and they are calibrated differently.
  *
  * A coronagraph is the opposite of a disk image: the Sun itself is deliberately
  * blocked, so `disk-calibration.ts` has nothing to find — there is no limb, and
@@ -29,15 +33,28 @@
  * uses — but only the drawn circle is white in all three at once.
  */
 
-export interface CoronagraphCalibration {
+import { CAPTION_FRACTION, calibrateLuminance } from './disk-calibration.js';
+
+export type PlaneKind = 'coronagraph' | 'disk';
+
+export interface SunPlaneCalibration {
+  kind: PlaneKind;
   /** Sun centre in texture coordinates, origin bottom-left. */
   centre: { u: number; v: number };
   /** One solar radius, as a fraction of image width. */
   rsun: number;
   /** Half the frame's width, in solar radii — the field of view. */
   halfWidthRsun: number;
-  /** Radius of the occulted zone, in solar radii. Inside it there is no data. */
-  occulterRsun: number;
+  /**
+   * Radius, in solar radii, inside which the plane draws nothing.
+   *
+   * For a coronagraph it is the occulted zone, where the instrument saw
+   * nothing — and discarding it takes the drawn limb circle with it. For a disk
+   * image it is the limb itself, because everything inside is already on the
+   * sphere: the card carries only what the sphere cannot hold, which is the
+   * off-limb emission that made the sphere's projection drop it.
+   */
+  innerRsun: number;
   /**
    * The sky pedestal: the brightness the palette assigns to *no corona*, as a
    * fraction of full scale.
@@ -55,8 +72,9 @@ export interface CoronagraphCalibration {
    * thirds of the blue survives, leaving the slab intact and only dimmer.
    */
   background: { r: number; g: number; b: number };
-  /** How tightly the ring pixels fit the fitted circle, in pixels. */
-  residualPx: number;
+  /** How tightly the ring pixels fit the fitted circle, in pixels; null for a
+   *  disk image, whose limb is found by intensity rather than by a fit. */
+  residualPx: number | null;
 }
 
 /** Resolution the fit runs at. LASCO frames are 512²; this keeps them intact. */
@@ -150,7 +168,7 @@ function residual(pts: Pt[], cx: number, cy: number): number {
  */
 export function calibrateCoronagraphRgba(
   rgba: Uint8ClampedArray, n: number,
-): CoronagraphCalibration | null {
+): SunPlaneCalibration | null {
   for (const frac of SEARCH_FRACTIONS) {
     const found = fitAtWindow(rgba, n, Math.round(n * frac));
     if (found) return found;
@@ -161,7 +179,7 @@ export function calibrateCoronagraphRgba(
 /** One attempt at one search radius. Null when this window holds no clean ring. */
 function fitAtWindow(
   rgba: Uint8ClampedArray, n: number, win: number,
-): CoronagraphCalibration | null {
+): SunPlaneCalibration | null {
   const mid = n / 2;
   let pts: Pt[] = [];
   for (let y = Math.max(0, Math.floor(mid - win)); y < Math.min(n, mid + win); y++) {
@@ -203,11 +221,12 @@ function fitAtWindow(
   const background = measureBackground(rgba, n, f.cx, f.cy, occulterPx, halfWidthRsun * f.r);
 
   return {
+    kind: 'coronagraph',
     // Texture coordinates run bottom-up; image rows run top-down.
     centre: { u: f.cx / n, v: 1 - f.cy / n },
     rsun: f.r / n,
     halfWidthRsun,
-    occulterRsun: occulterPx / f.r,
+    innerRsun: occulterPx / f.r,
     background,
     residualPx: res,
   };
@@ -322,7 +341,7 @@ function findOcculter(
  */
 export function calibrateCoronagraph(
   source: CanvasImageSource & { width?: number; height?: number },
-): CoronagraphCalibration | null {
+): SunPlaneCalibration | null {
   const canvas = document.createElement('canvas');
   canvas.width = SAMPLE;
   canvas.height = SAMPLE;
@@ -334,4 +353,97 @@ export function calibrateCoronagraph(
   } catch {
     return null;   // tainted canvas, zero-size image
   }
+}
+
+
+/* ------------------------------------------------------------------ *
+ * Disk images — the card that carries what the sphere cannot
+ * ------------------------------------------------------------------ */
+
+/**
+ * The same plane, for a SUVI frame.
+ *
+ * The sphere carries the disk, and by construction it can carry nothing else:
+ * a point outside the limb has no sphere to land on, so `sun.ts` discards it
+ * rather than smearing it into a bright ring at the edge. But that discarded
+ * light is real, measured, and often the most interesting thing in the frame —
+ * prominences standing off the limb, and the corona the disk sits in. On a
+ * SUVI 304 Å frame the limb is at 394 px of 640, so **a third of the picture
+ * was being thrown away.**
+ *
+ * So the same frame is also hung on the image plane, with everything inside the
+ * limb discarded because the sphere already has it. Sphere and card together
+ * are the whole exposure, each part drawn where it belongs: the disk wrapped
+ * onto the body it came from, the off-limb emission left flat on the plane it
+ * was actually projected onto. Neither is faked into the other.
+ *
+ * The geometry comes from `calibrateDisk`'s limb-finding, which is already the
+ * thing that places the sphere's projection — so the two cannot disagree about
+ * where the Sun is.
+ */
+export function calibrateDiskPlane(
+  source: CanvasImageSource & { width?: number; height?: number },
+): SunPlaneCalibration | null {
+  const canvas = document.createElement('canvas');
+  canvas.width = SAMPLE;
+  canvas.height = SAMPLE;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return null;
+
+  let rgba: Uint8ClampedArray;
+  try {
+    ctx.drawImage(source, 0, 0, SAMPLE, SAMPLE);
+    rgba = ctx.getImageData(0, 0, SAMPLE, SAMPLE).data;
+  } catch {
+    return null;                     // tainted canvas, zero-size image
+  }
+
+  const lum = new Float32Array(SAMPLE * SAMPLE);
+  for (let i = 0, p = 0; i < lum.length; i++, p += 4) {
+    lum[i] = (rgba[p]! + rgba[p + 1]! + rgba[p + 2]!) / 3;
+  }
+  const disk = calibrateLuminance(lum, SAMPLE);
+  if (!disk || disk.radius <= 0) return null;
+
+  const rsunPx = disk.radius * SAMPLE;
+  const cx = disk.centre.u * SAMPLE;
+  const cy = (1 - disk.centre.v) * SAMPLE;
+
+  /**
+   * Stop the card short of the burned-in caption.
+   *
+   * SUVI writes "GOES-19 SUVI Composite 304 Angstroms <timestamp>" across the
+   * bottom of every frame. It is white, it is not the Sun, and drawn onto a
+   * plane in space it appears as a band of text floating beside the corona —
+   * which looked, in the first render, like a label the Viewer had put there
+   * itself. The circular cut is pulled in to the largest circle that clears the
+   * caption line, measured from this frame's own Sun centre rather than assumed
+   * to be the middle. LASCO needs no such treatment: its caption sits in a
+   * corner, outside the inscribed circle already.
+   */
+  return {
+    kind: 'disk',
+    centre: disk.centre,
+    rsun: disk.radius,
+    halfWidthRsun: cardReachRsun(SAMPLE, cy, rsunPx),
+    // The limb. Everything inside it is on the sphere already.
+    innerRsun: 1,
+    // Measured over the off-limb annulus this card actually draws, so a frame
+    // with a bright background does not add a disc of it to the scene.
+    background: measureBackground(rgba, SAMPLE, cx, cy, rsunPx, SAMPLE / 2),
+    residualPx: null,
+  };
+}
+
+/**
+ * How far the card reaches: the frame's own half-width, or the largest circle
+ * that clears the burned-in caption, whichever is smaller.
+ *
+ * Measured from this frame's own Sun centre rather than the middle of the
+ * image, because the two differ — a circle sized from the wrong one either
+ * clips real corona or keeps the caption. A circle of this radius touches the
+ * caption line at its lowest point, so every pixel inside it is above.
+ */
+export function cardReachRsun(n: number, cy: number, rsunPx: number): number {
+  return Math.min((n / 2) / rsunPx, (CAPTION_FRACTION * n - cy) / rsunPx);
 }

@@ -35,7 +35,8 @@ export type ViewName = 'deck' | 'sunward' | 'profile' | 'polar' | 'corona' | 'sy
 /** Labels and the one-line reason each view exists. */
 export const VIEWS: Array<{ id: ViewName; label: string; title: string }> = [
   { id: 'deck', label: 'Deck',
-    title: 'Earth from a standoff, with the day/night terminator in frame' },
+    title: 'Behind Earth looking back down the Sun–Earth line: both bodies in '
+      + 'frame, with the wind and the field lines running between them' },
   { id: 'sunward', label: 'Sunward',
     title: 'Looking down the Sun–Earth line from the Sun: the magnetopause face-on' },
   { id: 'profile', label: 'Profile',
@@ -131,18 +132,36 @@ export class CameraRig {
       // thirty solar radii, and a frame that fits the Sun would hold about a
       // thirtieth of the picture. `coronaRadius` is that reach in scene units,
       // so the framing follows the scale mode without knowing about it.
+      // `sunDir` runs Earth -> Sun, so the Sun-to-Earth direction is its
+      // negation. Getting that sign wrong puts the camera on the *far* side of
+      // the Sun, looking at the hemisphere no instrument has seen — which
+      // renders as the flat unobserved grey it is supposed to, and reads as a
+      // blank Sun rather than as a camera in the wrong place.
       const back = coronaRadius / Math.tan((this.camera.fov * Math.PI) / 360);
-      pos = sunDir.clone().negate().normalize().multiplyScalar(-back * 1.25);
+      pos = sunDir.clone().negate().normalize().multiplyScalar(back * 1.25);
     } else if (view === 'deck') {
-      // Stand off from Earth, offset across the sun line so the terminator is
-      // in frame rather than edge-on, and a little above the ecliptic.
-      // Stand off outside the Moon's (compressed) orbit so it cannot sit
-      // between the camera and the subject in the default framing.
+      // The mirror of Sunward: behind Earth, looking back along the Sun–Earth
+      // line, so the Sun is *in the frame* rather than behind the camera.
+      //
+      // Which is the whole point of an opening view. From here the two bodies
+      // this instrument is about are both visible at once, in their real
+      // relationship: the Sun at the far end of the line, Earth near, and the
+      // wind and the field lines running between them. Standing sunward of
+      // Earth — where this used to be — showed the subject with its cause out
+      // of shot.
+      //
+      // Offset across and above so Earth does not sit dead centre on the Sun
+      // and eclipse it, and so the terminator is in frame rather than edge-on.
+      // The offset is small on purpose. Earth is held at frame centre and the
+      // Sun sits far beyond it, so the two separate by roughly the offset times
+      // (1/d − 1/(d + D)) — about 3° per Earth radius at this standoff. Two
+      // radii puts the Sun just clear of Earth's limb; six flings it across the
+      // frame and the pair stops reading as one line.
       const across = new Vector3().crossVectors(sunDir, NORTH).normalize();
       pos = earthPos.clone()
-        .add(across.multiplyScalar(earthRadius * 8))
-        .add(sunDir.clone().multiplyScalar(earthRadius * 3.5))
-        .add(new Vector3(0, earthRadius * 2.5, 0));
+        .addScaledVector(sunDir, -earthRadius * 14)
+        .add(across.multiplyScalar(earthRadius * 1.5))
+        .add(new Vector3(0, earthRadius * 1.5, 0));
     } else {
       // Framed for the whole system, not just the inner four. Globe scale puts
       // Mercury at 2.6 units and Neptune at 8.3 — a range of 3.2:1 for a true

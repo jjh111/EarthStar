@@ -14,7 +14,9 @@ import {
 } from 'three';
 import { Earth } from './earth.js';
 import { Sun } from './sun.js';
-import { calibrateCoronagraph, type CoronagraphCalibration } from './coronagraph-calibration.js';
+import {
+  calibrateCoronagraph, calibrateDiskPlane, type SunPlaneCalibration,
+} from './sun-plane.js';
 import { Moon, OrbitRing, Planet, makePlanets } from './bodies.js';
 import { makeStarfield } from './starfield.js';
 import { CameraRig, type ViewName } from './camera-rig.js';
@@ -73,8 +75,6 @@ function nearestRung(want: number): number {
 }
 
 /** 60 fps is the goal, not the display's maximum — 120 Hz panels need no more. */
-/** LASCO C3's published reach, and the widest frame the Corona view must hold. */
-const WIDEST_CORONAGRAPH_RSUN = 30;
 const SUN_RADIUS_AU = BODY_RADIUS_KM.Sun / AU_KM;
 
 const TARGET_MS = 1000 / 60;
@@ -212,6 +212,7 @@ export class Viewer {
   private sunDirEarthFixed = new Vector3(1, 0, 0);
 
   private mode: ScaleMode = 'globe';
+  private lastReach = 2;
   private _reducedMotion = false;
 
   private raf = 0;
@@ -325,15 +326,43 @@ export class Viewer {
   get sunHasImage(): boolean { return this.sun.hasImage; }
 
   /**
-   * Show a coronagraph frame on the image plane through the Sun. Returns the
-   * calibration so the panel can state the field of view it measured, or null
-   * when the frame carries no limb circle to measure — in which case nothing is
-   * drawn rather than something plausible.
+   * Re-frame the Corona view when what the Sun is showing changes size.
+   *
+   * Only on a real change, and only in that view: re-issuing the camera move on
+   * every frame of a playing loop would fight the reader for the controls.
    */
-  setCoronagraph(image: HTMLImageElement | null): CoronagraphCalibration | null {
-    if (!image) { this.sun.setCoronagraph(null, null); return null; }
+  syncCoronaFraming(): void {
+    if (this.rig.view !== 'corona') return;
+    const reach = this.sun.reachRsun();
+    if (Math.abs(reach - this.lastReach) < 0.01 * Math.max(1, this.lastReach)) return;
+    this.setView('corona');
+  }
+
+  /**
+   * A coronagraph on its own plane through the Sun. Returns what it measured so
+   * the panel can state the field of view, or null when the frame carries no
+   * limb circle to measure — in which case nothing is drawn rather than
+   * something plausible.
+   */
+  setCoronaPlane(image: HTMLImageElement | null): SunPlaneCalibration | null {
+    if (!image) { this.sun.setCoronaPlane(null, null); return null; }
     const cal = calibrateCoronagraph(image);
-    this.sun.setCoronagraph(image, cal);
+    this.sun.setCoronaPlane(image, cal);
+    return cal;
+  }
+
+  /**
+   * The off-limb part of a disk frame, on a card at the Sun.
+   *
+   * The sphere keeps the disk. This is the third of the picture the sphere's
+   * projection has to drop — a point outside the limb has no sphere to land on
+   * — drawn on the plane it was actually projected onto rather than smeared
+   * into a ring at the edge of a ball.
+   */
+  setSunCard(image: HTMLImageElement | null): SunPlaneCalibration | null {
+    if (!image) { this.sun.setDiskPlane(null, null); return null; }
+    const cal = calibrateDiskPlane(image);
+    this.sun.setDiskPlane(image, cal);
     return cal;
   }
 
@@ -387,7 +416,6 @@ export class Viewer {
 
   setReducedMotion(on: boolean): void {
     this._reducedMotion = on;
-    this.sun.setReducedMotion(on);
     this.rig.setReducedMotion(on);
     this.fieldLines.setReducedMotion(on);
     this.solarWind.setReducedMotion(on);
@@ -395,10 +423,12 @@ export class Viewer {
 
   setView(view: ViewName, immediate = false): void {
     const { earthPos, earthRadius, sunDir } = this.geometryNow(new Date());
-    // The widest coronagraph's reach, in scene units, so the Corona view can
-    // frame the picture rather than the body at its centre.
+    // What the Sun is actually showing, so the Corona view frames the picture
+    // rather than the body at its centre — and reframes when the selection
+    // changes from a six-radius coronagraph to a thirty-radius one.
+    this.lastReach = this.sun.reachRsun();
     this.rig.goTo(view, earthPos, earthRadius, sunDir,
-      distanceToScene(WIDEST_CORONAGRAPH_RSUN * SUN_RADIUS_AU, this.mode), immediate);
+      distanceToScene(this.lastReach * SUN_RADIUS_AU, this.mode), immediate);
   }
 
   private geometryNow(date: Date) {
@@ -441,7 +471,6 @@ export class Viewer {
     // Sun at the origin; its rendered radius follows the scale mode.
     this.sun.setRadius(radiusToScene('Sun', this.mode));
     this.sun.setScaleMode(this.mode);
-    this.sun.update(elapsed, this.now?.xray?.flux_long ?? null);
     // The projection is defined by where the image was taken from: the
     // direction to Earth, and solar north for the image's "up".
     this.sun.setViewGeometry(sunDir.clone().negate(), solarNorth(date));

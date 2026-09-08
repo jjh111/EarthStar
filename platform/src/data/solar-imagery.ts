@@ -22,6 +22,7 @@ export interface ImageFrame {
 export interface ImageLoop {
   id: string;
   label: string;
+  kind: LoopKind;
   /** What the instrument actually sees — shown on the panel, not decoration. */
   describes: string;
   /**
@@ -54,9 +55,19 @@ export const MAX_FRAMES = 24;
 
 const BASE = 'https://services.swpc.noaa.gov';
 
+export type LoopKind = 'disk' | 'coronagraph';
+
 export interface LoopSpec {
   id: string;
   label: string;
+  /**
+   * What sort of picture this is, which decides where it goes in the scene: a
+   * disk image wraps onto the sphere (and its off-limb third onto a card), a
+   * coronagraph goes on a plane starting outside the occulter. Carried as data
+   * rather than sniffed from the id, because the two are not interchangeable
+   * and getting it wrong paints the Sun with a picture of the Sun being hidden.
+   */
+  kind: LoopKind;
   describes: string;
   /** Instrument family, without a spacecraft number. See `instrumentFor`. */
   instrument: string;
@@ -68,17 +79,17 @@ export interface LoopSpec {
  * descriptions are the point rather than flavour text.
  */
 export const LOOPS: LoopSpec[] = [
-  { id: 'suvi-304', label: 'SUVI 304 Å', product: 'suvi-primary-304',
+  { id: 'suvi-304', label: 'SUVI 304 Å', kind: 'disk', product: 'suvi-primary-304',
     instrument: 'GOES SUVI', describes: 'Chromosphere at ~50 000 K — prominences and filaments' },
-  { id: 'suvi-195', label: 'SUVI 195 Å', product: 'suvi-primary-195',
+  { id: 'suvi-195', label: 'SUVI 195 Å', kind: 'disk', product: 'suvi-primary-195',
     instrument: 'GOES SUVI', describes: 'Corona at ~1.5 million K — active regions and coronal holes' },
-  { id: 'suvi-171', label: 'SUVI 171 Å', product: 'suvi-primary-171',
+  { id: 'suvi-171', label: 'SUVI 171 Å', kind: 'disk', product: 'suvi-primary-171',
     instrument: 'GOES SUVI', describes: 'Quiet corona at ~600 000 K — coronal loops' },
-  { id: 'suvi-131', label: 'SUVI 131 Å', product: 'suvi-primary-131',
+  { id: 'suvi-131', label: 'SUVI 131 Å', kind: 'disk', product: 'suvi-primary-131',
     instrument: 'GOES SUVI', describes: 'Flaring plasma at ~10 million K — brightest during flares' },
-  { id: 'lasco-c2', label: 'LASCO C2', product: 'lasco-c2',
+  { id: 'lasco-c2', label: 'LASCO C2', kind: 'coronagraph', product: 'lasco-c2',
     instrument: 'SOHO LASCO', describes: 'Coronagraph, 2–6 solar radii — where CMEs first appear' },
-  { id: 'lasco-c3', label: 'LASCO C3', product: 'lasco-c3',
+  { id: 'lasco-c3', label: 'LASCO C3', kind: 'coronagraph', product: 'lasco-c3',
     instrument: 'SOHO LASCO', describes: 'Coronagraph, 3.7–30 solar radii — CMEs heading outward' },
 ];
 
@@ -167,7 +178,7 @@ export async function fetchLoop(spec: LoopSpec, signal?: AbortSignal): Promise<I
 
     const good = await newestGoodIndex(sampled, signal);
     return {
-      id: spec.id, label: spec.label, describes: spec.describes,
+      id: spec.id, label: spec.label, kind: spec.kind, describes: spec.describes,
       instrument: spec.instrument, frames: sampled,
       totalAvailable: frames.length, spanHours,
       frameBytes: good.bytes,

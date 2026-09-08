@@ -36,7 +36,7 @@ const SAMPLE = 256;
  * SUVI and LASCO burn a caption into the bottom of the frame. It is bright, it
  * is not the Sun, and including it drags the centroid downward.
  */
-const CAPTION_FRACTION = 0.94;
+export const CAPTION_FRACTION = 0.94;
 
 /** Search bounds as a fraction of the profile, keeping clear of both ends. */
 const SEARCH_LO = 0.12;

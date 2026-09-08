@@ -18,7 +18,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { calibrateCoronagraphRgba } from '../src/scene/coronagraph-calibration.js';
+import { calibrateCoronagraphRgba, cardReachRsun } from '../src/scene/sun-plane.js';
 import { AU_KM, BODY_RADIUS_KM, distanceToScene, radiusToScene } from '../src/scene/scales.js';
 
 const N = 512;
@@ -81,8 +81,8 @@ describe('measuring a coronagraph frame', () => {
     // Whatever it measures, it must exceed 1 R☉ — otherwise the drawn limb
     // circle survives the discard and becomes a bright ring around the Sun
     // that no instrument saw.
-    expect(c!.occulterRsun).toBeGreaterThan(1.5);
-    expect(c!.occulterRsun * c!.rsun * N).toBeCloseTo(30, -1);
+    expect(c!.innerRsun).toBeGreaterThan(1.5);
+    expect(c!.innerRsun * c!.rsun * N).toBeCloseTo(30, -1);
   });
 
   it('measures the sky as a colour, not a brightness', () => {
@@ -140,5 +140,46 @@ describe('how large it is drawn', () => {
     for (const mode of ['globe', 'true'] as const) {
       expect(extent(6.32, mode)).toBeLessThan(extent(30.28, mode));
     }
+  });
+});
+
+/**
+ * The card carries what the sphere cannot, and must not carry what nobody
+ * measured.
+ *
+ * SUVI writes "GOES-19 SUVI Composite 304 Angstroms <timestamp>" across the
+ * bottom of every frame. On the sphere it never mattered — the projection drops
+ * everything past the limb, caption included. On a plane it appeared as a band
+ * of text floating in space beside the corona, which reads as a label the
+ * Viewer put there rather than as pixels from NOAA.
+ */
+describe('where the disk card stops', () => {
+  const N = 512;
+  const CAPTION_LINE = 0.94 * N;   // disk-calibration's CAPTION_FRACTION
+
+  it('clears the caption when the Sun is centred', () => {
+    const rsunPx = 158;
+    const reach = cardReachRsun(N, N / 2, rsunPx);
+    // Lowest point of the circle lands exactly on the caption line.
+    expect(N / 2 + reach * rsunPx).toBeCloseTo(CAPTION_LINE, 6);
+    expect(reach).toBeLessThan((N / 2) / rsunPx);
+  });
+
+  it('measures from the Sun, not from the middle of the frame', () => {
+    // A real SUVI frame had its disk 51 px off centre. Sizing the circle from
+    // the image centre instead either clips the corona or keeps the caption,
+    // depending on which way the offset runs.
+    const rsunPx = 158;
+    const low = cardReachRsun(N, N / 2 + 51, rsunPx);
+    const high = cardReachRsun(N, N / 2 - 51, rsunPx);
+    expect(low).toBeLessThan(high);
+    expect(N / 2 + 51 + low * rsunPx).toBeCloseTo(CAPTION_LINE, 6);
+  });
+
+  it('never reaches past the frame, however high the Sun sits', () => {
+    // With the disk near the top the caption is far away, and the limit
+    // becomes the frame edge rather than the text.
+    const rsunPx = 158;
+    expect(cardReachRsun(N, 20, rsunPx)).toBe((N / 2) / rsunPx);
   });
 });
