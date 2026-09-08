@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "a11y": "node scripts/a11y.mjs"
+    "a11y": "node scripts/a11y.mjs",
+    "health": "node scripts/health.mjs"
   },
   "dependencies": {
     "astronomy-engine": "^2.1.19",

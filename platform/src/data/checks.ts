@@ -12,7 +12,8 @@
 
 import { DirectSource } from './direct-source.js';
 import { SWPC_URL, auroraAt, parseXrayLatestClass, xrayClass } from './swpc.js';
-import { angularSeparationDeg, geomagneticNorthPole } from '../models/igrf14.js';
+import { angularSeparationDeg, decimalYear, geomagneticNorthPole, igrfInValidity } from '../models/igrf14.js';
+import { IGRF_EPOCH, IGRF_VALID_UNTIL } from '../models/igrf14-coeffs.js';
 import { subsolarPoint } from '../models/ephemeris.js';
 import { GEOSYNC_RE, dipoleFieldAtRe } from './geosync.js';
 import { EPHEM_URL, parseEphemerides } from './ephemerides.js';
@@ -293,7 +294,14 @@ export async function runChecks(
     rows.push({
       name: 'Aurora oval displaced toward magnetic midnight',
       ours: 'no data', theirs: '—', ok: false,
-      note: 'OVATION grid did not load, so orientation could not be checked',
+      // Absent evidence, not contradictory evidence. The grid is the largest
+      // payload the Viewer fetches and it does occasionally fail to arrive;
+      // calling that DRIFT accuses the orientation maths of a fault the run
+      // never tested, which is the precise way a checks page teaches people to
+      // stop reading it.
+      inconclusive: true,
+      note: 'OVATION grid did not load, so orientation could not be checked. This is the '
+        + 'check having no evidence, not the oval being in the wrong place.',
     });
   }
 
@@ -454,6 +462,33 @@ export async function runChecks(
       });
     }
   }
+
+  /**
+   * The one check with no upstream to compare against, because the thing it
+   * watches is a calendar. IGRF is reissued every five years; past
+   * `IGRF_VALID_UNTIL` the synthesis keeps returning plausible numbers by
+   * extrapolating the secular variation, and every field line stays exactly as
+   * convincing as it was the day before. Nothing else on the page would notice,
+   * and the citation would go on naming a validity window that had closed.
+   *
+   * It reports the remaining runway on every run rather than only failing at
+   * the boundary — an expiry that announces itself years early can be planned
+   * for; one that fires on the day is an outage.
+   */
+  const yearNow = decimalYear(new Date());
+  const yearsLeft = IGRF_VALID_UNTIL - yearNow;
+  rows.push({
+    name: 'Field model inside its published validity',
+    ours: `${yearNow.toFixed(2)}`,
+    theirs: `IGRF-14, ${IGRF_EPOCH.toFixed(1)}–${IGRF_VALID_UNTIL.toFixed(1)}`,
+    ok: igrfInValidity(new Date()),
+    note: yearsLeft >= 0
+      ? `${yearsLeft.toFixed(1)} years of validity remain; IAGA reissues the model every five `
+        + 'years, so IGRF-15 is the successor to fetch.'
+      : `Expired ${(-yearsLeft).toFixed(1)} years ago. The field lines are extrapolated beyond `
+        + 'the published secular variation and are labelled as such; replace the coefficients '
+        + 'with IGRF-15 via scripts/gen-igrf.mjs.',
+  });
 
   return {
     rows,

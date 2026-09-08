@@ -15,6 +15,8 @@ export interface ImageFrame {
   url: string;
   /** Observation time parsed from the filename, ISO-8601 UTC. */
   time: string;
+  /** Spacecraft parsed from the filename; null when it carries none. */
+  satellite: number | null;
 }
 
 export interface ImageLoop {
@@ -22,6 +24,11 @@ export interface ImageLoop {
   label: string;
   /** What the instrument actually sees — shown on the panel, not decoration. */
   describes: string;
+  /**
+   * Instrument *family* — the spacecraft is not part of it. Resolve the label
+   * for a given frame with `instrumentFor`, which reads the number the frame
+   * itself carries.
+   */
   instrument: string;
   /** Subsampled for playback; see MAX_FRAMES. Oldest first, newest last. */
   frames: ImageFrame[];
@@ -51,6 +58,7 @@ export interface LoopSpec {
   id: string;
   label: string;
   describes: string;
+  /** Instrument family, without a spacecraft number. See `instrumentFor`. */
   instrument: string;
   product: string;
 }
@@ -61,13 +69,13 @@ export interface LoopSpec {
  */
 export const LOOPS: LoopSpec[] = [
   { id: 'suvi-304', label: 'SUVI 304 Å', product: 'suvi-primary-304',
-    instrument: 'GOES-19 SUVI', describes: 'Chromosphere at ~50 000 K — prominences and filaments' },
+    instrument: 'GOES SUVI', describes: 'Chromosphere at ~50 000 K — prominences and filaments' },
   { id: 'suvi-195', label: 'SUVI 195 Å', product: 'suvi-primary-195',
-    instrument: 'GOES-19 SUVI', describes: 'Corona at ~1.5 million K — active regions and coronal holes' },
+    instrument: 'GOES SUVI', describes: 'Corona at ~1.5 million K — active regions and coronal holes' },
   { id: 'suvi-171', label: 'SUVI 171 Å', product: 'suvi-primary-171',
-    instrument: 'GOES-19 SUVI', describes: 'Quiet corona at ~600 000 K — coronal loops' },
+    instrument: 'GOES SUVI', describes: 'Quiet corona at ~600 000 K — coronal loops' },
   { id: 'suvi-131', label: 'SUVI 131 Å', product: 'suvi-primary-131',
-    instrument: 'GOES-19 SUVI', describes: 'Flaring plasma at ~10 million K — brightest during flares' },
+    instrument: 'GOES SUVI', describes: 'Flaring plasma at ~10 million K — brightest during flares' },
   { id: 'lasco-c2', label: 'LASCO C2', product: 'lasco-c2',
     instrument: 'SOHO LASCO', describes: 'Coronagraph, 2–6 solar radii — where CMEs first appear' },
   { id: 'lasco-c3', label: 'LASCO C3', product: 'lasco-c3',
@@ -81,6 +89,38 @@ export const LOOPS: LoopSpec[] = [
  * Returns null rather than guessing when neither matches — an undated frame is
  * not shown.
  */
+/**
+ * The spacecraft, read from the frame we are actually showing.
+ *
+ * The product we request is `suvi-primary-304` — an *alias*. NOAA repoints it
+ * between GOES satellites, and does not move the whole fleet at once: while
+ * this was written the X-ray primary was GOES-18 and SUVI's was GOES-19. A
+ * hard-coded number is therefore a citation with an expiry date on it, and the
+ * failure is silent — the picture stays right and the attribution goes wrong.
+ *
+ * SUVI filenames carry it (`…_g19_s20260908T…`). LASCO's do not, because SOHO
+ * is the only spacecraft that flies it; those return null and keep the family
+ * name, which is the whole truth for them.
+ */
+export function frameSatellite(url: string): number | null {
+  const m = /_g(\d{1,2})_/.exec(url);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * The instrument label for one frame: the family with the frame's own
+ * spacecraft substituted in, or the family alone when the frame does not say.
+ * Never invents a number that the filename did not carry.
+ */
+export function instrumentFor(family: string, satellite: number | null): string {
+  if (satellite === null) return family;
+  return /\bGOES\b/.test(family)
+    ? family.replace(/\bGOES\b/, `GOES-${satellite}`)
+    : `${family} (GOES-${satellite})`;
+}
+
 export function frameTime(url: string): string | null {
   const suvi = /_s(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z/.exec(url);
   if (suvi) {
@@ -108,7 +148,7 @@ export async function fetchLoop(spec: LoopSpec, signal?: AbortSignal): Promise<I
       if (!r?.url) continue;
       const time = frameTime(r.url);
       if (!time) continue;                    // undated frame, not shown
-      frames.push({ url: `${BASE}${r.url}`, time });
+      frames.push({ url: `${BASE}${r.url}`, time, satellite: frameSatellite(r.url) });
     }
     frames.sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
     if (frames.length === 0) return null;

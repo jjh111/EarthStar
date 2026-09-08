@@ -1,0 +1,80 @@
+# Watches the ~35 public feeds The Viewer runs on, and the deployed page itself.
+#
+# The Viewer has no server: it is a static bundle that fetches NOAA SWPC and
+# NASA DONKI from the reader's own browser. That is why it costs nothing to
+# run, and it is also why nothing on our side notices when an upstream product
+# is renamed. The app degrades honestly — the lane reads `no data`, the last
+# good value ages visibly, nothing is substituted — but an honest failure that
+# nobody is looking at is indistinguishable from no failure. This looks.
+#
+# Every six hours, because the failures it catches are structural (a renamed
+# product, a withdrawn CORS header, a dead deploy) and those persist until
+# someone fixes them. Minute-scale gaps are the app's own business and it
+# already shows them to the reader.
+name: Upstream health
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'   # offset from the hour; every service crons on :00
+  workflow_dispatch:
+  push:
+    paths:
+      - 'platform/src/**'
+      - 'platform/scripts/health.mjs'
+      - '.github/workflows/upstream-health.yml'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # No install step: the probe is dependency-free on purpose, so a broken
+      # lockfile can never be the reason we stopped watching the feeds.
+      - name: Probe upstream feeds and the deployment
+        id: probe
+        working-directory: platform
+        run: |
+          set +e
+          node scripts/health.mjs | tee /tmp/health.txt
+          echo "status=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Open or update the standing issue
+        if: steps.probe.outputs.status != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TITLE="Upstream health: a feed The Viewer depends on is failing"
+          BODY=$(printf 'Run: %s/%s/actions/runs/%s\n\n```\n%s\n```\n' \
+            "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" "$(cat /tmp/health.txt)")
+          # One standing issue, commented on, rather than a new issue every six
+          # hours — an alert that floods is an alert that gets muted.
+          NUM=$(gh issue list --state open --label upstream-health \
+                  --json number --jq '.[0].number')
+          if [ -n "$NUM" ]; then
+            gh issue comment "$NUM" --body "$BODY"
+          else
+            gh label create upstream-health --color B60205 \
+              --description "A feed The Viewer depends on stopped answering" 2>/dev/null || true
+            gh issue create --title "$TITLE" --label upstream-health --body "$BODY"
+          fi
+
+      - name: Close the standing issue when everything answers again
+        if: steps.probe.outputs.status == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NUM=$(gh issue list --state open --label upstream-health \
+                  --json number --jq '.[0].number')
+          if [ -n "$NUM" ]; then
+            gh issue comment "$NUM" --body "All feeds answering again as of $(date -u +%FT%TZ). Closing."
+            gh issue close "$NUM"
+          fi

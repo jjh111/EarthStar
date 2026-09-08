@@ -14,7 +14,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { Vector3 } from 'three';
-import { igrfGeodetic, igrfVector, decimalYear, igrfInValidity } from '../src/models/igrf14.js';
+import { igrfGeodetic, igrfVector, decimalYear, igrfInValidity, igrfCitation } from '../src/models/igrf14.js';
 import { IGRF_G, IGRF_G_SV, IGRF_H, IGRF_H_SV, IGRF_IDX } from '../src/models/igrf14-coeffs.js';
 import { parseIgrf, idx } from '../scripts/gen-igrf.mjs';
 
@@ -130,5 +130,26 @@ describe('Cartesian field vector', () => {
 
   it('returns zero rather than NaN at the centre', () => {
     expect(igrfVector(new Vector3(0, 0, 0), DATE).length()).toBe(0);
+  });
+});
+
+/**
+ * The predicate was here and tested from the beginning. Nothing called it.
+ *
+ * That is the shape of the failure worth naming: past the window the synthesis
+ * keeps extrapolating the secular variation and returns numbers as convincing
+ * as the day before, while the citation goes on naming a validity that has
+ * closed. The test proved the function; only the caller was missing. These
+ * assertions are on the citation, which is the part a reader sees.
+ */
+describe('how the model is cited', () => {
+  it('says the secular variation is carried to now, inside the window', () => {
+    expect(igrfCitation(new Date('2026-09-08T00:00:00Z')))
+      .toBe('IGRF-14 (IAGA, epoch 2025.0, secular variation to now)');
+  });
+
+  it('says plainly that it is extrapolated, outside it', () => {
+    expect(igrfCitation(new Date('2031-01-01T00:00:00Z')))
+      .toBe('IGRF-14 (IAGA, epoch 2025.0, extrapolated past its 2030.0 validity limit)');
   });
 });
