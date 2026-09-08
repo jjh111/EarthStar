@@ -30,14 +30,38 @@ you open the PR.
 3. **Deck view framing.** Default camera: Earth on the lower-left third, Moon clear of
    the limb at Globe scale, sunward side toward the light. Check all five vantage points
    still make sense on a 390-px phone.
-4. **Fonts, meta, brand.** Replace the Google Fonts links in `platform/index.html` with
+4. **Label states — loading is not "no data".** Today a cold visitor sees `no data` on
+   every tile and the Sun panel until first fetches land. Define and implement four
+   mutually exclusive states for every tile, the Sun panel, the layer toggles, and every
+   Situation Report sentence — a value slot shows a number in exactly one of them:
+   - **loading** — never received: dimmed tile, value slot shows a thin pulse or `…`,
+     label and unit still legible, badge greyed. Never the words "no data". Per lane:
+     the snapshot lane resolves in seconds while imagery is still loading.
+   - **no data** — a completed fetch carried nothing usable (empty, all fill values, a
+     dead feed like `geospace_pred_est_kp_1_hour`): literal `no data`, with the feed's
+     newest timestamp when it has one, so the reader can tell "quiet feed" from "dead
+     feed".
+   - **error** — the fetch failed after the retry and the mirror: `unavailable` + reason
+     class (`upstream 404` / `offline` / `blocked`) + next attempt time; if a previous
+     good value exists it stays on screen aging, with the error beneath it.
+   - **stale** — unchanged from today.
+   Put the state machine in one place (`src/data/store.ts` or a new `src/data/state.ts`)
+   with a test per transition, and drive the CSS from a single `data-state` attribute.
+   Sequence the cold start: snapshot lane → slow lane → imagery (first frame only); the
+   Sun panel gets its own loading state with the frame timestamp appearing before the
+   pixels. The Situation Report reads "Solar wind: loading." during the cold start, not
+   "no data", and its cold-start paragraph is short — the full report renders when the
+   snapshot lane is live. Acceptance: throttle the network to slow 3G, record the first
+   ten seconds, and confirm that `no data` never appears for anything still pending.
+5. **Fonts and meta.** Replace the Google Fonts links in `platform/index.html` with
    `@font-face` rules pointing at `../assets/fonts/CormorantGaramond.woff2`,
    `CormorantGaramond-italic.woff2`, `DMSans.woff2` (variable; weights 400–600 /
    300–500 — copy the rules from `src/fonts/fonts.css` in the splash). Add OG/Twitter
    card (`viewer/og.jpg`, 1200×630 deck-view screenshot), canonical
-   `https://earthstar.space/viewer/`, `theme-color`. Use the splash gold (`#ffd700`
-   accent, `#C8960C` label) for the brand mark, focus rings, and the primary action only.
-5. **Hold the line.** Frame-time budget unchanged (see commit `9a5c807`); `npm run a11y`
+   `https://earthstar.space/viewer/`, `theme-color`. **No visual-style changes** beyond
+   what the state work needs: an Earth Star style guide is a separate future track; the
+   Viewer keeps its current palette and type.
+6. **Hold the line.** Frame-time budget unchanged (see commit `9a5c807`); `npm run a11y`
    zero violations; Lighthouse mobile ≥ 90 perf / 100 a11y on `/viewer/`; `viewer/`
    ≤ 3 MB including the new textures.
 

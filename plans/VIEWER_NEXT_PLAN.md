@@ -39,10 +39,17 @@ proves it works, and standing-issue alarms. **331 tests pass.** `viewer/` is 828
    is beyond ~100 Rₑ.
 3. **The "snow globe" half of the mandate is not built.** The original vision — glass
    shell, the tree-ship's deck rail, bloom, Dream mode — was scheduled as phase 3 and is
-   untouched. The result is instrument-first and cool-toned; it does not yet read as
-   Earth Star's. Fine for now, and the fix is a bounded artistic pass *after* the raster
-   Earth changes the base look.
-4. **Loose ends:** `viewer/index.html` loads Google Fonts (the splash self-hosts the same
+   untouched. Fine for now; it lands as E7 *after* the raster Earth changes the base look.
+   **Visual style is deliberately out of scope for every phase here:** an Earth Star style
+   guide is its own future track (references to come). Until then the splash keeps its
+   candlelit gold and the Viewer keeps its cool instrument palette, and no phase should
+   "match" one to the other.
+4. **First load is harsh.** Tiles and the Sun panel show `no data` while their first fetch
+   is still in flight, so a cold visitor reads a page full of failures for several
+   seconds — the imagery lane alone is ~1 MB per frame. The honesty rule ("no fabricated
+   values") is right; the *label* is wrong: nothing has been measured *yet* is a different
+   claim from nothing was measured. Phase P defines the states.
+5. **Loose ends:** `viewer/index.html` loads Google Fonts (the splash self-hosts the same
    two families in `assets/fonts/`); no OG/Twitter card or canonical for `/viewer/`; root
    `README.md` doesn't mention the Viewer; an unmerged `claude/coronagraph` branch (the
    platform agent's in-flight work); the "skill v3.1 skillset" branch that merged contained
@@ -50,7 +57,7 @@ proves it works, and standing-issue alarms. **331 tests pass.** `viewer/` is 828
    `.blend1` backup) — **the skillset split, `heliosphere-data`, and triggering evals are
    still open**; and the splash's live teaser tiles were never built (the splash has a
    door to the Viewer, which is enough for now).
-5. **Contract drift, resolved in this plan.** `docs/sources.md` §3 raised five change
+6. **Contract drift, resolved in this plan.** `docs/sources.md` §3 raised five change
    requests (rtsw endpoints replace `products/solar-wind/*`; `spacecraft` on solar wind;
    arrays are not reliably ordered — select by timestamp; three timestamp formats;
    `products/*` are not header-row arrays). All accepted → `DATA_CONTRACT.md` v1.1.
@@ -72,12 +79,26 @@ first-time visitor on a laptop and a phone, before any new data lands.
 - **Deck view framing.** Default camera separates Earth and Moon (the Moon currently
   overlaps the limb at Globe scale); Earth sits on the lower-left third with the sunward
   side toward the light; the first thing seen is the planet, not the tangle.
+- **Label states: loading ≠ no data ≠ error ≠ stale.** Every tile, the Sun panel, and
+  every Situation Report sentence distinguishes four states, each visually and textually
+  distinct, none of them a number:
+  - **loading** — first fetch in flight, nothing ever received: a quiet skeleton (dimmed
+    tile, thin pulse or "…" on the value slot, label still legible), *no* "no data" text.
+    Held for the whole cold start, and per-lane: the snapshot lane can be live while
+    imagery is still loading.
+  - **no data** — a fetch *completed* and carried nothing usable (empty array, all
+    fills, dead feed): the literal words "no data", with the feed's last timestamp if any.
+  - **error** — the fetch *failed* (transport, 404, unparseable) after retry and mirror:
+    "unavailable" plus the reason class (upstream 404 / offline / blocked) and when the
+    next attempt is, and the last good value aging beside it if one exists.
+  - **stale** — a good value past `stale_after_s`: current behaviour, unchanged.
+  Sequencing for the cold start: snapshot lane first, then slow lane, imagery last and
+  only the first frame; the page must reach "all tiles resolved" (live or one of the
+  three states) with no `no data` shown for anything still pending.
 - **Self-host fonts** from `../assets/fonts/` (already shipped by the splash — same
   families, same weights); drop the Google Fonts preconnects. Add OG/Twitter card
-  (a 1200×630 screenshot of the deck view), canonical, `theme-color`.
-- **Brand tie.** Keep the cool instrument palette, but use the splash's gold
-  (`#ffd700` / `#C8960C`) for the brand mark, focus rings, and the one primary action — so
-  the two pages are visibly the same family without forcing ceremony onto an instrument.
+  (a 1200×630 screenshot of the deck view), canonical, `theme-color`. No palette or
+  type changes beyond what the state work needs.
 - **Perf/a11y hold:** frame budget from `9a5c807` unchanged; `npm run a11y` still zero;
   Lighthouse on `/viewer/` ≥ 90 perf mobile, 100 a11y.
 
