@@ -1,0 +1,83 @@
+# How a failure reaches a person.
+#
+# One standing issue per subject, commented on while the failure persists and
+# closed when it clears — not a new issue every half hour. An alert that floods
+# is an alert that gets muted, and a muted alert is worse than none because it
+# is mistaken for coverage.
+#
+# Optionally forwards the same notice to a webhook. Set the repository secret
+# ALERT_WEBHOOK_URL to a Slack or Discord incoming webhook (or anything that
+# accepts a JSON POST) and it is used; leave it unset and this step is skipped
+# in silence. No secret is required for the issue itself.
+name: Notify
+
+on:
+  workflow_call:
+    inputs:
+      label:   { required: true,  type: string }
+      title:   { required: true,  type: string }
+      body:    { required: true,  type: string }
+      # Pass false to close the standing issue instead of opening one.
+      failing: { required: false, type: boolean, default: true }
+
+permissions:
+  issues: write
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      # Nothing is built or read from the tree, so the checkout carries no
+      # credentials — `gh` is given a token explicitly, on the one step that
+      # needs it, rather than one being written into .git/config for every step.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: .github
+
+      - name: Open, update or close the standing issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          NUM=$(gh issue list --state open --label '${{ inputs.label }}' \
+                  --json number --jq '.[0].number // empty')
+
+          if [ '${{ inputs.failing }}' = 'false' ]; then
+            if [ -n "$NUM" ]; then
+              gh issue comment "$NUM" --body "Clear again as of $(date -u +%FT%TZ). Closing."
+              gh issue close "$NUM"
+            fi
+            exit 0
+          fi
+
+          BODY=$(printf '%s\n\nRun: %s\n' '${{ inputs.body }}' "$RUN_URL")
+          if [ -n "$NUM" ]; then
+            gh issue comment "$NUM" --body "$BODY"
+          else
+            gh label create '${{ inputs.label }}' --color B60205 \
+              --description 'Automated: something The Viewer depends on is failing' 2>/dev/null || true
+            gh issue create --title '${{ inputs.title }}' \
+              --label '${{ inputs.label }}' --body "$BODY"
+          fi
+
+      # Best effort, and deliberately last: a webhook that is misconfigured must
+      # not stop the issue from being filed.
+      - name: Forward to the webhook, if one is configured
+        if: inputs.failing
+        continue-on-error: true
+        env:
+          HOOK: ${{ secrets.ALERT_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "${HOOK:-}" ]; then
+            echo 'No ALERT_WEBHOOK_URL secret set — issue only. This is fine.'
+            exit 0
+          fi
+          # `text` is Slack's field and `content` is Discord's; sending both
+          # means one secret works with either without a format setting.
+          jq -nc --arg t "Earth Star · ${{ inputs.title }} · $RUN_URL" \
+            '{text: $t, content: $t}' \
+            | curl -sS -X POST -H 'Content-Type: application/json' --data @- "$HOOK" \
+            | head -c 400

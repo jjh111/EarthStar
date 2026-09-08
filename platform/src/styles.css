@@ -339,6 +339,9 @@ header.top {
   border-top: 1px solid var(--line); line-height: 1.4;
 }
 .status.is-error { color: var(--err); }
+/* Degraded, not broken: the mirror is serving real NOAA bytes with real NOAA
+   timestamps, so amber rather than red — and never the quiet grey of "live". */
+.status.is-mirror { color: var(--warn); }
 
 /* ---------- provenance / checks tables ---------- */
 .prov { width: 100%; border-collapse: collapse; font-size: 0.62rem; }
@@ -353,6 +356,7 @@ header.top {
 .prov td { color: var(--ink-dim); }
 .prov .num { font-family: var(--mono); color: var(--ink); white-space: nowrap; }
 .prov .err { color: var(--err); }
+.prov .warn { color: var(--warn); }
 
 .check-row td { border-bottom: none; padding-bottom: 0.05rem; }
 .check-note {

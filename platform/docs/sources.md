@@ -174,6 +174,14 @@ Reading `arr[arr.length - 1]` yields a **24-hour-old value** on half of these. T
 therefore selects by timestamp rather than by position and is order-agnostic by
 construction (tested by reversing the fixtures and asserting an identical result).
 
+**This bit again, later.** The stage-B mirror trims long arrays to their newest rows, and
+its first version used `slice(-N)` — the exact mistake this section was written to prevent.
+The copy held yesterday's wind. Every automated signal stayed green: the manifest said
+`0 failed`, the JSON was well-formed, the app parsed it without complaint. The only
+symptom was the page reading 18.9 hours old with upstream blocked. `scripts/trim.mjs`
+now selects by timestamp and re-emits rows in the order they arrived; `npm run drill`
+is the check that caught it.
+
 ### 3.4 Three different timestamp formats, all UTC, one of them unparseable as-is
 
 - `2026-09-06T17:16:00` — bare, UTC implied (`rtsw`, `planetary_k_index_1m`, `solar_regions`)

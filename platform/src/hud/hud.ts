@@ -470,15 +470,25 @@ export class Hud {
         d ? 'No watches, warnings or alerts outstanding.' : NO_DATA}</span></span>`;
     this.fitTicker();
 
-    // Status
+    // Status — three states, because "not live" and "not working" are not the
+    // same thing and a reader deciding whether to trust a number needs to know
+    // which one they are looking at.
+    const onMirror = env ? Object.values(env.parts).some((p) => p.mirrored) : false;
+    this.statusEl.classList.toggle('is-error', !!state.lastError);
+    this.statusEl.classList.toggle('is-mirror', !state.lastError && onMirror);
     if (state.lastError) {
       this.statusEl.textContent =
         `Last refresh failed (${state.lastError}) at ${hhmmUTC(state.lastAttempt)} UTC. Showing last good data, ageing.`;
-      this.statusEl.classList.add('is-error');
+    } else if (env && onMirror) {
+      // The mirror is a byte-for-byte copy, so each value still carries the
+      // time NOAA observed it — which is the number that decides whether it is
+      // worth anything, and it is already on every tile.
+      this.statusEl.textContent =
+        `NOAA SWPC unreachable · reading Earth Star's mirror (stage B), captured ${
+          hhmmUTC(env.fetched_at)} UTC · every value keeps NOAA's own timestamp`;
     } else if (env) {
       this.statusEl.textContent =
         `Live · NOAA SWPC · refreshed ${hhmmUTC(env.fetched_at)} UTC · DirectSource (stage A)`;
-      this.statusEl.classList.remove('is-error');
     } else {
       this.statusEl.textContent = 'Fetching live data from NOAA SWPC…';
     }

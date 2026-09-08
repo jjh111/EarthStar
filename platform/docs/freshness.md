@@ -27,14 +27,63 @@ fetched like everything else.
 
 ### When a feed fails
 
-`NowStore.refresh()` never discards the last good envelope. The lane ages visibly, the
-value keeps its own timestamp, `no data` appears as literal text and never as a number or
-a dash, and the four slow-lane feeds fail independently of each other and of the snapshot.
+Three steps, in order, in `src/data/fetch-json.ts`:
 
-A **cold start** is the one case with nothing to fall back on, so `getJson` retries once
-— for a transport that failed to deliver, never for a status the server returned. That is
-not theoretical: it was observed on the OVATION grid, the largest payload we fetch, where
-`res.json()` threw on a body that parsed cleanly a moment later.
+1. **Retry once** — for a transport that delivered no answer, never for a status the
+   server returned. A `404` is upstream *answering*: it means a product was renamed, news
+   the page should carry rather than paper over. Not theoretical: observed on the OVATION
+   grid, the largest payload we fetch, where `res.json()` threw on a body that parsed
+   cleanly a moment later.
+2. **The mirror** (§2b) — only when upstream cannot be reached at all.
+3. **Age the last good envelope.** `NowStore.refresh()` never discards it. The lane ages
+   visibly, keeps its own timestamp, shows `no data` as literal text and never as a number
+   or a dash, and the slow-lane feeds fail independently of each other and of the snapshot.
+
+A **cold start** is the case with nothing to fall back on — no previous envelope, and the
+next attempt a whole refresh interval away. That is what steps 1 and 2 are for.
+
+---
+
+## 2b. Stage B — the mirror
+
+`.github/workflows/data-mirror.yml` copies every SWPC feed to the `data` branch every
+half hour; `src/data/fetch-json.ts` reads it **only after a direct fetch has failed**, so
+a healthy reader never touches it.
+
+It exists because the Viewer's one structural dependency is not ours: if
+`services.swpc.noaa.gov` goes down, or stops sending `Access-Control-Allow-Origin: *`,
+every reading on the page goes dark at once.
+
+**Copies are byte-for-byte**, stored under their own upstream paths. The fallback is a URL
+swap and nothing else — the same parsers over the same bytes. A mirror that reshaped the
+data would be a second implementation to hold in agreement with the first, and the earliest
+divergence between them would be invisible to both. `test/mirror.test.ts` asserts the
+writer and the reader agree about where a copy lives, and runs the app's real parsers over
+freshly written output; the workflow runs it before committing, so a snapshot the Viewer
+cannot read never reaches the branch.
+
+**Timestamps stay upstream's own**, so a reader on the mirror sees the true age of each
+measurement and the page still marks it stale on schedule. The only age the mirror could
+hide is its own — which is why `manifest.json` records `mirrored_at` separately and
+`npm run health` fails when it exceeds three hours.
+
+What is *not* mirrored: solar imagery (megabytes of PNG per frame, and a frame list is
+useless without them) and DONKI (human-curated, hours behind events anyway). Those lanes
+degrade the ordinary way.
+
+**Two lags to expect**, both harmless because the page reports real ages: the half-hour
+write cadence, and up to five minutes of `raw.githubusercontent.com` CDN cache on top.
+
+### The one liberty: length
+
+The 1-minute L1 files are seven days deep and megabytes wide. Long fast-moving arrays are
+cut to their newest 720 rows — twice what the widest panel draws. **Selection is by
+timestamp, not by position**, because SWPC's array order is not consistent: `rtsw_*` runs
+newest-*first*, so taking the last N rows keeps yesterday and discards today. That bug
+shipped once and was caught only by loading the page with upstream blocked and noticing the
+wind was 18.9 hours old — the mirror was well-formed and the manifest said `0 failed`.
+Arrays spanning more than a year are archives and are copied whole, which is what keeps the
+sunspot record honest at 3 332 rows back to 1749.
 
 ---
 
@@ -90,8 +139,14 @@ Two details that matter:
   fetches loses one occasionally; on a schedule that becomes a false alarm, and an alarm
   that is wrong sometimes gets muted.
 
-`.github/workflows/upstream-health.yml` runs it every six hours and keeps **one** standing
-issue — commented on while the failure persists, closed when the feeds answer again.
+`.github/workflows/upstream-health.yml` runs it every six hours and hands any failure to
+`notify.yml`, which keeps **one** standing issue — commented on while the failure persists,
+closed when the feeds answer again. An alert that floods is an alert that gets muted, and a
+muted alert is worse than none because it is mistaken for coverage.
+
+To forward the same notice somewhere a person will see it, set the repository secret
+`ALERT_WEBHOOK_URL` to a Slack or Discord incoming webhook. Unset, the step is skipped in
+silence and the issue is still filed.
 
 ---
 
@@ -99,8 +154,9 @@ issue — commented on while the failure persists, closed when the feeds answer 
 
 | When | What | Who |
 |------|------|-----|
-| Every 6 h | `npm run health` via Actions | automatic |
-| On failure | one standing GitHub issue | automatic |
+| Every 30 min | stage-B mirror written to the `data` branch | automatic |
+| Every 6 h | `npm run health` — feeds, deployment, mirror age | automatic |
+| On failure | one standing GitHub issue, plus a webhook if `ALERT_WEBHOOK_URL` is set | automatic |
 | ~Q1 2030 | IGRF-15 coefficients | a person |
 | When a new L1 monitor appears | one line in `SPACECRAFT_NOTE` | a person, optional |
 

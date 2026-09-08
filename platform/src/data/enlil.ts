@@ -26,6 +26,7 @@
  */
 
 import { SWPC_BASE, num, swpcTime, type Series } from './swpc.js';
+import { getJson } from './fetch-json.js';
 
 export const ENLIL_URL = `${SWPC_BASE}/json/enlil_time_series.json`;
 
@@ -144,9 +145,9 @@ export function enlilAt(
 
 export async function fetchEnlil(signal?: AbortSignal, now = new Date()): Promise<EnlilRun | null> {
   try {
-    const res = await fetch(ENLIL_URL, { cache: 'no-store', signal });
-    if (!res.ok) return null;
-    return parseEnlil(await res.json(), now);
+    const res = await getJson<unknown>(ENLIL_URL, signal);
+    if (res.json === null) return null;
+    return parseEnlil(res.json, now);
   } catch {
     return null;
   }

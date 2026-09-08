@@ -632,6 +632,8 @@ export function renderDetail(
       <tr><td>Data time</td><td class="num">${meta.data_time ? `${hhmmUTC(meta.data_time)} UTC` : NO_DATA}</td></tr>
       <tr><td>Latency</td><td class="num">${meta.latency_s === null ? NO_DATA : `${meta.latency_s}s`}</td></tr>
       <tr><td>Stale after</td><td class="num">${Math.round(meta.stale_after_s / 60)} min</td></tr>
+      ${meta.mirrored ? `<tr><td>Transport</td><td class="warn">Earth Star mirror (stage B) —
+        NOAA was unreachable; these are its bytes and its timestamps, copied</td></tr>` : ''}
       ${meta.error ? `<tr><td>Error</td><td class="err">${escapeHtml(meta.error)}</td></tr>` : ''}
     </tbody></table>` : '<p>No provenance recorded.</p>'}`;
 }

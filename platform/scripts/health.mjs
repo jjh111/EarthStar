@@ -21,15 +21,19 @@
  * parsed. Exit 1 otherwise.
  */
 
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
-
-const SRC = new URL('../src/', import.meta.url).pathname;
-const SWPC = 'https://services.swpc.noaa.gov';
-const DONKI = 'https://kauai.ccmc.gsfc.nasa.gov/DONKI/WS/get';
+import { DONKI, SWPC, discover } from './endpoints.mjs';
 
 /** The page itself, checked alongside the feeds it consumes. */
 const DEPLOY = 'https://earthstar.space/viewer/';
+
+/** Stage B's own manifest. The mirror is the one thing that can fail silently
+ *  for weeks — nothing reads it until NOAA is already down. */
+const MIRROR_MANIFEST =
+  'https://raw.githubusercontent.com/jjh111/EarthStar/data/v1/manifest.json';
+
+/** A mirror older than this has stopped running: it refreshes every 30 minutes,
+ *  and GitHub's scheduler is late often enough that an hour proves nothing. */
+const MIRROR_STALE_H = 3;
 
 const JSON_OUT = process.argv.includes('--json');
 
@@ -47,64 +51,8 @@ const STALE_WARN_H = 24;
 
 // ---------------------------------------------------------------- discovery
 
-function sources(dir) {
-  const out = [];
-  for (const name of readdirSync(dir)) {
-    const p = join(dir, name);
-    if (statSync(p).isDirectory()) out.push(...sources(p));
-    else if (name.endsWith('.ts') && !name.includes('.test.')) out.push(p);
-  }
-  return out;
-}
-
-const files = sources(SRC);
-const all = files.map((f) => readFileSync(f, 'utf8')).join('\n');
-
-/** SUVI/LASCO products, so `${spec.product}` can fan out to the real ones. */
-const products = [...all.matchAll(/product:\s*'([^']+)'/g)].map((m) => m[1]);
-
-/**
- * Every placeholder the catalogue is allowed to contain. Anything else is
- * reported rather than guessed at.
- */
-const SUBS = [
-  [/\$\{(?:SWPC_)?BASE\}/g, () => [SWPC]],
-  [/\$\{DONKI_BASE\}/g, () => [DONKI]],
-  [/\$\{spec\.product\}/g, () => products],
-  // DONKI wants a start date; the app asks for the last week.
-  [/\$\{start\.toISOString\(\)\.slice\(0, 10\)\}/g,
-    () => [new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10)]],
-];
-
-function expand(raw) {
-  let forms = [raw];
-  for (const [re, values] of SUBS) {
-    const next = [];
-    for (const f of forms) {
-      if (!re.test(f)) { next.push(f); continue; }
-      re.lastIndex = 0;
-      for (const v of values()) next.push(f.replace(re, v));
-    }
-    forms = next;
-  }
-  return forms;
-}
-
-const found = new Set();
-// Template literals that begin with a base placeholder and continue with a path.
-for (const m of all.matchAll(/`(\$\{(?:SWPC_BASE|BASE|DONKI_BASE)\}\/[^`]*)`/g)) found.add(m[1]);
-// Plain string URLs with an actual path — a bare origin is a provenance label,
-// not an endpoint, and must not be probed as one.
-for (const m of all.matchAll(/'(https:\/\/services\.swpc\.noaa\.gov\/[^']+)'/g)) found.add(m[1]);
-
-const urls = new Set();
-const unchecked = [];
-for (const raw of found) {
-  for (const u of expand(raw)) {
-    if (u.includes('${')) unchecked.push(u);
-    else urls.add(u);
-  }
-}
+const { urls: catalogue, unchecked } = discover();
+const urls = new Set(catalogue);
 
 // ------------------------------------------------------------------ probing
 
@@ -195,22 +143,57 @@ async function probeDeploy() {
   }
 }
 
+/**
+ * Stage B: present, recent, and complete. A mirror that stopped updating a
+ * fortnight ago looks exactly like a working one until the day it is needed.
+ */
+async function probeMirror() {
+  const r = { url: MIRROR_MANIFEST, ok: false };
+  try {
+    const res = await fetch(MIRROR_MANIFEST, { cache: 'no-store' });
+    r.status = res.status;
+    if (!res.ok) {
+      r.problem = res.status === 404
+        ? 'no manifest on the data branch — has the mirror ever run?'
+        : `HTTP ${res.status}`;
+      return r;
+    }
+    const m = JSON.parse(await res.text());
+    r.ageH = (Date.now() - Date.parse(m.mirrored_at)) / 3.6e6;
+    r.files = m.total;
+    r.failedFiles = m.failed;
+    if (!Number.isFinite(r.ageH)) { r.problem = 'manifest carries no usable mirrored_at'; return r; }
+    if (r.ageH > MIRROR_STALE_H) {
+      r.problem = `last written ${r.ageH.toFixed(1)} h ago — the mirror has stopped`;
+      return r;
+    }
+    if (m.failed > 0) { r.problem = `${m.failed} of ${m.total} feeds failed to copy`; return r; }
+    if (m.unchecked?.length) { r.problem = `${m.unchecked.length} endpoint(s) the mirror could not resolve`; return r; }
+    r.ok = true;
+    return r;
+  } catch (e) {
+    r.problem = e.message;
+    return r;
+  }
+}
+
 // ------------------------------------------------------------------- report
 
 const list = [...urls].sort();
 const results = [];
 for (const u of list) results.push(await probe(u));   // serial: we are a guest here
 const deploy = await probeDeploy();
+const mirror = await probeMirror();
 
 const failed = results.filter((r) => !r.ok);
 const warned = results.filter((r) => r.ok && r.warn);
-const bad = failed.length > 0 || unchecked.length > 0 || !deploy.ok;
+const bad = failed.length > 0 || unchecked.length > 0 || !deploy.ok || !mirror.ok;
 
 if (JSON_OUT) {
   console.log(JSON.stringify({
     ranAt: new Date().toISOString(),
     total: results.length, failed: failed.length, warned: warned.length,
-    unchecked, deploy, endpoints: results,
+    unchecked, deploy, mirror, endpoints: results,
   }, null, 2));
 } else {
   const age = (h) => (h === undefined ? '' : h < 0 ? `+${(-h).toFixed(0)}h ahead`
@@ -223,6 +206,10 @@ if (JSON_OUT) {
   }
   console.log(`\n${deploy.ok ? 'ok  ' : 'DEAD'} deployment ${DEPLOY}`
     + (deploy.ok ? ` — ${deploy.assets} hashed assets served` : `\n       ↳ ${deploy.problem}`));
+  console.log(`${mirror.ok ? 'ok  ' : 'DEAD'} stage B mirror`
+    + (mirror.ok
+      ? ` — ${mirror.files} feeds, written ${mirror.ageH.toFixed(1)} h ago`
+      : `\n       ↳ ${mirror.problem}`));
   for (const u of unchecked) console.log(`\nUNCHECKED  ${u}\n       ↳ unresolved placeholder; teach SUBS in scripts/health.mjs about it`);
   console.log(`\n${results.length} endpoints · ${failed.length} failing · ${warned.length} stale`
     + `${unchecked.length ? ` · ${unchecked.length} unchecked` : ''}`);

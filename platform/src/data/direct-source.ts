@@ -8,6 +8,7 @@
  * `null` + an `error` on its PartMeta, which the HUD renders as "no data".
  */
 
+import { getJson, servedFromMirror } from './fetch-json.js';
 import type { AuroraNow, Envelope, Now, SolarWindSeries } from '../contract/types.js';
 import { PARTICLE_URL, parseParticles, seriesFor } from './particles.js';
 import { PROPAGATED_URL, parsePropagated } from './geospace.js';
@@ -49,64 +50,6 @@ export const STALE_AFTER = {
   spacecraft: 3 * 60 * 60,
 } as const;
 
-const FETCH_TIMEOUT_MS = 15_000;
-/** Long enough to clear a blip, short enough that a cold start still feels immediate. */
-const RETRY_DELAY_MS = 600;
-
-interface Fetched<T> { json: T | null; error?: string; }
-
-/**
- * One attempt. `retryable` marks a transport that failed to deliver an answer
- * — a dropped connection, a timeout, a body that would not parse — as opposed
- * to a status the server actually returned.
- */
-async function attemptJson<T>(
-  url: string, signal?: AbortSignal,
-): Promise<Fetched<T> & { retryable?: boolean }> {
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(new Error('timeout')), FETCH_TIMEOUT_MS);
-  const onAbort = () => ctl.abort(signal?.reason);
-  signal?.addEventListener('abort', onAbort, { once: true });
-  try {
-    const res = await fetch(url, { cache: 'no-store', signal: ctl.signal });
-    if (!res.ok) return { json: null, error: `HTTP ${res.status}` };
-    return { json: (await res.json()) as T };
-  } catch (e) {
-    return {
-      json: null,
-      error: e instanceof Error ? e.message : String(e),
-      // The caller going away is not a failure worth repeating.
-      retryable: !signal?.aborted,
-    };
-  } finally {
-    clearTimeout(timer);
-    signal?.removeEventListener('abort', onAbort);
-  }
-}
-
-/**
- * The same fetch, tried twice when the first attempt got no answer at all.
- *
- * The store never discards a good envelope, so a mid-session blip is already
- * harmless — it ages, and says so. A *cold start* has nothing to fall back on,
- * and there the next attempt is a whole refresh interval away: sixty seconds
- * for the snapshot, five minutes for the aurora. This was observed on the
- * OVATION grid, ~900 KB and the largest thing the Viewer fetches, where
- * `res.json()` threw on a body that parsed cleanly a moment later; the reader
- * got a blank aurora and a check reporting DRIFT for five minutes.
- *
- * An HTTP status is never retried. That is the server answering, and asking a
- * second time neither changes the answer nor is polite.
- */
-async function getJson<T>(url: string, signal?: AbortSignal): Promise<Fetched<T>> {
-  const first = await attemptJson<T>(url, signal);
-  if (!first.retryable) return { json: first.json, ...(first.error ? { error: first.error } : {}) };
-  await new Promise((ok) => setTimeout(ok, RETRY_DELAY_MS));
-  if (signal?.aborted) return { json: null, error: first.error ?? 'aborted' };
-  const second = await attemptJson<T>(url, signal);
-  return { json: second.json, ...(second.error ? { error: second.error } : {}) };
-}
-
 function latency(fetchedAt: string, dataTime: string | null): number | null {
   if (!dataTime) return null;
   const l = (Date.parse(fetchedAt) - Date.parse(dataTime)) / 1000;
@@ -122,6 +65,9 @@ function meta(
     tier, source, source_url: url, model,
     data_time: dataTime, latency_s: latency(fetchedAt, dataTime),
     stale_after_s: staleAfter, ...(error ? { error } : {}),
+    // Keyed by the upstream URL, which is the one this function is given —
+    // so provenance costs nothing at fifteen call sites.
+    ...(servedFromMirror(url) ? { mirrored: true } : {}),
   };
 }
 
