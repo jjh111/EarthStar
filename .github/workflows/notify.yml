@@ -20,6 +20,16 @@ on:
       # Pass false to close the standing issue instead of opening one.
       failing: { required: false, type: boolean, default: true }
 
+  # An alarm nobody has ever heard is an alarm nobody knows is wired up. This
+  # lets the whole path — issue, comment, close, webhook — be rehearsed on
+  # demand against a throwaway label, without waiting for something to break.
+  workflow_dispatch:
+    inputs:
+      label:   { required: true,  type: string, default: alarm-test }
+      title:   { required: true,  type: string, default: 'Alarm test — please ignore' }
+      body:    { required: true,  type: string, default: 'Rehearsing the notification path.' }
+      failing: { required: false, type: boolean, default: true }
+
 permissions:
   issues: write
 
