@@ -100,6 +100,77 @@ export function buildEarthTexture(width = 2048): HTMLCanvasElement {
 
 
 /**
+ * Coastlines and graticule as a transparent overlay, for drawing on top of the
+ * NASA raster base. This is the cartography half of `buildEarthTexture` above,
+ * kept after the raster replaces the flat-colour base: the lines are real
+ * (Natural Earth 110m), the raster is the measurement, and the overlay is
+ * optional. Same lon/lat → pixel mapping as the surface texture, so the two
+ * are registered by construction.
+ */
+export function buildCoastOverlayTexture(width = 2048): HTMLCanvasElement {
+  const w = width;
+  const h = width / 2;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas;
+
+  ctx.strokeStyle = PALETTE.graticule;
+  ctx.lineWidth = Math.max(1, w / 2048);
+  for (let lon = -180; lon <= 180; lon += 30) {
+    const [x] = px(lon, 0, w, h);
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+  }
+  for (let lat = -60; lat <= 60; lat += 30) {
+    const [, y] = px(0, lat, w, h);
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+  }
+
+  const topo = land110m as unknown as Topology<{ land: GeometryCollection }>;
+  const collection = feature(topo, topo.objects.land) as unknown as
+    { type: string; features?: Array<{ geometry: MultiPolygon | Polygon | null }>;
+      geometry?: MultiPolygon | Polygon | null };
+
+  const geometries: Array<MultiPolygon | Polygon> = [];
+  if (collection.features) {
+    for (const f of collection.features) if (f.geometry) geometries.push(f.geometry);
+  } else if (collection.geometry) {
+    geometries.push(collection.geometry);
+  }
+
+  ctx.strokeStyle = 'rgba(150, 200, 175, 0.75)';
+  ctx.lineWidth = Math.max(1, w / 1800);
+  ctx.lineJoin = 'round';
+  for (const g of geometries) {
+    if (g.type === 'MultiPolygon') {
+      for (const poly of g.coordinates) {
+        for (const ring of poly) {
+          ctx.beginPath();
+          for (let i = 0; i < ring.length; i++) {
+            const [x, y] = px(ring[i]![0]!, ring[i]![1]!, w, h);
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          }
+          ctx.closePath();
+          ctx.stroke();
+        }
+      }
+    } else {
+      for (const ring of g.coordinates) {
+        ctx.beginPath();
+        for (let i = 0; i < ring.length; i++) {
+          const [x, y] = px(ring[i]![0]!, ring[i]![1]!, w, h);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+      }
+    }
+  }
+  return canvas;
+}
+
+/**
  * OVATION aurora probability as an equirectangular canvas, using the SAME
  * lon/lat → pixel mapping as the surface texture above so the two are
  * registered by construction rather than by eye.

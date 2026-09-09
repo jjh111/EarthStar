@@ -21,9 +21,17 @@ import { bodyFacts, distanceText, lightTimeText } from './hud/body-facts.js';
 import { LOOPS, fetchLoop, preloadLoop, type ImageLoop } from './data/solar-imagery.js';
 import { scaleLabel, type ScaleMode } from './scene/scales.js';
 import { VIEWS, type ViewName } from './scene/camera-rig.js';
+import { errorReason } from './data/state.js';
 
 const canvas = document.getElementById('scene') as HTMLCanvasElement;
-const viewer = new Viewer(canvas);
+/**
+ * One frame of yield before the scene exists: the shell — header, tiles, the
+ * report — paints first, and the globe arrives a beat later behind it. The
+ * first-paint budget is spent on the words, not on WebGL context setup, which
+ * is the same lazy-load-after-first-paint rule the Earth rasters follow.
+ */
+const viewer = await new Promise<Viewer>((ok) =>
+  requestAnimationFrame(() => ok(new Viewer(canvas))));
 const store = new NowStore(new DirectSource(), 60_000);
 const motion = new MotionPreference();
 
@@ -31,6 +39,28 @@ const motion = new MotionPreference();
 
 let sunTimer: number | null = null;
 const loopCache = new Map<string, ImageLoop | null>();
+
+/**
+ * Imagery failure gets one honest retry on its own clock — the frame list is
+ * tiny, so a minute later is cheap — and the error text names that time
+ * instead of "soon".
+ */
+const IMAGERY_RETRY_MS = 60_000;
+const sunRetryTimers = new Map<string, number>();
+function retryImagery(kind: 'disk' | 'corona', id: string): void {
+  const key = `${kind}:${id}`;
+  if (sunRetryTimers.has(key)) return;
+  const at = new Date(Date.now() + IMAGERY_RETRY_MS).toISOString();
+  if (kind === 'disk') hud.setSunRetry(at); else hud.setCoronaRetry(at);
+  const t = window.setTimeout(() => {
+    sunRetryTimers.delete(key);
+    if (kind === 'disk' ? hud.sunState.loopId === id : hud.sunState.coronaId === id) {
+      loopCache.delete(id);
+      void (kind === 'disk' ? selectLoop(id) : selectCorona(id));
+    }
+  }, IMAGERY_RETRY_MS);
+  sunRetryTimers.set(key, t);
+}
 
 async function selectLoop(id: string): Promise<void> {
   const spec = LOOPS.find((l) => l.id === id && l.kind === 'disk') ?? LOOPS[0]!;
@@ -42,11 +72,18 @@ async function selectLoop(id: string): Promise<void> {
     return;
   }
   hud.setSunLoop(null, true);
-  const loop = await fetchLoop(spec);
-  loopCache.set(spec.id, loop);
-  if (hud.sunState.loopId === spec.id) {
-    hud.setSunLoop(loop, false);
-    sunTexture(loop);
+  try {
+    const loop = await fetchLoop(spec);
+    loopCache.set(spec.id, loop);
+    if (hud.sunState.loopId === spec.id) {
+      hud.setSunLoop(loop, false);
+      sunTexture(loop);
+    }
+  } catch (e) {
+    if (hud.sunState.loopId === spec.id) {
+      hud.setSunLoop(null, false, errorReason(e));
+      retryImagery('disk', spec.id);
+    }
   }
 }
 
@@ -72,9 +109,16 @@ async function selectCorona(id: string | null): Promise<void> {
     return;
   }
   hud.setCoronaLoop(null, true);
-  const loop = await fetchLoop(spec);
-  loopCache.set(spec.id, loop);
-  if (hud.sunState.coronaId === spec.id) hud.setCoronaLoop(loop, false);
+  try {
+    const loop = await fetchLoop(spec);
+    loopCache.set(spec.id, loop);
+    if (hud.sunState.coronaId === spec.id) hud.setCoronaLoop(loop, false);
+  } catch (e) {
+    if (hud.sunState.coronaId === spec.id) {
+      hud.setCoronaLoop(null, false, errorReason(e));
+      retryImagery('corona', spec.id);
+    }
+  }
 }
 
 /**
@@ -183,15 +227,20 @@ async function loadForecast(): Promise<void> {
   hud.setForecast(null, true);
   try {
     forecast = await fetchForecast();
-  } catch {
+    hud.setForecast(forecast, false);
+  } catch (e) {
     forecast = null;
+    hud.setForecast(null, false, errorReason(e));
   }
-  hud.setForecast(forecast, false);
 }
 
 async function loadCycle(): Promise<void> {
   hud.setCycle(null, true);
-  hud.setCycle(await fetchSolarCycle(), false);
+  try {
+    hud.setCycle(await fetchSolarCycle(), false);
+  } catch (e) {
+    hud.setCycle(null, false, errorReason(e));
+  }
 }
 
 const hud = new Hud({
@@ -216,6 +265,7 @@ const btnShield = btn('shield-toggle');
 const btnAurora = btn('aurora-toggle');
 const btnWind = btn('wind-toggle');
 const btnCme = btn('cme-toggle');
+const btnCoast = btn('coast-toggle');
 
 /**
  * The view buttons are generated from the same list the camera reads, so a
@@ -243,6 +293,7 @@ function syncNarration(): void {
     mode: viewer.scaleMode, view, reducedMotion: motion.reduced,
     shield: viewer.shieldOn, fieldLines: viewer.fieldLineStats,
     aurora: viewer.auroraOn, wind: viewer.windOn,
+    earthSurface: viewer.earthSurfaceState,
     cmes: { shown: viewer.cmesOn, count: viewer.cmeCount },
   });
   hud.render(store.get());
@@ -334,6 +385,16 @@ function setCmes(on: boolean): void {
 }
 btnCme.addEventListener('click', () => setCmes(!viewer.cmesOn));
 
+function setCoast(on: boolean): void {
+  viewer.setCoastOverlay(on);
+  btnCoast.setAttribute('aria-pressed', String(on));
+  announce(on
+    ? 'Vector coastlines drawn over the surface imagery.'
+    : 'Coastlines hidden — the raster surface only.');
+  syncNarration();
+}
+btnCoast.addEventListener('click', () => setCoast(!viewer.coastOverlayOn));
+
 btnMotion.addEventListener('click', () => motion.setOverride(!motion.reduced));
 
 motion.subscribe((reduced) => {
@@ -354,14 +415,71 @@ installKeyboard({
   focusReport: () => hud.selectTab('report'),
 });
 
+/* Cold-start sequencing (task: snapshot lane → slow lane → imagery). The Sun's
+   frame list is megabytes behind a slow link and every JSON the instrument rail
+   needs is a few hundred KB, so imagery waits for the snapshot lane to resolve
+   — live or failed — before it starts. Declared before the subscription below,
+   which fires synchronously with the store's current state. */
+let sunImageryStarted = false;
+function maybeStartImagery(): void {
+  if (sunImageryStarted) return;
+  if (store.get().lanes.snapshot) return;
+  sunImageryStarted = true;
+  void selectLoop(LOOPS[0]!.id);
+}
+
 store.subscribe((state) => {
   viewer.setNow(state.now?.data ?? null);
   viewer.setAurora(state.aurora?.data ?? null);
   viewer.setRegions(state.regions?.data ?? [], state.regions?.data?.[0]?.observed ?? null);
   viewer.setCmes(state.cmes);
   viewer.setSpacecraft(state.spacecraft?.data ?? []);
+  maybeStartImagery();
   syncNarration();
 });
+
+/* ---------------- Earth base imagery ---------------- */
+
+/**
+ * The first Earth pixel on the page that is a measurement. The vector base map
+ * paints first paint; NASA's composites are fetched after the scene has drawn,
+ * so they never block the first frame.
+ *
+ * The size follows devicePixelRatio × viewport width: a texture wider than the
+ * pixels it can ever cover is bandwidth and memory spent for nothing. The
+ * 4096 variant covers desktops and large tablets; everything narrower than
+ * 2048 device pixels gets the 2048 set.
+ */
+let earthImageryStarted = false;
+function loadEarthImagery(): void {
+  if (earthImageryStarted) return;
+  earthImageryStarted = true;
+  const dpr = Math.min(devicePixelRatio || 1, 3);
+  const deviceWidth = (canvas.clientWidth || window.innerWidth) * dpr;
+  const suffix = deviceWidth >= 2048 ? '4096' : '2048';
+  const load = (file: string, ok: (img: HTMLImageElement) => void): void => {
+    const img = new Image();
+    img.decoding = 'async';
+    img.onload = () => ok(img);
+    img.onerror = () => { viewer.setEarthSurfaceState('vector'); syncNarration(); };
+    img.src = `/viewer/earth-${file}.webp`;
+  };
+  load(`day-${suffix}`, (img) => {
+    viewer.setEarthDayImage(img);
+    viewer.setEarthSurfaceState('imagery');
+    syncNarration();
+  });
+  load('night-2048', (img) => {
+    viewer.setEarthNightImage(img);
+    hud.setEarthLights(true);
+    syncNarration();
+  });
+}
+
+// Two frames out: the first painted frame exists, the imagery starts behind it.
+function afterFirstPaint(fn: () => void): void {
+  requestAnimationFrame(() => requestAnimationFrame(fn));
+}
 
 // Ages tick even when the feed does not.
 window.setInterval(syncNarration, 30_000);
@@ -371,7 +489,7 @@ setScale('globe');
 setWind(true);
 viewer.start();
 store.start();
-void selectLoop(LOOPS[0]!.id);
+afterFirstPaint(loadEarthImagery);
 
 /* ---------------- picking ---------------- */
 

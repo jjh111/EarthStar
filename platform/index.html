@@ -3,13 +3,28 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   <title>Earth Star Viewer — live space weather</title>
   <meta name="description" content="Live 3D view of Earth's space-weather environment: solar wind, geomagnetic field, aurora and solar imagery from NOAA SWPC, every value carrying its source, timestamp and evidence tier." />
+  <link rel="canonical" href="https://earthstar.space/viewer/" />
+  <meta name="theme-color" content="#05070d" />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+
+  <!-- Open Graph / Twitter card. og.jpg is a deck-view frame, 1200×630. -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Earth Star" />
+  <meta property="og:url" content="https://earthstar.space/viewer/" />
+  <meta property="og:title" content="Earth Star Viewer — live space weather" />
+  <meta property="og:description" content="Earth's space-weather environment in one live view: solar wind, the modelled shield, aurora and the Sun in six instruments — every value with its source, timestamp and evidence tier." />
+  <meta property="og:image" content="https://earthstar.space/viewer/og.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="The deck view: Earth from the tree-ship's rail, the Sun beyond, and the space-weather instruments alongside." />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Earth Star Viewer — live space weather" />
+  <meta name="twitter:description" content="Earth's space-weather environment in one live view: solar wind, the modelled shield, aurora and the Sun, every value with its source, timestamp and evidence tier." />
+  <meta name="twitter:image" content="https://earthstar.space/viewer/og.jpg" />
+
   <link rel="preconnect" href="https://services.swpc.noaa.gov" crossorigin />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
 </head>
 <body>
   <a class="skip-link" href="#margin-body">Skip to the Situation Report</a>
@@ -59,6 +74,8 @@
               title="Solar wind stream, speed and density from the measured wind">Wind</button>
             <button class="ctl" id="cme-toggle" aria-pressed="true"
               title="Analysed CME cones propagating from the Sun">CMEs</button>
+            <button class="ctl" id="coast-toggle" aria-pressed="false"
+              title="Natural Earth vector coastlines and graticule, drawn over the surface imagery">Coast</button>
             <button class="ctl" id="motion-toggle" aria-pressed="false"
               title="Freeze all animation; the spatial information stays">Motion</button>
           </span>

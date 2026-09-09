@@ -44,20 +44,24 @@ describe('cold-start resilience', () => {
     expect(attempts.get(url)).toBe(2);
   });
 
-  it('does not retry a status the server actually returned', async () => {
+  it('does not retry a status the server actually returned, and reports it as an error', async () => {
     const attempts = harness('ovation', () => new Response('nope', { status: 404 }));
-    const env = await new DirectSource().fetchAurora();
+    const attempt = new DirectSource().fetchAurora();
     const url = [...attempts.keys()].find((u) => u.includes('ovation'))!;
+    // The failure throws so the store's slow lane can record a reason class —
+    // "unavailable · upstream 404", not a quietly empty envelope.
+    await expect(attempt).rejects.toThrow('HTTP 404');
     expect(attempts.get(url)).toBe(1);
-    expect(env.data).toBeNull();
   });
 
-  it('reports no data rather than a number when both attempts fail', async () => {
+  it('reports a failure rather than a number when both attempts fail', async () => {
     vi.stubGlobal('fetch', async (input: RequestInfo | URL) =>
       String(input).includes('ovation')
         ? (() => { throw new TypeError('Failed to fetch'); })()
         : ok([]));
-    const env = await new DirectSource().fetchAurora();
-    expect(env.data).toBeNull();
+    // Throwing is how a transport failure reaches the state machine: the tile
+    // then reads "unavailable", not the "no data" that an empty envelope
+    // would have produced — different claims, and the difference matters.
+    await expect(new DirectSource().fetchAurora()).rejects.toThrow('Failed to fetch');
   });
 });

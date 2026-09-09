@@ -7,6 +7,7 @@
 import type { AlertLevel } from '../contract/types.js';
 import type { PartMeta } from '../data/source.js';
 import type { StoreState } from '../data/store.js';
+import { valueState, type DataState } from '../data/state.js';
 import type { FrameStats } from '../scene/viewer.js';
 import { ImageCache } from './image-cache.js';
 import type { CheckResult } from '../data/checks.js';
@@ -14,7 +15,7 @@ import type { ForecastBundle } from '../data/forecast.js';
 import type { SolarCycle } from '../data/solar-cycle.js';
 import { LOOPS, type ImageLoop } from '../data/solar-imagery.js';
 import {
-  NO_DATA, badgeFor, badgeTitle, hhmmUTC, stalenessOf,
+  NO_DATA, badgeFor, badgeTitle, hhmmUTC,
 } from './format.js';
 import { INSTRUMENTS } from './instruments.js';
 import type { SunPlaneCalibration } from '../scene/sun-plane.js';
@@ -86,13 +87,17 @@ export class Hud {
   private forecast: ForecastBundle | null = null;
   private forecastLoading = false;
   private forecastRequested = false;
+  private forecastError: string | null = null;
   private cycle: SolarCycle | null = null;
   private cycleLoading = false;
   private cycleRequested = false;
+  private cycleError: string | null = null;
   private sun: SunState = {
     loop: null, loopId: LOOPS[0]!.id, frameIndex: 0,
     playing: false, loading: true, preloaded: 0, preloading: false,
+    error: null, retryAt: null,
     corona: null, coronaId: null, coronaLoading: false,
+    coronaError: null, coronaRetryAt: null,
     diskPlane: null, coronaPlane: null,
   };
   private narration: SceneNarration = {
@@ -132,16 +137,17 @@ export class Hud {
     this.checks = c; this.checksRunning = running; this.renderMargin();
   }
 
-  setCycle(c: SolarCycle | null, loading: boolean): void {
-    this.cycle = c; this.cycleLoading = loading; this.renderMargin();
+  setCycle(c: SolarCycle | null, loading: boolean, error: string | null = null): void {
+    this.cycle = c; this.cycleLoading = loading; this.cycleError = error; this.renderMargin();
   }
 
-  setForecast(f: ForecastBundle | null, loading: boolean): void {
-    this.forecast = f; this.forecastLoading = loading; this.renderMargin();
+  setForecast(f: ForecastBundle | null, loading: boolean, error: string | null = null): void {
+    this.forecast = f; this.forecastLoading = loading; this.forecastError = error; this.renderMargin();
   }
-  setSunLoop(loop: ImageLoop | null, loading: boolean): void {
+  setSunLoop(loop: ImageLoop | null, loading: boolean, error: string | null = null): void {
     this.sun.loop = loop;
     this.sun.loading = loading;
+    this.sun.error = loading ? null : error;
     // Open on the newest usable frame — the current Sun, not yesterday's, and
     // not a dropout that would render as a black square.
     this.sun.frameIndex = loop ? loop.newestGood : 0;
@@ -185,10 +191,22 @@ export class Hud {
   }
 
   /** The coronagraph is its own selection, loaded and shown alongside the disk. */
-  setCoronaLoop(loop: ImageLoop | null, loading: boolean): void {
+  setCoronaLoop(loop: ImageLoop | null, loading: boolean, error: string | null = null): void {
     this.sun.corona = loop;
     this.sun.coronaLoading = loading;
+    this.sun.coronaError = loading ? null : error;
     this.renderMargin();
+  }
+
+  /** Stated with the error, so the text can name the retry time. */
+  setSunRetry(at: string | null): void {
+    this.sun.retryAt = at;
+    if (this.sun.error && this.tab === 'sun') this.renderMargin();
+  }
+
+  setCoronaRetry(at: string | null): void {
+    this.sun.coronaRetryAt = at;
+    if (this.sun.coronaError && this.tab === 'sun') this.renderMargin();
   }
 
   get sunState(): SunState { return this.sun; }
@@ -341,6 +359,8 @@ export class Hud {
       narration: buildSituationReport(
         this.state.now, this.narration, now, this.state.aurora, this.state.cmes,
         this.state.spacecraft?.data ?? [],
+        { snapshot: this.state.lanes.snapshot, aurora: this.state.lanes.aurora,
+          cmes: this.state.lanes.cmes, nextAttempt: this.state.nextAttempt },
       ),
       checks: this.checks,
       forecast: this.forecast,
@@ -406,32 +426,52 @@ export class Hud {
     this.clockEl.textContent =
       `${now.toISOString().slice(0, 10)} ${hhmmUTC(now.toISOString())} UTC`;
 
+    /**
+     * One state per value slot, from the machine in data/state.ts — loading,
+     * no data, error, stale, fresh — written to a single `data-state`
+     * attribute the CSS keys on. A slot shows a number in exactly one of
+     * them; the others say loading ("…"), "unavailable" (with the reason) or
+     * "no data" (the literal words).
+     */
+    const snapshotLane = {
+      loading: state.lanes.snapshot, error: null, nextAttempt: null,
+    };
     for (const inst of INSTRUMENTS) {
       const el = this.tiles.get(inst.id)!;
       const meta: PartMeta | undefined = env?.parts?.[inst.part];
-      const s = stalenessOf(meta, now);
-      const raw = inst.value(d);
-      el.classList.toggle('is-stale', s.state === 'stale');
-      el.classList.toggle('is-nodata', s.state === 'no-data' || raw === NO_DATA);
+      let st = valueState({ lane: snapshotLane, received: !!state.now, meta, now });
+      const raw = st.state === 'fresh' || st.state === 'stale' ? inst.value(d) : null;
+      // The feed answered but this *field* carries nothing: the value slot is
+      // "no data" even while its feed is fresh — a number is still withheld.
+      if ((st.state === 'fresh' || st.state === 'stale') && raw === NO_DATA) {
+        st = { state: 'no-data', label: `no data · ${st.label}`, short: NO_DATA, ageS: st.ageS };
+      }
+      el.setAttribute('data-state', st.state);
 
-      (el.querySelector('[data-v]') as HTMLElement).textContent = raw;
+      (el.querySelector('[data-v]') as HTMLElement).textContent = raw !== null ? raw
+        : st.state === 'loading' ? '…'
+          : st.state === 'error' ? 'unavailable'
+            : NO_DATA;
       const badge = el.querySelector('[data-badge]') as HTMLElement;
       const b = badgeFor(meta);
       badge.textContent = b;
       badge.className = `badge badge-${b.toLowerCase()}`;
-      const detail = inst.detail?.(d) ?? '';
-      (el.querySelector('[data-time]') as HTMLElement).textContent =
-        s.state === 'fresh' && detail ? detail : s.short;
-      el.setAttribute('title',
-        `${inst.label}: ${raw === NO_DATA ? 'no data' : `${raw} ${inst.unit}`} · ${s.label} · ${badgeTitle(meta)}`);
-      el.setAttribute('aria-label',
-        `${inst.label}: ${raw === NO_DATA ? 'no data' : `${raw} ${inst.unit}`}, ${s.label}. Open detail.`);
+      const detail = st.state === 'fresh' ? inst.detail?.(d) ?? '' : '';
+      (el.querySelector('[data-time]') as HTMLElement).textContent = detail || st.short;
+      const valueTitle = raw !== null ? `${raw} ${inst.unit}`
+        : st.state === 'loading' ? 'loading'
+          : st.state === 'error' ? `unavailable (${st.label})`
+            : 'no data';
+      el.setAttribute('title', `${inst.label}: ${valueTitle} · ${st.label} · ${badgeTitle(meta)}`);
+      el.setAttribute('aria-label', st.state === 'fresh' || st.state === 'stale'
+        ? `${inst.label}: ${raw} ${inst.unit}, ${st.label}. Open detail.`
+        : `${inst.label}: ${st.state === 'error' ? `unavailable, ${st.label}` : st.state === 'loading' ? 'loading' : 'no data'}. Open detail.`);
 
       // The trend behind the number. Redrawn on the store's cadence, not the
       // frame's, and marked aria-hidden because the value above it already
       // carries the reading — a screen reader gains nothing from a path.
       const sparkEl = el.querySelector('[data-spark]') as HTMLElement;
-      const sp = tileSpark(inst.id, state);
+      const sp = st.state === 'fresh' || st.state === 'stale' ? tileSpark(inst.id, state) : null;
       const key = sp ? `${sp.series.time[sp.series.time.length - 1] ?? ''}:${sp.series.value.length}` : '';
       if (key !== this.sparkKeys.get(inst.id)) {
         this.sparkKeys.set(inst.id, key);
@@ -445,17 +485,16 @@ export class Hud {
     const scalesEl = this.tiles.get('scales')!;
     const row = scalesEl.querySelector('[data-scales]') as HTMLElement;
     const sc = d?.scales;
+    const scS = valueState({ lane: snapshotLane, received: !!state.now, meta: env?.parts?.scales, now });
     row.innerHTML = sc
       ? (['R', 'S', 'G'] as const).map((k) => {
         const n = sc[k].scale ?? null;
         return `<span class="scale-chip scale-${n ?? 'na'}" title="${k} — ${escapeHtml(sc[k].text ?? 'no data')}">${k}${n ?? '–'}</span>`;
       }).join('')
-      : NO_DATA;
-    const scS = stalenessOf(env?.parts?.scales, now);
+      : scS.state === 'loading' ? '<span class="tile-loading-dots">…</span>' : NO_DATA;
     (scalesEl.querySelector('[data-time]') as HTMLElement).textContent = scS.short;
     scalesEl.setAttribute('title', `NOAA scales · ${scS.label}`);
-    scalesEl.classList.toggle('is-stale', scS.state === 'stale');
-    scalesEl.classList.toggle('is-nodata', !sc);
+    scalesEl.setAttribute('data-state', scS.state);
 
     // Aurora
     const auEl = this.tiles.get('aurora')!;
@@ -465,15 +504,35 @@ export class Hud {
         tier: 'modeled', source: au.source, source_url: au.source_url, model: au.model,
         data_time: au.data?.observation_time ?? null, latency_s: au.latency_s,
         stale_after_s: au.stale_after_s,
+        ...(state.laneErrors.aurora ? { error: state.laneErrors.aurora } : {}),
       }
       : undefined;
-    const auS = stalenessOf(auMeta, now);
+    const auS = valueState({
+      lane: { loading: state.lanes.aurora, error: state.laneErrors.aurora, nextAttempt: state.nextAttempt },
+      received: !!au?.data, meta: auMeta, now,
+    });
     (auEl.querySelector('[data-v]') as HTMLElement).textContent =
-      au?.data ? String(au.data.max_probability) : NO_DATA;
+      au?.data ? String(au.data.max_probability)
+        : auS.state === 'loading' ? '…'
+          : auS.state === 'error' ? 'unavailable' : NO_DATA;
     (auEl.querySelector('[data-time]') as HTMLElement).textContent =
       au?.data ? `valid ${hhmmUTC(au.data.forecast_time)}` : auS.short;
-    auEl.classList.toggle('is-stale', auS.state === 'stale');
-    auEl.classList.toggle('is-nodata', !au?.data);
+    auEl.setAttribute('data-state', auS.state);
+    auEl.setAttribute('title', `Aurora peak · ${auS.label}`);
+    auEl.setAttribute('aria-label', au?.data
+      ? `Aurora peak: ${au.data.max_probability} percent, ${auS.label}. Open report.`
+      : `Aurora peak: ${auS.state === 'loading' ? 'loading' : auS.state === 'error' ? `unavailable, ${auS.label}` : 'no data'}. Open report.`);
+
+    // Layer toggles carry the same four states: a layer whose data has not
+    // landed is dimmed rather than pretending to be ready.
+    this.setToggleState('aurora-toggle', auS.state);
+    this.setToggleState('cme-toggle',
+      state.lanes.cmes && state.cmes.length === 0 ? 'loading'
+        : state.laneErrors.cmes ? 'error'
+          : state.cmes.length === 0 ? 'no-data' : 'fresh');
+    this.setToggleState('wind-toggle', snapshotLane.loading ? 'loading'
+      : d?.solar_wind ? 'fresh'
+        : (env?.parts?.solar_wind?.error ?? state.lastError) ? 'error' : 'no-data');
 
     // Notices. Ordered by what NOAA's own words mean rather than by clock:
     // something happening now outranks something expected, which outranks
@@ -505,15 +564,20 @@ export class Hud {
         + `<span class="alert-text">${escapeHtml(a.text || a.product)}</span>`
         + `<span class="alert-time">${hhmmUTC(a.issued)}</span></span>`).join('')
       : `<span class="ticker-item level-none"><span class="alert-text">${
-        d ? 'No watches, warnings or alerts outstanding.' : NO_DATA}</span></span>`;
+        d ? 'No watches, warnings or alerts outstanding.'
+          : state.lanes.snapshot ? 'Loading NOAA notices…' : NO_DATA}</span></span>`;
     this.fitTicker();
 
-    // Status — three states, because "not live" and "not working" are not the
-    // same thing and a reader deciding whether to trust a number needs to know
-    // which one they are looking at.
+    // Status — four states, because "not live", "partly working" and "not
+    // working" are not the same thing and a reader deciding whether to trust
+    // a number needs to know which one they are looking at.
     const onMirror = env ? Object.values(env.parts).some((p) => p.mirrored) : false;
+    // "Live" is a claim: it needs at least one timestamp behind it. A
+    // completed composite whose every feed failed has none.
+    const gotAny = env ? Object.values(env.parts).some((p) => p.data_time) : false;
     this.statusEl.classList.toggle('is-error', !!state.lastError);
     this.statusEl.classList.toggle('is-mirror', !state.lastError && onMirror);
+    this.statusEl.classList.toggle('is-degraded', !state.lastError && !!env && !gotAny && !onMirror);
     if (state.lastError) {
       this.statusEl.textContent =
         `Last refresh failed (${state.lastError}) at ${hhmmUTC(state.lastAttempt)} UTC. Showing last good data, ageing.`;
@@ -524,6 +588,10 @@ export class Hud {
       this.statusEl.textContent =
         `NOAA SWPC unreachable · reading Earth Star's mirror (stage B), captured ${
           hhmmUTC(env.fetched_at)} UTC · every value keeps NOAA's own timestamp`;
+    } else if (env && !gotAny) {
+      this.statusEl.textContent =
+        `NOAA SWPC unreachable — nothing has loaded yet. Retrying${
+          state.nextAttempt ? ` at ${hhmmUTC(state.nextAttempt)} UTC` : ''}.`;
     } else if (env) {
       this.statusEl.textContent =
         `Live · NOAA SWPC · refreshed ${hhmmUTC(env.fetched_at)} UTC · DirectSource (stage A)`;
@@ -532,6 +600,17 @@ export class Hud {
     }
 
     this.renderMargin();
+  }
+
+  /** What the scene's Earth surface carries, for the provenance rows. */
+  private earthLights = false;
+  private earthCoast = false;
+
+  setEarthLights(v: boolean): void { this.earthLights = v; }
+  setEarthCoast(v: boolean): void { this.earthCoast = v; }
+
+  private setToggleState(id: string, state: DataState): void {
+    document.getElementById(id)?.setAttribute('data-state', state);
   }
 
 /**
@@ -589,14 +668,18 @@ export class Hud {
       case 'forecast':
         this.bodyEl.innerHTML = renderForecast(
           this.forecast, this.forecastLoading, state?.cmes ?? [], this.remembered,
+          this.forecastError,
         );
         break;
       case 'sun':
-        this.bodyEl.innerHTML = renderSun(this.sun, LOOPS, this.cycle, this.cycleLoading);
+        this.bodyEl.innerHTML = renderSun(this.sun, LOOPS, this.cycle, this.cycleLoading, this.cycleError);
         this.placeSunFrame();
         break;
       case 'sources':
-        this.bodyEl.innerHTML = renderSources(state, this.checks, this.remembered);
+        this.bodyEl.innerHTML = renderSources(state, this.checks, this.remembered, {
+          surface: this.narration.earthSurface ?? 'vector',
+          lights: this.earthLights, coast: this.earthCoast,
+        });
         break;
       case 'checks': this.bodyEl.innerHTML = renderChecks(this.checks, this.checksRunning); break;
       case 'detail':

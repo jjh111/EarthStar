@@ -260,8 +260,11 @@ export class DirectSource implements Source {
 
   async fetchAurora(signal?: AbortSignal): Promise<Envelope<AuroraNow | null>> {
     const res = await getJson<unknown>(SWPC_URL.aurora, signal);
+    // A transport failure is an error state, not "no data" — throw so the
+    // store's slow lane records it and the tile can say why it is empty.
+    if (!res.json) throw new Error(res.error ?? 'unreachable');
     const fetched_at = new Date().toISOString();
-    const data = res.json ? parseAurora(res.json) : null;
+    const data = parseAurora(res.json);
     // Staleness is measured against the OBSERVATION, not the forecast: the
     // forecast time is in the future and would make a stale grid look fresh.
     const data_time = data?.observation_time ?? fetched_at;
@@ -280,8 +283,9 @@ export class DirectSource implements Source {
 
   async fetchRegions(signal?: AbortSignal): Promise<Envelope<ActiveRegion[]>> {
     const res = await getJson<unknown>(SWPC_URL.regions, signal);
+    if (!res.json) throw new Error(res.error ?? 'unreachable');
     const fetched_at = new Date().toISOString();
-    const data = res.json ? parseRegions(res.json) : [];
+    const data = parseRegions(res.json);
     const data_time = data[0]?.observed ?? fetched_at;
     return {
       source: `${SWPC} · solar region summary`,
@@ -297,8 +301,9 @@ export class DirectSource implements Source {
 
   async fetchEphemerides(signal?: AbortSignal): Promise<Envelope<SpacecraftPos[]>> {
     const res = await getJson<unknown>(EPHEM_URL, signal);
+    if (!res.json) throw new Error(res.error ?? 'unreachable');
     const fetched_at = new Date().toISOString();
-    const data = res.json ? parseEphemerides(res.json) : [];
+    const data = parseEphemerides(res.json);
     // The newest of the per-spacecraft newests: they share a cadence, so this
     // is the age of the whole set rather than of the luckiest member.
     const data_time = data.reduce<string | null>(

@@ -198,6 +198,14 @@ const PEDESTAL_LIFT: Record<PlaneKind, number> = { coronagraph: 0.2, disk: 0 };
 const SKY_OPACITY: Record<PlaneKind, number> = { coronagraph: 0.8, disk: 0.3 };
 
 /**
+ * The Corona view's framing floor, in solar radii, for the bare sphere — set
+ * to the LASCO C2 field of view (6.32 R☉, measured off the live frames and
+ * agreeing with the published number) so the view reads as "the space the
+ * coronagraphs photograph" whether or not any of them is loaded.
+ */
+const CORONA_DEFAULT_REACH = 6.32;
+
+/**
  * One solar frame, hung on the plane it was projected onto.
  *
  * Both the coronagraphs and the off-limb part of a disk image use this: the
@@ -417,13 +425,18 @@ export class Sun {
 
   /**
    * How far the shown imagery reaches, in solar radii — the widest visible
-   * plane, or just past the limb when only the sphere is lit. The Corona view
-   * frames on this, so switching C2 for C3 reframes from six radii to thirty
-   * instead of leaving one of them a speck in a frame built for the other.
+   * plane, or the default framing distance when only the bare sphere is lit.
+   *
+   * The Corona view frames on this, so switching C2 for C3 reframes from six
+   * radii to thirty instead of leaving one of them a speck in a frame built
+   * for the other. And when *nothing* is loaded the floor still holds the
+   * frame at the C2 scale (6.3 R☉, the measured half-width of its published
+   * field of view) instead of zooming in until the base-coloured sphere fills
+   * the viewport with no context around it.
    */
   reachRsun(): number {
     return Math.max(
-      2,
+      CORONA_DEFAULT_REACH,
       this.diskPlane.reachRsun(),
       this.coronaPlane.reachRsun(),
     );
