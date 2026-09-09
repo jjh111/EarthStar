@@ -59,6 +59,8 @@ function renderGrid() {
   grid.innerHTML = filtered.map(cardHTML).join('');
 }
 
+export function setArchiveQuery(q) { handleSearch(q); }
+
 function handleSearch(q) {
   searchQuery = q;
   if (q) {
@@ -191,9 +193,10 @@ export function initArchive() {
     }
   });
 
-  const search = $('archiveSearch');
-  search.addEventListener('input', () => handleSearch(search.value));
-  search.addEventListener('focus', ensureContentIndex, { once: true });
+  // The site-wide search box (search.js) drives this module; warm the
+  // full-text index the first time it is focused.
+  const search = $('siteSearch');
+  search?.addEventListener('focus', ensureContentIndex, { once: true });
 
   $('archivePanelOverlay').addEventListener('click', closePanel);
   $('archivePanelClose').addEventListener('click', closePanel);

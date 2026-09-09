@@ -1,27 +1,31 @@
-import { initTheme } from './theme.js';
 import { initParallax } from './parallax.js';
 import { initArchive } from './archive.js';
 import { initGarden } from './garden.js';
 import { initTimeOfDay, initConstellations, initGomenCrab } from './delight.js';
-import { initAutomata } from './automata.js';
+import { initIdeas } from './ideas.js';
+import { initSearch } from './search.js';
+import { initSky } from './sky.js';
+import { initThread } from './thread.js';
 
-// Theme first — the canvas painters read the palette from it
-initTheme();
-
-// Time-of-day tint next — it changes what the vista looks like
+// Time-of-day tint first — it changes what the hero looks like
 initTimeOfDay();
 
-// Archive immediately: deep links (#doc/...) must resolve on load
+// Archive and ideas immediately: deep links (#doc/…, #idea/…) must resolve on load
 initArchive();
+initIdeas();
+initSearch();
 
-// The automata ground is behind everything; start it before idle
-initAutomata();
+// The live strip fetches after the page has painted — five requests must not
+// compete with the hero image on a slow connection; tiles say "loading" meanwhile
+if (document.readyState === 'complete') initSky();
+else window.addEventListener('load', initSky, { once: true });
 
-// Interaction layers can wait for idle
+// Interaction and ambience can wait for idle
 const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 1));
 idle(() => {
   initParallax();
   initConstellations(); // must listen before initGarden fires its first stars event
   initGarden();
   initGomenCrab();
+  initThread();
 });

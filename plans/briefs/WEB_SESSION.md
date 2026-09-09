@@ -1,5 +1,11 @@
 # Session Brief — Web Presence Track (splash / resources site)
 
+> **2026-09-09 — superseded in part.** The Director shipped web presence v2.0 (see
+> `plans/WEB_PRESENCE_V2_PLAN.md`): the live *Sky now* strip (task 1, with the four label
+> states and mock mode), the resources row (task 3), the Ideas dashboard, the unified
+> search, and the golden thread. **Remaining from this brief:** task 2 (register badges in
+> the Archive) — now `WEB_PRESENCE_V2_PLAN.md` W2 — and W3/W4 there. Read that plan first.
+
 **Repo:** `jjh111/EarthStar` · **Branch:** `claude/site-viewer-teaser` (create from the
 current `claude/website-skill-planning-hnmy8t` head, or from `main` after it merges)
 **You own:** `src/`, `index.html`, `assets/`, `archive/`, `test/`, `build.mjs`,

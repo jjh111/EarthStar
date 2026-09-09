@@ -15,9 +15,12 @@ const check = (name, ok, extra = '') => results.push(`${ok ? 'PASS' : 'FAIL'} ${
 async function newPage(opts = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, ...opts });
   const page = await ctx.newPage();
-  page.on('console', m => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
+  page.on('console', m => { if (m.type() === 'error' && !/ERR_TUNNEL_CONNECTION_FAILED|ERR_NAME_NOT_RESOLVED|ERR_INTERNET_DISCONNECTED|Failed to load resource/.test(m.text())) errors.push('console: ' + m.text()); });
   page.on('pageerror', e => errors.push('pageerror: ' + e.message));
-  page.on('requestfailed', r => errors.push('reqfail: ' + r.url()));
+  // Upstream data hosts are allowed to fail (offline, sandboxed, blocked) — the
+  // page must degrade honestly; the sky checks below assert that it does.
+  const UPSTREAM = /services\.swpc\.noaa\.gov|raw\.githubusercontent\.com/;
+  page.on('requestfailed', r => { if (!UPSTREAM.test(r.url())) errors.push('reqfail: ' + r.url()); });
   return { ctx, page };
 }
 
@@ -65,18 +68,44 @@ async function newPage(opts = {}) {
   check('footer garden populated', await page.locator('.emoji-footer').count() > 0);
   check('coherence meter moves', ((await page.locator('#coherenceValue').textContent()) || '').includes('+'));
 
-  await page.locator('#archiveSearch').scrollIntoViewIfNeeded();
-  await page.locator('#archiveSearch').fill('datacenter');
+  await page.locator('#siteSearch').fill('datacenter');
   await page.waitForTimeout(600);
-  check('search filters', await page.locator('.archive-card').count() === 1);
-  await page.locator('#archiveSearch').fill('veracity');
+  check('search filters documents', await page.locator('.archive-card').count() === 1);
+  await page.locator('#siteSearch').fill('kincentric');
+  await page.waitForTimeout(400);
+  check('search filters ideas', await page.locator('.idea:not([hidden])').count() >= 1 && await page.locator('.idea:not([hidden])').count() < 8);
+  await page.locator('#siteSearch').fill('veracity');
   await page.waitForTimeout(800);
   check('content search (lazy index)', await page.locator('.archive-card').count() >= 1);
+  await page.locator('#siteSearch').fill('');
+  await page.waitForTimeout(300);
+
+  // Ideas dashboard: tiles, lenses, expand
+  check('ideas rendered', await page.locator('.idea').count() >= 12);
+  await page.locator('.chip[data-lens="alignment"]').click();
+  await page.waitForTimeout(200);
+  const alignCount = await page.locator('.idea:not([hidden])').count();
+  check('lens chip filters', alignCount > 0 && alignCount < await page.locator('.idea').count(), String(alignCount));
+  await page.locator('.chip[data-lens="all"]').click();
+  await page.locator('#idea-gomens .idea-head').click();
+  check('idea expands', await page.locator('#idea-gomens-more').isVisible());
+
+  // Sky strip: every tile resolves to a real state; an error never shows a number
+  await page.waitForFunction(() => Array.from(document.querySelectorAll('.sky-tile')).every(t => t.dataset.state !== 'loading'), null, { timeout: 25000 }).catch(() => {});
+  const states = await page.$$eval('.sky-tile', ts => ts.map(t => [t.dataset.state, t.querySelector('.sky-value').textContent]));
+  const resolved = states.every(([s]) => ['live', 'stale', 'nodata', 'error'].includes(s));
+  const honest = states.every(([s, v]) => (s === 'error' || s === 'nodata') ? !/\d/.test(v) : true);
+  check('sky tiles resolve', resolved, states.map(s => s[0]).join(','));
+  check('sky error/nodata never shows a number', honest);
+
+  // Golden thread knots follow the sections
+  check('thread knots', await page.locator('.thread-knot').count() === await page.locator('[data-thread]').count());
 
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForTimeout(800);
   check('garden persists', await page.locator('.emoji-footer').count() > 0);
 
+  await page.goto(BASE + '/', { waitUntil: 'networkidle' });
   await page.keyboard.press('Tab');
   check('skip link is first tab stop', await page.evaluate(() => document.activeElement.className) === 'skip-link');
   await ctx.close();
@@ -90,6 +119,17 @@ async function newPage(opts = {}) {
   await page.waitForTimeout(600);
   const after = await page.locator('.hero-images img').nth(3).evaluate(el => el.style.transform);
   check('scroll parallax (mobile)', before !== after);
+  await ctx.close();
+}
+
+// Mock mode renders numbers and says so
+{
+  const { ctx, page } = await newPage();
+  await page.goto(BASE + '/?mock=1', { waitUntil: 'networkidle' });
+  await page.waitForTimeout(800);
+  const v = await page.locator('#sky-kp .sky-value').textContent();
+  check('mock mode shows fixture value', /\d/.test(v), v);
+  check('mock mode is labelled', await page.locator('#sky-now.is-mock').count() === 1);
   await ctx.close();
 }
 
