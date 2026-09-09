@@ -114,7 +114,12 @@ header.top {
      1200 px they cannot share a row with the brand and a readable notice — and
      a flex row that cannot fit does not wrap by default, it crushes whatever is
      allowed to shrink. That was the notice. */
-  display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap;
+  /* nowrap, so the notice shrinks before anything moves. A *wrapping* row
+     breaks lines using each item's natural width and only then shrinks what is
+     left on the line — so with wrap on, the controls jumped to a second row
+     while the notice sat at its full 293 px, untouched. Wrapping returns below
+     1090 px, where even the notice's readable floor cannot close the gap. */
+  display: flex; align-items: center; gap: 0.8rem; flex-wrap: nowrap;
   padding: 0.3rem 0.7rem;
   min-height: var(--header-h);
   border-bottom: 1px solid var(--line);
@@ -143,7 +148,7 @@ header.top {
 .clock {
   margin: 0; font-family: var(--mono); font-size: 0.6rem; color: var(--ink-faint);
   white-space: nowrap; letter-spacing: 0.02em; line-height: 1;
-  align-self: flex-start; padding-left: 2.1rem;
+  align-self: flex-start; padding-left: 0;
 }
 
 /* The most consequential outstanding notice, in the space the header row was
@@ -189,8 +194,10 @@ header.top {
 .headline-alert.level-alert { border-color: rgba(255, 139, 115, 0.5); }
 .headline-alert.level-warning { border-color: rgba(240, 180, 41, 0.45); }
 
+/* Never shrinks: it would wrap its own buttons into a second row, which is the
+   height this was all trying to avoid. The notice gives way instead. */
 .controls {
-  display: flex; gap: 0.75rem; align-items: center; flex: 0 1 auto;
+  display: flex; gap: 0.75rem; align-items: center; flex: none;
   flex-wrap: wrap; justify-content: flex-end; margin-left: auto;
 }
 /* A cluster is a legend plus its buttons: the legend says what the group is
@@ -520,6 +527,30 @@ header.top {
    top that scrolls away, the controls collapse behind a disclosure, and the
    tiles and the panel are one continuous document below. Nothing is clipped and
    there is only ever one scroll region. */
+/* Fit the row rather than growing a second one.
+   Brand 143 + a readable notice + three control clusters is about 1250 px at
+   full size, so between there and the phone breakpoint the header has to give
+   something up. It gives up the legends first — SCALE / VIEW / LAYERS name
+   clusters whose buttons already say Globe, Deck, Field — and then a little
+   padding. Together that is ~200 px, which is the difference between one row
+   and two. `flex-wrap` stays as the floor: if it still will not fit, wrapping
+   is better than the collision it replaced. */
+@media (max-width: 1500px) {
+  .ctl-legend { display: none; }
+  .controls { gap: 0.5rem; }
+  .ctl-set { gap: 0; }
+}
+@media (max-width: 1180px) {
+  .ctl { padding: 0.3rem 0.4rem; font-size: 0.64rem; }
+  .controls { gap: 0.42rem; }
+  header.top { gap: 0.6rem; }
+}
+/* Below here the notice has spent its shrink and the row genuinely cannot hold
+   the clusters; wrapping is the honest outcome. */
+@media (max-width: 1090px) {
+  header.top { flex-wrap: wrap; }
+}
+
 .controls-toggle { display: none; }
 
 @media (max-width: 860px) {

@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import { Vector3 } from 'three';
 import {
-  EARTH_RADIUS_KM, geoToEcefKm, seedPoints, traceFieldLine, traceFullLine,
+  DEFAULT_SEEDS, EARTH_RADIUS_KM, geoToEcefKm, seedPoints, traceFieldLine, traceFullLine,
 } from '../src/models/fieldlines.js';
 import { igrfVector } from '../src/models/igrf14.js';
 
@@ -117,7 +117,15 @@ describe('tracing', () => {
 describe('seed layout', () => {
   it('covers both hemispheres on evenly spaced meridians', () => {
     const pts = seedPoints();
-    expect(pts.length).toBe(10 * 12);
+    // Derived from the spec rather than restated. Written as `10 * 12` this
+    // failed the moment the cage was thinned from twelve meridians to eight —
+    // reporting a deliberate change as a defect, which is all a test that
+    // repeats a constant can ever do.
+    expect(pts.length).toBe(DEFAULT_SEEDS.latitudes.length * DEFAULT_SEEDS.meridianCount);
+    // One seed per latitude per meridian, and the meridians evenly spaced.
+    // z is the polar axis in this frame, so longitude is atan2(y, x).
+    const lons = [...new Set(pts.map((p) => Math.round((Math.atan2(p.y, p.x) * 180) / Math.PI)))];
+    expect(lons.length).toBe(DEFAULT_SEEDS.meridianCount);
     expect(pts.some((p) => p.z > 0)).toBe(true);
     expect(pts.some((p) => p.z < 0)).toBe(true);
     for (const p of pts) expect(Re(p)).toBeCloseTo((EARTH_RADIUS_KM + 120) / EARTH_RADIUS_KM, 3);

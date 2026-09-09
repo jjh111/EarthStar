@@ -151,7 +151,11 @@ export const DEFAULT_SEEDS: SeedSpec = {
   // Both hemispheres; low latitudes give the closed inner shells, high ones the
   // long lines that show the field opening out.
   latitudes: [-72, -64, -55, -42, -28, 28, 42, 55, 64, 72],
-  meridianCount: 12,
+  // Eight meridians, not twelve. The latitudes carry the shell structure — the
+  // closed inner shells, the long open ones — and are worth keeping; the
+  // meridians only repeat that structure around the axis, and at twelve they
+  // repeated it into a mat. 80 lines instead of 120.
+  meridianCount: 8,
   altitudeKm: 120,
 };
 

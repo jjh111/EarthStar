@@ -326,12 +326,18 @@ export function shueWireframe(
   const push = (a: Vector3, b: Vector3) => { pos.push(a.x, a.y, a.z, b.x, b.y, b.z); };
   // Rings around the axis, closer together near the nose where the boundary
   // actually moves with the wind.
-  for (let i = 0; i <= THETA_STEPS; i += i < 16 ? 3 : 5) {
+  //
+  // Sparse on purpose. A dense lat/long grid over a half-dome stops reading as
+  // a boundary and starts reading as a solid shell — two glass hemispheres
+  // around the Earth, which is not what a magnetopause is. It is where the
+  // pressures balance; the deflection itself is in the field lines, and they
+  // should be what the eye follows. Half the ribs, and dimmer.
+  for (let i = 0; i <= THETA_STEPS; i += i < 16 ? 6 : 10) {
     const ring = grid[i]!;
     for (let j = 0; j < PHI_STEPS; j++) push(ring[j]!, ring[(j + 1) % PHI_STEPS]!);
   }
   // Meridians along it.
-  for (let j = 0; j < PHI_STEPS; j += 4) {
+  for (let j = 0; j < PHI_STEPS; j += 8) {
     for (let i = 0; i < THETA_STEPS; i++) push(grid[i]![j]!, grid[i + 1]![j]!);
   }
 
@@ -353,7 +359,7 @@ export class Magnetosphere {
     this.magnetopause = new LineSegments(
       new BufferGeometry(),
       new LineBasicMaterial({
-        color: new Color(0.45, 0.9, 0.8), transparent: true, opacity: 0.34,
+        color: new Color(0.45, 0.9, 0.8), transparent: true, opacity: 0.22,
         blending: AdditiveBlending, depthWrite: false,
       }),
     );
@@ -362,7 +368,7 @@ export class Magnetosphere {
     this.bowShock = new LineSegments(
       new BufferGeometry(),
       new LineBasicMaterial({
-        color: new Color(1.0, 0.62, 0.35), transparent: true, opacity: 0.20,
+        color: new Color(1.0, 0.62, 0.35), transparent: true, opacity: 0.13,
         blending: AdditiveBlending, depthWrite: false,
       }),
     );
