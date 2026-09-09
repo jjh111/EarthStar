@@ -183,3 +183,73 @@ describe('where the disk card stops', () => {
     expect(cardReachRsun(N, 20, rsunPx)).toBe((N / 2) / rsunPx);
   });
 });
+
+/**
+ * The hole in the middle of the picture is where the Sun goes.
+ *
+ * On a coronagraph that hole is the occulting disc — the solid circle the
+ * instrument puts over the Sun so the corona beside it can be exposed at all.
+ * On a disk card it is the limb. Either way the sphere has to sit inside it: an
+ * image scaled so the Sun pokes out through its own cutout is a picture of
+ * nothing that ever happened, and that is what Globe scale used to produce,
+ * because it exaggerates the Sun tenfold while compressing every distance.
+ */
+describe('the cutout holds the Sun', () => {
+  /** `ImagePlane.applyScale`, in the open. */
+  const extent = (halfWidthRsun: number, innerRsun: number, mode: 'globe' | 'true'): number =>
+    Math.max(
+      distanceToScene(halfWidthRsun * SUN_RADIUS_AU, mode),
+      (radiusToScene('Sun', mode) * halfWidthRsun) / innerRsun,
+    );
+
+  /** Scene radius of the image's inner cutout, which must clear the sphere. */
+  const cutout = (halfWidthRsun: number, innerRsun: number, mode: 'globe' | 'true'): number =>
+    (extent(halfWidthRsun, innerRsun, mode) * innerRsun) / halfWidthRsun;
+
+  const CASES = [
+    ['C2 coronagraph', 6.32, 2.30],
+    ['C3 coronagraph', 30.28, 4.49],
+    ['SUVI disk card', 1.62, 1.00],
+  ] as const;
+
+  it.each(CASES)('%s: the Sun fits its cutout at Globe scale', (_n, half, inner) => {
+    const sun = radiusToScene('Sun', 'globe');
+    expect(cutout(half, inner, 'globe')).toBeGreaterThanOrEqual(sun - 1e-9);
+  });
+
+  it.each(CASES)('%s: the Sun fits its cutout at True scale', (_n, half, inner) => {
+    const sun = radiusToScene('Sun', 'true');
+    expect(cutout(half, inner, 'true')).toBeGreaterThanOrEqual(sun - 1e-9);
+  });
+
+  it('leaves True scale exactly as measured — the occulter really does stand off', () => {
+    // At true scale the distance rule already clears the sphere, so anchoring
+    // must not shrink the picture: C2 still reaches 6.32 solar radii, and its
+    // occulter still sits at 2.30, not pulled in to 1.
+    const sun = radiusToScene('Sun', 'true');
+    expect(extent(6.32, 2.30, 'true') / sun).toBeCloseTo(6.32, 2);
+    expect(cutout(6.32, 2.30, 'true') / sun).toBeCloseTo(2.30, 2);
+  });
+
+  it('grows the picture at Globe scale rather than letting the Sun burst through', () => {
+    const sun = radiusToScene('Sun', 'globe');
+    // The distance rule alone put C2's whole 6.32-radius image at 1.6 sphere
+    // radii, so its 2.3-radius occulter landed *inside* the sphere.
+    const naive = distanceToScene(6.32 * SUN_RADIUS_AU, 'globe');
+    expect((naive * 2.30) / 6.32).toBeLessThan(sun);
+    // Anchored, the cutout meets the sphere exactly.
+    expect(cutout(6.32, 2.30, 'globe')).toBeCloseTo(sun, 6);
+  });
+
+  it('keeps the disk card meeting the sphere at the limb in both modes', () => {
+    for (const mode of ['globe', 'true'] as const) {
+      expect(cutout(1.62, 1, mode)).toBeCloseTo(radiusToScene('Sun', mode), 6);
+    }
+  });
+
+  it('still nests C2 inside C3', () => {
+    for (const mode of ['globe', 'true'] as const) {
+      expect(extent(6.32, 2.30, mode)).toBeLessThan(extent(30.28, 4.49, mode));
+    }
+  });
+});
