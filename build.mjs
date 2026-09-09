@@ -23,6 +23,36 @@ const ROOT = new URL('.', import.meta.url).pathname;
 const p = (rel) => ROOT + rel;
 
 const manifest = JSON.parse(readFileSync(p('src/archive/manifest.json'), 'utf8'));
+const concepts = JSON.parse(readFileSync(p('src/concepts.json'), 'utf8'));
+
+// ── 0. Ideas dashboard: concept tiles rendered at build time (no JS needed to read them) ──
+
+const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+function ideaHTML(c) {
+  const search = [c.name, c.meaning, c.more, c.alignment, c.formula, ...(c.lens || [])].filter(Boolean).join(' ');
+  const links = (c.links || []).map((l) => `<a href="${esc(l.href)}">${esc(l.label)}</a>`).join('');
+  return `<article class="idea" id="idea-${esc(c.id)}" data-id="${esc(c.id)}" data-lens="${esc((c.lens || []).join(' '))}" data-register="${esc(c.register)}" data-search="${esc(search)}">
+  <button class="idea-head" type="button" aria-expanded="false" aria-controls="idea-${esc(c.id)}-more">
+    <span class="idea-glyph" aria-hidden="true">${esc(c.glyph)}</span>
+    <span class="idea-name">${esc(c.name)}</span>
+    <span class="badge" title="${esc(concepts.registers[c.register] || '')}">${esc(c.register)}</span>
+  </button>
+  <p class="idea-meaning">${esc(c.meaning)}</p>
+  <div class="idea-more" id="idea-${esc(c.id)}-more" hidden>
+    ${c.formula ? `<p class="idea-formula">${esc(c.formula)}</p>` : ''}
+    <p>${esc(c.more)}</p>
+    ${c.alignment ? `<p class="idea-align"><strong>For AI:</strong> ${esc(c.alignment)}</p>` : ''}
+    ${links ? `<p class="idea-links">${links}</p>` : ''}
+  </div>
+</article>`;
+}
+
+const ideasGrid = concepts.concepts.map(ideaHTML).join('\n');
+const ideasLenses = concepts.lenses.map((l) =>
+  `<button type="button" class="chip" data-lens="${esc(l.id)}" aria-pressed="${l.id === 'all'}">${esc(l.label)}</button>`).join('');
+const registerLegend = Object.entries(concepts.registers).map(([k, v]) =>
+  `<span class="legend-item"><span class="badge">${k}</span> ${esc(v)}</span>`).join(' ');
 
 // ── 1. Archive fragments: markdown → HTML, written to /archive ──
 
@@ -73,6 +103,13 @@ const { code: minCss } = await transform(fontsCss + siteCss, { loader: 'css', mi
 let html = readFileSync(p('src/index.html'), 'utf8');
 html = html.replace('<!--BUILD:CSS-->', '<style>' + minCss + '</style>');
 html = html.replace('<!--BUILD:ARCHIVE_GRID-->', manifest.docs.map(cardHTML).join('\n'));
+html = html.replace('<!--BUILD:IDEAS_GRID-->', ideasGrid);
+html = html.replace('<!--BUILD:IDEAS_LENSES-->', ideasLenses);
+html = html.replace('<!--BUILD:REGISTER_LEGEND-->', registerLegend);
+
+// Mock fixture for ?mock=1 and tests — never consulted by the live path
+mkdirSync(p('assets/data'), { recursive: true });
+cpSync(p('src/data/now.mock.json'), p('assets/data/now.mock.json'));
 
 // Conservative HTML minify: strip comments and leading indentation only —
 // never touches intra-line whitespace, so inline elements are safe.

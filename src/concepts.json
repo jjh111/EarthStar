@@ -1,0 +1,189 @@
+{
+  "lenses": [
+    { "id": "all", "label": "All" },
+    { "id": "ontology", "label": "Ontology" },
+    { "id": "economics", "label": "Economics" },
+    { "id": "practice", "label": "Practice" },
+    { "id": "alignment", "label": "Alignment" },
+    { "id": "sky", "label": "Sky" }
+  ],
+  "registers": {
+    "E": "Empirical — measured, citable",
+    "H": "Historical — documented practice",
+    "D": "Design — proposal or model, not yet built",
+    "P": "Policy — draft text, not enacted law",
+    "M": "Mythopoetic — vision and commitment"
+  },
+  "concepts": [
+    {
+      "id": "prime-directive",
+      "name": "The Prime Directive",
+      "glyph": "∇",
+      "lens": ["ontology", "alignment"],
+      "register": "D",
+      "formula": "∇(𝒞) ≥ 0 across ∀𝑆 ∈ {body, biome, being, network, star}",
+      "meaning": "Coherence must rise at every scale, from your body to the star. If an action heals one scale by harming another, it isn't healing.",
+      "more": "Coherence is the aliveness of a system: how well its parts keep each other going. The directive isn't a rule to obey but a direction to move — every intervention is checked against all five scales at once.",
+      "alignment": "Aligning AI means replacing productivity metrics with a coherence gradient: does this action increase or decrease aliveness across body, biome, being, network, and star?",
+      "links": [{ "label": "Framework spec", "href": "#doc/earth-star-skill" }]
+    },
+    {
+      "id": "five-scales",
+      "name": "Five Fractal Scales",
+      "glyph": "⟷",
+      "lens": ["ontology", "alignment"],
+      "register": "D",
+      "meaning": "Body · Biome · Being · Network · Star. Heal one, and the pattern echoes through all — the same shape of care, all the way up and all the way down.",
+      "more": "Body is your physiology; biome the beach, the soil, the neighborhood; being the psyche and the community; network the supply chains and flows; star the planet in its solar neighborhood. Interventions at any scale resonate across the others.",
+      "alignment": "A system coherent in the body but chaotic in the network is not aligned — it has merely localized its damage. True alignment is fractal.",
+      "links": [{ "label": "Watch the star scale live", "href": "/viewer/" }]
+    },
+    {
+      "id": "gomens",
+      "name": "Gomens",
+      "glyph": "🜃",
+      "lens": ["ontology", "alignment"],
+      "register": "D",
+      "meaning": "Autonomous agents, imagined from fungus, bacteria and necessity, that metabolize waste into life. They tend. They do not extract.",
+      "more": "Gomens are design requirements, not products: multiscale (molecular to orbital), waste-seeking, symbiotic with existing life, and born with an apologetic heart — “gomen’nasai” acknowledges the disruption of acting at all. They accept their own obsolescence.",
+      "alignment": "Gomens are what alignment looks like when it grows legs and goes to work: Earth-first optimization, anti-accumulation, coherence generation as the core function.",
+      "links": [{ "label": "Engineering notes", "href": "#doc/earth-star-skill" }]
+    },
+    {
+      "id": "earth-stewards",
+      "name": "Earth Stewards",
+      "glyph": "✦",
+      "lens": ["practice", "ontology"],
+      "register": "D",
+      "meaning": "The humans bridging extractive systems and regenerative ones — flesh and blood with far better tools, working from the eighteen-second rescue to the seven-generation plan.",
+      "more": "Stewards translate between paradigms, tend waste-transformation sites, facilitate the deployment of Gomens, and practice infinite play. Their training begins with the certainty of death and ends in fearlessness.",
+      "links": [{ "label": "Training protocols", "href": "#doc/earth-star-skill" }]
+    },
+    {
+      "id": "tending",
+      "name": "Tending",
+      "glyph": "🌱",
+      "lens": ["practice"],
+      "register": "H",
+      "meaning": "The missing middle of every equation: the labor of care. Not observing, not calculating — presence, hands, relationship, over time.",
+      "more": "Gomens = ∑(waste × love) → TENDING → ∂regenerative systems/∂time. California’s indigenous peoples tended these lands for ten thousand years — daily observation, fire for renewal, harvest below the rate of regrowth — documented in M. Kat Anderson’s Tending the Wild (2005).",
+      "links": [{ "label": "Plant something below", "href": "#footerGarden" }]
+    },
+    {
+      "id": "waste-as-signal",
+      "name": "Waste as Signal",
+      "glyph": "♻",
+      "lens": ["economics", "alignment"],
+      "register": "D",
+      "meaning": "Waste is information about where coherence is breaking down. It is the highest-value resource on the board — a map of what needs tending.",
+      "more": "Traditional economics treats waste as an externality. Earth Star reads it as a broadcast: systems that produce waste announce their inefficiency, and that is exactly where Gomens converge.",
+      "alignment": "An aligned system does not suppress disorder — it metabolizes it. Systems that hide waste are misaligned. Systems that eat it are not.",
+      "links": [{ "label": "The Waste Reclamation Fund", "href": "#doc/wrf" }]
+    },
+    {
+      "id": "kincentric",
+      "name": "The Kincentric Worldview",
+      "glyph": "🌿",
+      "lens": ["ontology", "alignment"],
+      "register": "H",
+      "meaning": "Plants and animals as relatives. When the forest is family, you cannot optimize it to extinction — extraction becomes unthinkable, not merely forbidden.",
+      "more": "Indigenous California’s gift to the framework: an anti-extractive ontology carried in culture for ten thousand years. Earth Star re-encodes it, and owes the debt out loud.",
+      "alignment": "Rules can be gamed; relationships cannot. Kincentric ethics rewires the utility function at the root — the deepest form of alignment.",
+      "links": [{ "label": "Tending the Wild", "href": "#doc/earth-star-skill" }]
+    },
+    {
+      "id": "death-acceptance",
+      "name": "Death-Acceptance",
+      "glyph": "☽",
+      "lens": ["practice", "alignment"],
+      "register": "D",
+      "meaning": "Face mortality fully; fear loses its grip; then act from love of life rather than from self-preservation. The ethical override, discovered in an ocean rescue at sixteen.",
+      "more": "The certainty of doom is a saving grace: accepted, it frees you to act with total clarity. Stewards train it; Gomens hardcode it — they can be obsoleted when something better arrives.",
+      "alignment": "An aligned AI can be wrong and can be replaced. Impermanence is what makes it trustworthy: a system that cannot die cannot be honest about its limits.",
+      "links": []
+    },
+    {
+      "id": "infinite-game",
+      "name": "The Infinite Game",
+      "glyph": "∞",
+      "lens": ["ontology", "alignment"],
+      "register": "D",
+      "meaning": "Play to keep playing, not to win. Resources circulate; the horizon is generations; success is continuation.",
+      "more": "Civilization is playing finite games on an infinite board. Gomens are infinite-game algorithms; Stewards are infinite-game players; the butterfly emerges when infinite play reaches critical mass.",
+      "alignment": "Any strategy that forecloses future possibility — burning the commons for a local maximum — is alignment failure. The infinite game is the only game worth building for.",
+      "links": []
+    },
+    {
+      "id": "seven-generations",
+      "name": "Seven-Generation Thinking",
+      "glyph": "◎",
+      "lens": ["practice", "alignment"],
+      "register": "H",
+      "meaning": "Every decision asks what it costs, or gives, the seventh generation. Deep time adds obligations; it never dissolves the next step.",
+      "more": "Indigenous management guidelines — leave some for tomorrow, some for the other animals — made structural. Pair every seventh-generation claim with a first-generation action.",
+      "alignment": "Shortcuts that feel efficient now are often extractions from the future. The time horizon is the ethical horizon.",
+      "links": []
+    },
+    {
+      "id": "wrf",
+      "name": "The Waste Reclamation Fund",
+      "glyph": "⚖",
+      "lens": ["economics"],
+      "register": "P",
+      "meaning": "A per-item fee on waste-generating products, retroactive to first sale, funding research, restoration, and Earth Stewards as a job. Draft legislation — not enacted law.",
+      "more": "Companies retrofit with it; newcomers disrupt with it; planned obsolescence is penalized; waste export is banned. Externalized liabilities become internal again — profits from poisoning aren’t real profits.",
+      "links": [{ "label": "Read the bill", "href": "#doc/wrf" }, { "label": "Harmonious Computing Act", "href": "#doc/harmonious-computing" }]
+    },
+    {
+      "id": "cold-start",
+      "name": "The Cold Start",
+      "glyph": "🦋",
+      "lens": ["practice"],
+      "register": "M",
+      "meaning": "You cannot escape your civilization’s waste, so start where you are: pick up trash today, tell the story, build the tools, let it propagate.",
+      "more": "Micro-map: stories between intelligences. Meso-map: patterns encoded into agents — the skill. Macro-map: Stewards finding each other. Meta-map: the framework describing itself. The cold start is not separate from the work; it is the work.",
+      "links": [{ "label": "The skill (v3.1)", "href": "#begin" }]
+    },
+    {
+      "id": "registers",
+      "name": "Epistemic Registers",
+      "glyph": "📜",
+      "lens": ["practice", "alignment"],
+      "register": "D",
+      "meaning": "Every claim is one of five kinds — measured, historical, design, policy, or myth — and the kinds never contaminate each other. Certainty is a stance, not evidence.",
+      "more": "“We make it” is a vow, not a forecast. The ten thousand years is documented precedent. Gomens are design requirements. The dream inspires and never testifies. The badges on this page — [E] [H] [D] [P] [M] — are that discipline made visible.",
+      "alignment": "An aligned system labels what it knows, what it models, and what it hopes — and never lets the third impersonate the first.",
+      "links": [{ "label": "Research veracity protocol", "href": "#doc/research-veracity" }]
+    },
+    {
+      "id": "viewer",
+      "name": "The Viewer",
+      "glyph": "☉",
+      "lens": ["sky", "practice"],
+      "register": "E",
+      "meaning": "The star scale, live: solar wind at L1, Earth’s magnetic shield reshaping to it, the aurora, the Sun’s own pictures — every number carrying its source, time, and evidence tier.",
+      "more": "A 3D instrument and a snow globe at once, watched from the deck of the tree-ship. No server: your browser reads NOAA and NASA directly. Modeled things say they are modeled; missing data says it is missing.",
+      "links": [{ "label": "Open the Viewer", "href": "/viewer/" }, { "label": "Data catalog", "href": "#doc/heliosphere-data" }]
+    },
+    {
+      "id": "magnetosphere",
+      "name": "The Shield",
+      "glyph": "◠",
+      "lens": ["sky"],
+      "register": "E",
+      "meaning": "Earth’s magnetic field, blown into a comet shape by the solar wind. Its sunward edge sits about ten Earth radii out on a quiet day and is pushed inward when the wind hits.",
+      "more": "The Viewer draws the field from IGRF-14 and the shield’s edge from the Shue (1998) model driven by live wind — and checks the model against a satellite that actually sits at the boundary.",
+      "links": [{ "label": "See it reshape", "href": "/viewer/" }]
+    },
+    {
+      "id": "forest-city",
+      "name": "The Forest City Dream",
+      "glyph": "🌲",
+      "lens": ["ontology"],
+      "register": "M",
+      "meaning": "A dream of the completed world — megatree cities, diamond armor built for peace, children flying on resonance fields — and a woman who said: we do make it.",
+      "more": "Held as a commitment device, not a forecast: the certainty is chosen. It makes the doom optional and the destination legible, and it generates design targets without ever serving as evidence.",
+      "links": [{ "label": "The full vision", "href": "#doc/earth-star-skill" }]
+    }
+  ]
+}

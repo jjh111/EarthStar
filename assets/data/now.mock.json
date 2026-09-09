@@ -1,0 +1,8 @@
+{
+  "mock": true,
+  "note": "Fixture for ?mock=1 and tests only. Never served as live data.",
+  "kp": { "time": "2026-09-09T15:44:00Z", "estimated_kp": 2.33, "kp": "2+" },
+  "wind": { "time": "2026-09-09T15:42:00Z", "spacecraft": "SOLAR1", "speed": 457.7, "density": 5.32, "bz_gsm": 3.24, "bt": 7.39 },
+  "xray": { "time": "2026-09-09T15:44:00Z", "flux_long": 1.1e-6, "class": "C1.1", "satellite": 18 },
+  "scales": { "time": "2026-09-09T15:00:00Z", "R": 0, "S": 0, "G": 1, "text": { "R": "none", "S": "none", "G": "minor" } }
+}
