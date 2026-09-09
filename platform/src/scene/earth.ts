@@ -167,6 +167,11 @@ function blankTexture(): Texture {
 
 function imageTexture(img: HTMLImageElement): Texture {
   const t = new Texture(img);
+  // Without this the image is never uploaded to the GPU and every sample reads
+  // black — a fully downloaded, fully decoded Blue Marble rendering as a dead
+  // sphere, with nothing in the console and a 200 in the network panel.
+  // `CanvasTexture` sets it for you on construction; `Texture` does not.
+  t.needsUpdate = true;
   t.colorSpace = SRGBColorSpace;
   // Power-of-two equirect rasters, so mipmaps are valid and the far side of
   // the globe does not shimmer.
