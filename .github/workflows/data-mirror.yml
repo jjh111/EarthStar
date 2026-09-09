@@ -15,9 +15,14 @@ name: Data mirror
 
 on:
   schedule:
-    # Every half hour. GitHub runs scheduled workflows on a best-effort basis
-    # and delays them under load, which is fine: this is a fallback, and the
-    # page reports the real age of whatever it finds here.
+    # Asks for every half hour. Does not get it: GitHub delays scheduled
+    # workflows on public repositories, and the observed intervals here run
+    # 2-5 hours, median about four. The cron is a request, not a promise.
+    #
+    # That is fine — this is a fallback, every record keeps upstream's own
+    # timestamp, and the page reports the real age of whatever it finds. What
+    # is not fine is a staleness alarm tuned to the request rather than the
+    # delivery; see MIRROR_STALE_H in platform/scripts/health.mjs.
     - cron: '*/30 * * * *'
   workflow_dispatch:
   push:
@@ -74,7 +79,7 @@ jobs:
           git worktree add --detach "$RUNNER_TEMP/pub"
           cd "$RUNNER_TEMP/pub"
           # An orphan branch, force-pushed: one commit, no history. A feed
-          # copied every half hour would otherwise grow the repository without
+          # copied every few hours would otherwise grow the repository without
           # limit, and nobody wants to read last Tuesday's solar wind twice.
           git checkout --orphan data
           git rm -rq --cached . || true
@@ -84,7 +89,9 @@ jobs:
           # Earth Star — data branch (stage B)
 
           Byte-for-byte copies of the NOAA SWPC payloads The Viewer reads,
-          refreshed every half hour by `.github/workflows/data-mirror.yml`.
+          refreshed by `.github/workflows/data-mirror.yml` — nominally every
+          half hour, in practice every 2-5 hours, because GitHub delays
+          scheduled workflows on public repositories.
           Long fast-moving arrays are cut to their newest rows; archives are
           copied whole. Every record keeps upstream's own timestamps.
 

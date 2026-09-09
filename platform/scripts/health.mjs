@@ -31,9 +31,27 @@ const DEPLOY = 'https://earthstar.space/viewer/';
 const MIRROR_MANIFEST =
   'https://raw.githubusercontent.com/jjh111/EarthStar/data/v1/manifest.json';
 
-/** A mirror older than this has stopped running: it refreshes every 30 minutes,
- *  and GitHub's scheduler is late often enough that an hour proves nothing. */
-const MIRROR_STALE_H = 3;
+/**
+ * A mirror older than this has genuinely stopped.
+ *
+ * The workflow asks for every thirty minutes. It does not get it: GitHub delays
+ * scheduled workflows on public repositories, and the observed intervals over
+ * five consecutive scheduled runs were 2.2, 2.5, 4.9, 5.4 and 4.1 hours —
+ * median about four. The cron is a request, not a promise.
+ *
+ * Three hours was therefore a threshold the mirror breaches in normal
+ * operation, which would have opened a standing issue reading "the mirror has
+ * stopped" while it was running perfectly. That is the exact failure the
+ * notifier exists to avoid: an alarm that is wrong sometimes gets muted, and a
+ * muted alarm is worse than none because it is mistaken for coverage.
+ *
+ * Twelve hours clears the observed spread and still catches a real stop — a
+ * disabled workflow, a broken push — within half a day. The mirror is a
+ * fallback consulted only when NOAA is unreachable, and every record in it
+ * keeps upstream's own timestamp, so a reader sees the true age of each
+ * measurement however long ago the copy was taken.
+ */
+const MIRROR_STALE_H = 12;
 
 const JSON_OUT = process.argv.includes('--json');
 
