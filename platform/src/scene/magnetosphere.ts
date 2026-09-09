@@ -13,9 +13,28 @@ import {
   AdditiveBlending, BufferGeometry, Color, Float32BufferAttribute,
   Group, Line, LineBasicMaterial, LineSegments, ShaderMaterial, Vector3,
 } from 'three';
-import { EARTH_RADIUS_KM, traceAll, type FieldLine } from '../models/fieldlines.js';
+import { DEFAULT_SEEDS, EARTH_RADIUS_KM, SIGNATURE_SEEDS, traceAll } from '../models/fieldlines.js';
+import type { FieldLine } from '../models/fieldlines.js';
 import { shueRadius, type Magnetopause } from '../models/shue1998.js';
 import { toScene } from '../models/ephemeris.js';
+
+/** The default seed spec, aliased to keep the far-set switch terse. */
+const DEFAULT_SPEC = DEFAULT_SEEDS;
+
+/** GLSL smoothstep, for the opacity curve shared with the shader. */
+function smoothstep(a: number, b: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * Camera distances, in Earth radii, between which the drawn set switches.
+ * The threshold the plan sets is ~100 Rₑ; the 40 Rₑ of hysteresis between
+ * entering and leaving the far set keeps a camera parked near the threshold
+ * from retracing every frame.
+ */
+const FAR_ON_RE = 120;
+const FAR_OFF_RE = 80;
 
 /** Earth-fixed km → the Earth mesh's local frame, in units of Earth radii. */
 function ecefToLocal(p: Vector3): Vector3 {
@@ -27,7 +46,7 @@ const OPEN_COLOR = new Color(0.72, 0.55, 1.0);
 
 /**
  * Field lines are traced from IGRF-14 alone, which knows nothing about the
- * solar wind — an unconfined internal field extends forever. Two effects are
+ * solar wind — an unconfined internal field extends forever. Four effects are
  * applied on the GPU on top of that:
  *
  *  · CONFINEMENT `[D, approximate]` — vertices outside the Shue magnetopause
@@ -38,6 +57,13 @@ const OPEN_COLOR = new Color(0.72, 0.55, 1.0);
  *  · SHIVER `[M]` — a small transverse oscillation whose amplitude follows Kp.
  *    Pure ambience. The real field does not wobble like this; disturbance is
  *    genuinely higher at high Kp, and this is a legend for that, nothing more.
+ *  · DISTANCE FADE — line opacity scales down with camera distance, so the
+ *    cage that is the subject at Deck does not become a mat of noise when the
+ *    whole system is in frame.
+ *  · DEPTH FADE — the half of every loop that passes behind the globe fades
+ *    by view-space z, so a line reads as wrapping the globe rather than
+ *    crossing it. Cheap: depth, not occlusion queries. The depth test still
+ *    hides what is truly occluded.
  */
 const lineVert = /* glsl */ `
   uniform float uTime;
@@ -47,6 +73,7 @@ const lineVert = /* glsl */ `
   uniform vec3  uSunDir;      // unit, Earth-fixed frame
   uniform float uConfine;     // 0 = raw IGRF, 1 = clamped to the magnetopause
   varying float vDepth;
+  varying float vViewZ;
 
   void main() {
     vec3 p = position;
@@ -54,7 +81,7 @@ const lineVert = /* glsl */ `
 
     if (uShiver > 0.001) {
       vec3 axis = normalize(cross(p, vec3(0.0, 1.0, 0.0)) + vec3(0.0001));
-      float amp = uShiver * 0.045 * min(r, 5.0);
+      float amp = uShiver * 0.0225 * min(r, 5.0);
       p += axis * amp * sin(uTime * 1.9 + r * 2.3 + p.y * 2.7);
       r = max(length(p), 0.0001);
     }
@@ -67,17 +94,26 @@ const lineVert = /* glsl */ `
     }
 
     vDepth = r;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+    vec4 viewPos = modelViewMatrix * vec4(p, 1.0);
+    vViewZ = -viewPos.z;
+    gl_Position = projectionMatrix * viewPos;
   }
 `;
 
 const lineFrag = /* glsl */ `
   uniform vec3 uColor;
   uniform float uOpacity;
+  uniform float uCamDist;     // camera → Earth centre, scene units
+  uniform float uGlobeR;      // globe radius, scene units
   varying float vDepth;
+  varying float vViewZ;
   void main() {
     // Fade with distance so the near-Earth structure stays readable.
     float fade = 1.0 - smoothstep(2.0, 14.0, vDepth) * 0.55;
+    // And behind the globe: from just in front of the centre plane to just
+    // past the back limb, the line lets go of the frame.
+    float behind = smoothstep(uCamDist - uGlobeR * 0.25, uCamDist + uGlobeR * 0.8, vViewZ);
+    fade *= 1.0 - 0.85 * behind;
     gl_FragColor = vec4(uColor, uOpacity * fade);
     #include <colorspace_fragment>
   }
@@ -89,6 +125,10 @@ export class FieldLines {
   private lines: Line[] = [];
   private materials: ShaderMaterial[] = [];
   private tracedFor: number | null = null;
+  /** Which seed set the current lines were traced from. */
+  private tracedSet: 'full' | 'signature' | null = null;
+  /** Hysteresis between the two sets, from the camera's distance in Rₑ. */
+  private far = false;
   private reduced = false;
   private frozenAt = 0;
 
@@ -98,13 +138,16 @@ export class FieldLines {
 
   /**
    * Tracing is a one-off: the main field is Earth-fixed and changes only by
-   * secular variation, so retrace at most once a day rather than per frame.
+   * secular variation, so retrace at most once a day rather than per frame —
+   * or when the camera's distance moves the line across the far-set threshold.
    */
   ensureTraced(date: Date): void {
     const day = Math.floor(date.getTime() / 86_400_000);
-    if (this.tracedFor === day) return;
+    const want: 'full' | 'signature' = this.far ? 'signature' : 'full';
+    if (this.tracedFor === day && this.tracedSet === want) return;
     this.tracedFor = day;
-    this.build(traceAll(date));
+    this.tracedSet = want;
+    this.build(traceAll(date, want === 'signature' ? SIGNATURE_SEEDS : DEFAULT_SPEC));
   }
 
   private build(traced: FieldLine[]): void {
@@ -126,6 +169,9 @@ export class FieldLines {
           uAlpha: { value: 0.58 },
           uSunDir: { value: new Vector3(1, 0, 0) },
           uConfine: { value: 1 },
+          uCamDist: { value: 20 },
+          uGlobeR: { value: 0.1 },
+          uFarFade: { value: 1 },
           // Closed (trapped) and open (polar, wind-connected) lines are
           // physically different things, so they are not drawn the same.
           uColor: { value: line.closed ? CLOSED_COLOR : OPEN_COLOR },
@@ -140,6 +186,35 @@ export class FieldLines {
       l.name = line.closed ? 'field-line-closed' : 'field-line-open';
       this.lines.push(l);
       this.group.add(l);
+    }
+  }
+
+  /**
+   * How the camera distance reshapes what is drawn — the one place the seed
+   * set and the line opacity answer to the view.
+   *
+   *  · Beyond the far threshold the cage is retraced as twelve signature
+   *    lines; coming back in retraces the full set. Tracing ~120 RK4 lines is
+   *    a one-time cost on the crossing, not a per-frame one.
+   *  · Opacity falls with distance continuously, so the tangle thins out
+   *    before the threshold is reached rather than popping at it.
+   *
+   * `distanceRe` is camera → Earth in Earth radii (scene distance over the
+   * rendered radius), `globeR` the globe radius in scene units.
+   */
+  setCamera(distanceRe: number, globeR: number, camDistScene: number): void {
+    const want = distanceRe > FAR_ON_RE ? true : distanceRe < FAR_OFF_RE ? false : this.far;
+    if (want !== this.far) this.far = want;
+
+    // Twenty-six Rₑ is the Deck/Sunward standoff where the cage is the
+    // subject; a hundred is System scale, where it has long become noise.
+    const scale = this.far
+      ? 0.85   // the twelve survivors stand in for the whole cage — keep them legible
+      : 1.0 - 0.45 * smoothstep(26, 100, distanceRe);
+    for (const m of this.materials) {
+      m.uniforms['uFarFade']!.value = scale;
+      m.uniforms['uCamDist']!.value = camDistScene;
+      m.uniforms['uGlobeR']!.value = globeR;
     }
   }
 
@@ -179,6 +254,9 @@ export class FieldLines {
   }
 
   get lineCount(): number { return this.lines.length; }
+
+  /** Whether the far (signature) set is currently drawn. */
+  get farSet(): boolean { return this.far; }
 
   get pointCount(): number {
     return this.lines.reduce(

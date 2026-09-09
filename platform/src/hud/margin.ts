@@ -80,6 +80,8 @@ export function renderReport(
 ): string {
   const lines = buildSituationReport(
     state.now, narration, now, state.aurora, state.cmes, state.spacecraft?.data ?? [],
+    { snapshot: state.lanes.snapshot, aurora: state.lanes.aurora, cmes: state.lanes.cmes,
+      nextAttempt: state.nextAttempt },
   );
   // The sentence carries its own evidence: each quantity appears as glyph,
   // sparkline and number together. The prose report follows it, and the
@@ -123,9 +125,13 @@ function kpBars(f: ForecastBundle): string {
 export function renderForecast(
   f: ForecastBundle | null, loading: boolean, cmes: Cme[] = [],
   remembered?: (id: string) => boolean | undefined,
+  error: string | null = null,
 ): string {
   if (!f) {
-    return `<h2>Ahead</h2><p>${loading ? 'Loading NOAA forecasts…' : 'Forecasts have not loaded.'}</p>`;
+    return `<h2>Ahead</h2><p>${
+      loading ? '<span class="tile-state loading">Loading NOAA forecasts<span class="pulse">…</span></span>'
+        : error ? `<span class="tile-state err"><span class="tile-state-word">unavailable</span> · ${escapeHtml(error)}</span>`
+          : 'no data — the forecasts could not be parsed.'}</p>`;
   }
   const three = f.threeDay ? stripProductHeader(f.threeDay) : null;
   const disc = f.discussion ? stripProductHeader(f.discussion) : null;
@@ -297,9 +303,36 @@ function metaRow(key: string, m: PartMeta): string {
 export function renderSources(
   state: StoreState, checks: CheckResult | null,
   remembered?: (id: string) => boolean | undefined,
+  earth: { surface: 'vector' | 'imagery' | 'loading'; lights: boolean; coast: boolean } =
+    { surface: 'vector', lights: false, coast: false },
 ): string {
   const env = state.now;
   if (!env) return '<h2>Provenance</h2><p>No envelope loaded yet.</p>';
+
+  /**
+   * The Earth base imagery. It is not a polled feed, so the staleness columns
+   * do not apply — what is stated instead is the acquisition period of the
+   * composite, which is the date that actually means something about these
+   * pixels. The first Earth pixels on the page that are a measurement.
+   */
+  const earthRow = (kind: string, source: string, url: string, period: string, note: string, on: boolean): string =>
+    `<tr>
+      <td>${kind}</td>
+      <td><span class="badge badge-e">E</span></td>
+      <td><a href="${url}" rel="noreferrer noopener" target="_blank">${source}</a>
+        <br><span class="tile-meta">${note}</span></td>
+      <td class="num">${period}</td>
+      <td class="num">${on ? 'on screen' : '—'}</td>
+    </tr>`;
+  const earthRows = `
+      ${earthRow('earth surface', 'NASA Blue Marble Next Generation',
+        'https://earthobservatory.nasa.gov/features/BlueMarble/blue_marble.php',
+        '2004-12', 'a composite, not live; public domain. Lazy-loaded after first paint.',
+        earth.surface === 'imagery')}
+      ${earthRow('earth night lights', 'NASA Black Marble 2016',
+        'https://earthobservatory.nasa.gov/features/night-lights/page/2',
+        '2016', 'Suomi NPP VIIRS day/night band composite, drawn as emission on the night side.',
+        earth.lights)}`;
 
   const au = state.aurora;
   const auRow = au ? `<tr>
@@ -324,6 +357,18 @@ export function renderSources(
         <thead><tr><th>Element</th><th>Tier</th><th>Source</th><th>Time</th><th>Lat.</th></tr></thead>
         <tbody>${Object.entries(env.parts).map(([k, m]) => metaRow(k, m)).join('')}${auRow}</tbody>
       </table>`, true, remembered)}
+    ${section('prov-earth', 'The Earth base — imagery, not a feed', `
+      <table class="prov">
+        <thead><tr><th>Element</th><th>Tier</th><th>Source</th><th>Acquired</th><th>On screen</th></tr></thead>
+        <tbody>${earthRows}
+          <tr><td>coastlines</td><td><span class="badge badge-m">M</span></td>
+            <td>Natural Earth 110m land (vector), optional overlay</td>
+            <td class="num">static</td><td class="num">${earth.coast ? 'on' : 'off'}</td></tr>
+        </tbody>
+      </table>
+      <p class="tile-meta">Until the rasters arrive the globe carries the vector base map
+      — cartography [M], not measurement — and the Situation Report says which is showing.</p>`,
+      false, remembered)}
     ${section('prov-monitors', 'The monitors', monitors, false, remembered)}
     ${section('prov-tiers', 'What the tiers mean', `
       <p><span class="badge badge-e">E</span> Measured — read from an instrument, shown with its
@@ -446,9 +491,17 @@ export interface SunState {
   /** Frames cached so far; playback waits for the full set. */
   preloaded: number;
   preloading: boolean;
+  /**
+   * Why there is no loop while `loading` is false — the transport's reason
+   * class. Null when the fetch has not failed; "no data" is the completed
+   * fetch that carried nothing usable and needs no reason of its own.
+   */
+  error: string | null;
+  /** When the imagery lane retries, so the error text can be exact. */
+  retryAt: string | null;
 
   /**
-   * The coronagraph is a *second, independent*selection, not an alternative
+   * The coronagraph is a *second, independent* selection, not an alternative
    * to the disk image. They are pictures of different regions — SUVI to 1.6
    * solar radii, C2 from 2.3 to 6.3, C3 from 4.5 to 30 — so they stack rather
    * than replace, and the panel offers them as two control sets.
@@ -456,6 +509,8 @@ export interface SunState {
   corona: ImageLoop | null;
   coronaId: string | null;
   coronaLoading: boolean;
+  coronaError: string | null;
+  coronaRetryAt: string | null;
 
   /** What the scene measured out of each frame; null when it could not. */
   diskPlane: SunPlaneCalibration | null;
@@ -468,15 +523,46 @@ function mb(bytes: number | null, frames: number): string {
 }
 
 /**
+ * The one-line state text a Sun-panel section shows in place of its frame.
+ * Imagery is its own lane with its own clock, so its states are written here
+ * rather than borrowed from the store's: loading, no data (a completed fetch
+ * that carried nothing usable), and error ("unavailable" plus the reason and
+ * the retry time). The frame timestamp appears before the pixels — once the
+ * list is in, the stamp renders and the image slot fills behind it.
+ */
+function imageryState(
+  kind: string, loading: boolean, hasLoop: boolean,
+  error: string | null, retryAt: string | null,
+): { state: 'loading' | 'no-data' | 'error' | 'fresh'; text: string } {
+  if (loading) {
+    return { state: 'loading', text: `<p class="tile-state loading">Loading ${kind} frames<span class="pulse">…</span></p>` };
+  }
+  if (error) {
+    const next = retryAt ? ` · retrying at ${hhmmUTC(retryAt)} UTC` : '';
+    return { state: 'error', text: `<p class="tile-state err"><span class="tile-state-word">unavailable</span> · ${escapeHtml(error)}${next}</p>` };
+  }
+  if (!hasLoop) {
+    return { state: 'no-data', text: `<p class="tile-state">no data — the frame list carried no usable frames.</p>` };
+  }
+  return { state: 'fresh', text: '' };
+}
+
+/**
  * Century-scale context. Two sparklines: the whole record, and the last three
  * cycles. The point of the first is that today's number is unremarkable, which
  * only a 275-year line can say.
  */
-function solarCyclePanel(c: SolarCycle | null, loading: boolean): string {
+function solarCyclePanel(
+  c: SolarCycle | null, loading: boolean, error: string | null,
+): string {
   if (!c) {
-    return loading
-      ? '<h3>Solar cycle</h3><p class="tile-meta">Loading the sunspot record…</p>'
-      : '';
+    if (loading) {
+      return '<h3>Solar cycle</h3><p class="tile-state loading">Loading the sunspot record<span class="pulse">…</span></p>';
+    }
+    if (error) {
+      return `<h3>Solar cycle</h3><p class="tile-state err"><span class="tile-state-word">unavailable</span> · ${escapeHtml(error)}</p>`;
+    }
+    return '<h3>Solar cycle</h3><p class="tile-state">no data — the record could not be parsed.</p>';
   }
   const now = c.latest;
   const years = c.ssn.time.length / 12;
@@ -499,7 +585,7 @@ function solarCyclePanel(c: SolarCycle | null, loading: boolean): string {
 
 export function renderSun(
   sun: SunState, specs: Array<{ id: string; label: string; kind: LoopKind }>,
-  cycle: SolarCycle | null = null, cycleLoading = false,
+  cycle: SolarCycle | null = null, cycleLoading = false, cycleError: string | null = null,
 ): string {
   /**
    * Two control sets, because the two instruments answer different questions
@@ -527,15 +613,38 @@ export function renderSun(
         btn(x.id, x.label, x.id === sun.coronaId, 'data-corona')).join('')}</div>
     </div>`;
 
-  if (sun.loading && !sun.loop) {
-    return `<h2>The Sun</h2>${picker}<p>Loading frames…</p>`;
-  }
-  if (!sun.loop) {
-    return `<h2>The Sun</h2>${picker}
-      <p>That imagery did not load. Nothing is shown in its place.</p>`;
-  }
+  /**
+   * The disk and the coronagraph render in *every* state, each with its own
+   * loading / no data / error text. A SUVI outage must not hide a working
+   * LASCO — the two selections are independent by design and their failures
+   * are theirs alone.
+   */
+  const disk = imageryState('SUVI', sun.loading, !!sun.loop, sun.error, sun.retryAt);
+  const diskBody = sun.loop ? diskSection(sun) : disk.text;
 
-  const L = sun.loop;
+  const coronaOn = sun.coronaId !== null;
+  const corona = coronaOn
+    ? imageryState('coronagraph', sun.coronaLoading, !!sun.corona, sun.coronaError, sun.coronaRetryAt)
+    : null;
+  const coronaBody = coronaOn
+    ? (corona!.state === 'fresh' ? coronaPanel(sun) : corona!.text)
+    : '';
+
+  return `
+    <h2>The Sun</h2>
+    ${picker}
+    <section class="sun-sec" data-state="${coronaOn ? corona!.state : disk.state}" aria-label="Disk imagery">
+      ${diskBody}
+    </section>
+    <section class="sun-sec" data-state="${corona ? corona.state : 'fresh'}" aria-label="Coronagraph">
+      ${coronaBody}
+    </section>
+    ${solarCyclePanel(cycle, cycleLoading, cycleError)}`;
+}
+
+/** The disk section as it looks when the loop is in hand. */
+function diskSection(sun: SunState): string {
+  const L = sun.loop!;
   const f = L.frames[sun.frameIndex] ?? L.frames[L.frames.length - 1]!;
   // Resolved per frame, not per loop: a loop can span a spacecraft handover,
   // and the label belongs to the image on screen.
@@ -554,8 +663,6 @@ export function renderSun(
       : `<button class="ctl" id="sun-play">Load loop · ${n} frames, ${mb(L.frameBytes, n)}</button>`;
 
   return `
-    <h2>The Sun</h2>
-    ${picker}
     <div class="sun-frame">
       <!-- The image element is not written here. It is owned by the image
            cache and moved into this slot after render, so that rebuilding the
@@ -567,15 +674,13 @@ export function renderSun(
     <div class="sun-transport">${transport}</div>
     <p><span class="badge badge-e">E</span> ${escapeHtml(instrument)}. ${escapeHtml(L.describes)}</p>
     ${diskCardNote(sun)}
-    ${coronaPanel(sun)}
     <p class="tile-meta">${L.skippedDropouts > 0
       ? `The newest ${L.skippedDropouts} frame${L.skippedDropouts > 1 ? 's were' : ' was'} a
          data dropout — a valid but near-empty image — so this is the newest usable one. `
       : 'Showing the newest frame. '}Upstream published ${L.totalAvailable} frames
     over ${L.spanHours.toFixed(0)} hours; playback samples ${n} of them evenly, always keeping
     the newest. Each frame carries its own observation time.
-    <a href="${L.sourceUrl}" rel="noreferrer noopener" target="_blank">Frame list</a>.</p>
-    ${solarCyclePanel(cycle, cycleLoading)}`;
+    <a href="${L.sourceUrl}" rel="noreferrer noopener" target="_blank">Frame list</a>.</p>`;
 }
 
 /**
@@ -603,19 +708,13 @@ function diskCardNote(sun: SunState): string {
 }
 
 /**
- * The coronagraph, when one is switched on — a second exposure of a region the
- * disk imagers cannot reach, so it is shown alongside rather than instead.
+ * The coronagraph body, once its loop is in hand — a second exposure of a
+ * region the disk imagers cannot reach, shown alongside rather than instead.
+ * Its loading / no data / error states are written by the caller.
  */
 function coronaPanel(sun: SunState): string {
-  if (!sun.coronaId) return '';
-  if (sun.coronaLoading && !sun.corona) {
-    return '<p class="tile-meta">Loading the coronagraph…</p>';
-  }
   const L = sun.corona;
-  if (!L) {
-    return `<p class="tile-meta">That coronagraph did not load. Nothing is shown in
-      its place.</p>`;
-  }
+  if (!L) return '';
   const f = L.frames[L.newestGood]!;
   const c = sun.coronaPlane;
   const ageMin = Math.round((Date.now() - Date.parse(f.time)) / 60000);

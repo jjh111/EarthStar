@@ -146,48 +146,50 @@ export function frameTime(url: string): string | null {
   return null;
 }
 
+/**
+ * Fetch a frame list. Returns null only when the fetch *completed* and carried
+ * nothing usable — no frames, or none of them dated. A transport or HTTP
+ * failure *throws*, so the caller can show an error state with a reason
+ * instead of confusing "the feed answered empty" with "the feed is down".
+ */
 export async function fetchLoop(spec: LoopSpec, signal?: AbortSignal): Promise<ImageLoop | null> {
   const sourceUrl = `${BASE}/products/animations/${spec.product}.json`;
-  try {
-    const res = await fetch(sourceUrl, { cache: 'no-store', signal });
-    if (!res.ok) return null;
-    const raw = (await res.json()) as Array<{ url?: string }>;
-    if (!Array.isArray(raw)) return null;
+  const res = await fetch(sourceUrl, { cache: 'no-store', signal });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const raw = (await res.json()) as Array<{ url?: string }>;
+  if (!Array.isArray(raw)) return null;
 
-    const frames: ImageFrame[] = [];
-    for (const r of raw) {
-      if (!r?.url) continue;
-      const time = frameTime(r.url);
-      if (!time) continue;                    // undated frame, not shown
-      frames.push({ url: `${BASE}${r.url}`, time, satellite: frameSatellite(r.url) });
-    }
-    frames.sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
-    if (frames.length === 0) return null;
-
-    const spanHours = (Date.parse(frames[frames.length - 1]!.time)
-      - Date.parse(frames[0]!.time)) / 3.6e6;
-
-    // Even subsample that always keeps the newest frame — the current Sun is
-    // the one frame that must not be dropped.
-    let sampled = frames;
-    if (frames.length > MAX_FRAMES) {
-      const step = (frames.length - 1) / (MAX_FRAMES - 1);
-      sampled = Array.from({ length: MAX_FRAMES },
-        (_, i) => frames[Math.round(i * step)]!);
-    }
-
-    const good = await newestGoodIndex(sampled, signal);
-    return {
-      id: spec.id, label: spec.label, kind: spec.kind, describes: spec.describes,
-      instrument: spec.instrument, frames: sampled,
-      totalAvailable: frames.length, spanHours,
-      frameBytes: good.bytes,
-      newestGood: good.index, skippedDropouts: good.skipped,
-      sourceUrl,
-    };
-  } catch {
-    return null;
+  const frames: ImageFrame[] = [];
+  for (const r of raw) {
+    if (!r?.url) continue;
+    const time = frameTime(r.url);
+    if (!time) continue;                    // undated frame, not shown
+    frames.push({ url: `${BASE}${r.url}`, time, satellite: frameSatellite(r.url) });
   }
+  frames.sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
+  if (frames.length === 0) return null;
+
+  const spanHours = (Date.parse(frames[frames.length - 1]!.time)
+    - Date.parse(frames[0]!.time)) / 3.6e6;
+
+  // Even subsample that always keeps the newest frame — the current Sun is
+  // the one frame that must not be dropped.
+  let sampled = frames;
+  if (frames.length > MAX_FRAMES) {
+    const step = (frames.length - 1) / (MAX_FRAMES - 1);
+    sampled = Array.from({ length: MAX_FRAMES },
+      (_, i) => frames[Math.round(i * step)]!);
+  }
+
+  const good = await newestGoodIndex(sampled, signal);
+  return {
+    id: spec.id, label: spec.label, kind: spec.kind, describes: spec.describes,
+    instrument: spec.instrument, frames: sampled,
+    totalAvailable: frames.length, spanHours,
+    frameBytes: good.bytes,
+    newestGood: good.index, skippedDropouts: good.skipped,
+    sourceUrl,
+  };
 }
 
 /** Measured weight of one frame, so the panel can state the real cost. */

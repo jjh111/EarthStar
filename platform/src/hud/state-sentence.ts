@@ -36,9 +36,13 @@ const GLYPH: Record<string, string> = {
 };
 
 const MISSING = '<span class="sentence-missing">no data</span>';
+/** The cold start's placeholder: nothing measured *yet*, so nothing claimed. */
+const PENDING = '<span class="sentence-loading">…</span>';
 
-function num(v: number | null | undefined, digits: number, unit: string): string {
-  if (v === null || v === undefined || !Number.isFinite(v)) return MISSING;
+function num(v: number | null | undefined, digits: number, unit: string, pending = false): string {
+  if (v === null || v === undefined || !Number.isFinite(v)) {
+    return pending ? PENDING : MISSING;
+  }
   const tight = unit === '%' ? ' tight' : '';
   return `<b class="sentence-num">${v.toFixed(digits)}</b>`
     + `<span class="sentence-unit${tight}">${unit}</span>`;
@@ -51,6 +55,11 @@ function num(v: number | null | undefined, digits: number, unit: string): string
 export function stateSentence(state: StoreState): string {
   const d = state.now?.data ?? null;
   const sw = d?.solar_wind ?? null;
+  /**
+   * The cold start shows "…" wherever a number will arrive — nothing is
+   * claimed to be missing, because nothing has been measured *yet*.
+   */
+  const pending = !state.now && state.lanes.snapshot;
   /** Sentences, not comma splices: each glyph opens a clause of its own. */
   const out: string[] = [];
 
@@ -73,9 +82,9 @@ export function stateSentence(state: StoreState): string {
   out.push(
     `${GLYPH['wind']} The solar wind is blowing ` +
     `${speedSeries ? inlineSpark(speedSeries, { label: 'wind speed over the last 24 hours' }) : ''} ` +
-    `${num(sw?.speed ?? null, 0, 'km/s')}, carrying a field that points ${bzWord} ` +
+    `${num(sw?.speed ?? null, 0, 'km/s', pending)}, carrying a field that points ${pending ? '' : bzWord} ` +
     `${bzSeries ? inlineSpark(bzSeries, { rule: 0, extremes: true, label: 'Bz over the last 24 hours, rule at zero' }) : ''} ` +
-    `${num(bz, 1, 'nT')}${bzConsequence}.`,
+    `${num(bz, 1, 'nT', pending)}${pending ? '' : bzConsequence}.`,
   );
 
   /* --- the shield it meets --- */
@@ -83,18 +92,18 @@ export function stateSentence(state: StoreState): string {
   const mpWord = mp === null ? ''
     : mp < 8 ? ', pushed well in' : mp > 11.5 ? ', standing off comfortably' : '';
   out.push(
-    `${GLYPH['shield']} It meets the magnetosphere ${num(mp, 1, 'R⊕')} out on the ` +
-    `sunward side${mpWord}.`,
+    `${GLYPH['shield']} It meets the magnetosphere ${num(mp, 1, 'R⊕', pending)} out on the ` +
+    `sunward side${pending ? '' : mpWord}.`,
   );
 
   /* --- geomagnetic response at the ground --- */
   const kp = d?.kp?.estimated_kp ?? null;
-  const kpWord = kp === null ? 'of unknown disturbance'
+  const kpWord = kp === null ? (pending ? '' : 'of unknown disturbance')
     : kp >= 5 ? 'storming' : kp >= 4 ? 'unsettled' : 'quiet';
   out.push(
     `${GLYPH['field']} The ground beneath is ${kpWord} ` +
     `${state.kpSeries ? inlineSpark(state.kpSeries, { band: [0, 4], extremes: true, label: 'Kp over the last 6 hours, quiet band shaded' }) : ''} ` +
-    `${num(kp, 2, 'Kp')}.`,
+    `${num(kp, 2, 'Kp', pending)}.`,
   );
 
   /* --- particle radiation --- */
@@ -103,11 +112,11 @@ export function stateSentence(state: StoreState): string {
     const s10 = pt.proton_10mev;
     out.push(
       `${GLYPH['particle']} Radiation is at ` +
-      `<b class="sentence-num">S${pt.s_scale ?? 0}</b>` +
+      `<b class="sentence-num">${pending ? '…' : `S${pt.s_scale ?? 0}`}</b>` +
       `${state.protonSeries ? ` ${inlineSpark(state.protonSeries, { log: true, extremes: true, label: 'proton flux above 10 MeV, last 6 hours, logarithmic' })}` : ''} ` +
-      `${num(s10, 2, 'pfu')}` +
-      (pt.s_scale !== null && pt.s_scale >= 1
-        ? ' &mdash; a storm is under way' : ' &mdash; nothing to worry about') + '.',
+      `${num(s10, 2, 'pfu', pending)}` +
+      (pending ? '' : (pt.s_scale !== null && pt.s_scale >= 1
+        ? ' &mdash; a storm is under way' : ' &mdash; nothing to worry about')) + '.',
     );
   }
 
@@ -117,9 +126,9 @@ export function stateSentence(state: StoreState): string {
   out.push(
     `${GLYPH['flare']} The Sun is putting out ` +
     `${state.xraySeries ? inlineSpark(state.xraySeries, { log: true, extremes: true, label: 'X-ray flux over the last 6 hours, logarithmic' }) : ''} ` +
-    `<b class="sentence-num">${xr?.class ?? 'no data'}</b> X-rays, and ` +
+    `<b class="sentence-num">${pending ? '…' : xr?.class ?? 'no data'}</b> X-rays, and ` +
     `${GLYPH['aurora']} the aurora is forecast to reach ` +
-    `${num(au?.max_probability ?? null, 0, '%')} at its brightest.`,
+    `${num(au?.max_probability ?? null, 0, '%', pending)} at its brightest.`,
   );
 
   return out.join(' ');
@@ -127,6 +136,12 @@ export function stateSentence(state: StoreState): string {
 
 /** The plain-language equivalent, for screen readers and the text alternative. */
 export function stateSentenceText(state: StoreState): string {
+  const pending = !state.now && state.lanes.snapshot;
+  if (pending) {
+    return 'Solar wind, magnetopause standoff, planetary K index, radiation, X-ray class '
+      + 'and aurora forecast: all loading. Positions and the scene are computed locally '
+      + 'and are already live.';
+  }
   const d = state.now?.data ?? null;
   const sw = d?.solar_wind ?? null;
   const f = (v: number | null | undefined, digits: number): string =>

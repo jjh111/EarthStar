@@ -155,6 +155,19 @@ export const DEFAULT_SEEDS: SeedSpec = {
   altitudeKm: 120,
 };
 
+/**
+ * The far-distance set. From System scale the full 120-line cage is scaled up
+ * to planetary-orbit size and reads as noise, so beyond ~100 Rₑ the shield
+ * simplifies to twelve signature lines (every 60° of longitude, alternating
+ * hemispheres — the shape a textbook draws) plus the magnetopause and bow-shock
+ * silhouettes, which carry the shape of the cavity.
+ */
+export const SIGNATURE_SEEDS: SeedSpec = {
+  latitudes: [-55, 55],
+  meridianCount: 6,
+  altitudeKm: 120,
+};
+
 /** Seed points spread over meridians, for a legible cage rather than a mat. */
 export function seedPoints(spec: SeedSpec = DEFAULT_SEEDS): Vector3[] {
   const out: Vector3[] = [];

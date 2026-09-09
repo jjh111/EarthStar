@@ -214,6 +214,7 @@ export class Viewer {
   private mode: ScaleMode = 'globe';
   private lastReach = 2;
   private _reducedMotion = false;
+  private earthSurface: 'vector' | 'imagery' | 'loading' = 'loading';
 
   private raf = 0;
   private clockStart = performance.now();
@@ -294,6 +295,35 @@ export class Viewer {
   }
 
   setNow(now: Now | null): void { this.now = now; }
+
+  /**
+   * Earth's surface imagery, lazy-loaded after first paint by main.ts. The
+   * vector base is what the sphere already shows; these swap in when NASA's
+   * rasters have decoded. Choosing the size is the caller's job (it needs the
+   * viewport); feeding it here is only a texture swap.
+   */
+  setEarthDayImage(img: HTMLImageElement): void {
+    this.earth.setDayImage(img);
+  }
+
+  setEarthNightImage(img: HTMLImageElement): void {
+    this.earth.setNightImage(img);
+  }
+
+  setCoastOverlay(on: boolean): void {
+    this.earth.setCoastOverlay(on);
+  }
+
+  get coastOverlayOn(): boolean { return this.earth.coastOverlayOn; }
+
+  /** Whether the measured Earth imagery is on the sphere, for the report. */
+  get earthSurfaceState(): 'vector' | 'imagery' | 'loading' {
+    return this.earthSurface;
+  }
+
+  setEarthSurfaceState(s: 'vector' | 'imagery' | 'loading'): void {
+    this.earthSurface = s;
+  }
 
   setAurora(aurora: AuroraNow | null): void { this.aurora = aurora; }
 
@@ -410,8 +440,12 @@ export class Viewer {
   get windOn(): boolean { return this.windVisible; }
 
   /** Field-line counts, for the Situation Report and the perf readout. */
-  get fieldLineStats(): { lines: number; points: number } {
-    return { lines: this.fieldLines.lineCount, points: this.fieldLines.pointCount };
+  get fieldLineStats(): { lines: number; points: number; far: boolean } {
+    return {
+      lines: this.fieldLines.lineCount,
+      points: this.fieldLines.pointCount,
+      far: this.fieldLines.farSet,
+    };
   }
 
   setReducedMotion(on: boolean): void {
@@ -507,6 +541,11 @@ export class Viewer {
     if (this.shieldVisible) {
       this.fieldLines.ensureTraced(date);
       this.fieldLines.setScale(earthRadius);
+      // Line density and opacity answer to the camera: the tangle that is the
+      // subject at Deck is noise at System scale, so past ~100 Rₑ it gives way
+      // to twelve signature lines and the boundary silhouette.
+      const camDistScene = this.rig.camera.position.distanceTo(earthPos);
+      this.fieldLines.setCamera(camDistScene / Math.max(earthRadius, 1e-6), earthRadius, camDistScene);
       this.fieldLines.setDynamics(
         elapsed, this.sunDirEarthFixed,
         mp?.r0Re ?? null, mp?.alpha ?? null, this.now?.kp?.estimated_kp ?? null,

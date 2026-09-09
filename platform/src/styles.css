@@ -4,6 +4,26 @@
    the page; the margin column is the only thing that ever scrolls internally.
    Type stack shared with the splash site. Contrast held at AA against panels. */
 
+/* Self-hosted, same families and weights the splash ships. The urls point at
+   the splash's own files in the repo-root assets/ (one copy, no duplication);
+   the bundler resolves and hashes them into viewer/assets, so `npm run dev`
+   and the Pages build serve the same bytes with no external request. */
+@font-face{
+  font-family:'Cormorant Garamond';font-style:normal;font-weight:400 600;font-display:swap;
+  src:url('../../assets/fonts/CormorantGaramond.woff2') format('woff2');
+  unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face{
+  font-family:'Cormorant Garamond';font-style:italic;font-weight:400;font-display:swap;
+  src:url('../../assets/fonts/CormorantGaramond-italic.woff2') format('woff2');
+  unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face{
+  font-family:'DM Sans';font-style:normal;font-weight:300 500;font-display:swap;
+  src:url('../../assets/fonts/DMSans.woff2') format('woff2');
+  unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 :root {
   --bg: #05070d;
   --bg-panel: rgba(12, 18, 30, 0.55);
@@ -241,10 +261,37 @@ header.top {
 .tile-meta > [data-time] {
   overflow: hidden; text-overflow: ellipsis; min-width: 0;
 }
-.tile.is-stale { border-color: rgba(240, 180, 41, 0.5); }
-.tile.is-stale .tile-value, .tile.is-stale .tile-meta { color: var(--warn); }
-.tile.is-nodata { opacity: 0.55; border-style: dashed; }
-.tile.is-nodata .tile-value { font-size: 0.72rem; color: var(--ink-faint); }
+/* The four label states, driven by one `data-state` attribute on each slot.
+   loading ≠ no data ≠ error ≠ stale: a fetch still in flight is never written
+   as "no data", a failed transport is not "no data", and a completed fetch
+   that carried nothing usable says so plainly. */
+.tile[data-state='loading'] { opacity: 0.66; }
+.tile[data-state='loading'] .tile-value {
+  animation: value-pulse 1.6s ease-in-out infinite;
+  color: var(--ink-dim);
+}
+.tile[data-state='loading'] .badge { color: var(--ink-faint); border-color: var(--line); }
+.tile[data-state='stale'] { border-color: rgba(240, 180, 41, 0.5); }
+.tile[data-state='stale'] .tile-value, .tile[data-state='stale'] .tile-meta { color: var(--warn); }
+.tile[data-state='no-data'] { opacity: 0.55; border-style: dashed; }
+.tile[data-state='no-data'] .tile-value { font-size: 0.72rem; color: var(--ink-faint); }
+.tile[data-state='error'] { border-color: rgba(255, 139, 115, 0.45); }
+.tile[data-state='error'] .tile-value { font-size: 0.72rem; color: var(--err); }
+@keyframes value-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+/* Loading dots on the scales tile, where a number would otherwise sit. */
+.tile-loading-dots { font-family: var(--mono); color: var(--ink-faint); }
+
+/* Layer toggles share the states: a layer whose data has not landed is dimmed,
+   a layer whose feed failed is marked — while the button itself stays usable. */
+.ctl[data-state='loading'] { color: var(--ink-faint); border-style: dashed; }
+.ctl[data-state='error'] { color: var(--err); border-color: rgba(255, 139, 115, 0.4); }
+.ctl[data-state='no-data'] { color: var(--ink-faint); }
+.ctl-toggles .ctl[data-state='loading'],
+.ctl-toggles .ctl[data-state='error'],
+.ctl-toggles .ctl[data-state='no-data'] { background: rgba(127, 212, 193, 0.04); }
 
 .badge {
   font-family: var(--mono); font-size: 0.52rem; font-weight: 700;
@@ -342,6 +389,7 @@ header.top {
 /* Degraded, not broken: the mirror is serving real NOAA bytes with real NOAA
    timestamps, so amber rather than red — and never the quiet grey of "live". */
 .status.is-mirror { color: var(--warn); }
+.status.is-degraded { color: var(--warn); }
 
 /* ---------- provenance / checks tables ---------- */
 .prov { width: 100%; border-collapse: collapse; font-size: 0.62rem; }
@@ -381,6 +429,17 @@ header.top {
 }
 
 /* ---------- sun imagery ---------- */
+/* The Sun panel's two sections are independent: each renders in every state,
+   so a SUVI outage cannot hide a working LASCO. The state attribute is the
+   same one the tiles use. */
+.sun-sec[data-state='loading'] .sun-frame, .sun-sec[data-state='loading'] { opacity: 0.75; }
+.tile-state { margin: 0.4rem 0; font-size: 0.72rem; color: var(--ink-dim); }
+.tile-state.loading { animation: value-pulse 1.6s ease-in-out infinite; }
+.tile-state.err { color: var(--err); }
+.tile-state-word {
+  font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.03em;
+  text-transform: none;
+}
 .sun-frame {
   position: relative; width: 100%; aspect-ratio: 1;
   background: #000; border: 1px solid var(--line); border-radius: 4px;
@@ -560,6 +619,8 @@ header.top {
 /* No gap before a percent sign — it binds to its number. */
 .sentence-unit.tight { margin-left: 0.02em; }
 .sentence-missing { color: var(--warn); font-style: italic; }
+/* The cold start's placeholder: no claim at all, just a pulse. */
+.sentence-loading { color: var(--ink-faint); letter-spacing: 0.2em; }
 
 /* ---------- forecast ---------- */
 

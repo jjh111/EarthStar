@@ -13,9 +13,19 @@ import { hhmmUTC, formatAge } from '../contract/types.js';
 import type { AuroraNow, Envelope } from '../contract/types.js';
 import type { Cme } from '../data/cme.js';
 import { stalenessOf } from './format.js';
+import { errorReason } from '../data/state.js';
 import { scaleLabel, type ScaleMode } from '../scene/scales.js';
 import { subsolarPoint } from '../models/ephemeris.js';
 import { igrfCitation } from '../models/igrf14.js';
+
+/** Which fetch lanes are still in flight — the cold start's shape. */
+export interface ReportLanes {
+  snapshot: boolean;
+  aurora: boolean;
+  cmes: boolean;
+  /** When the store's next poll is due, so an error text can be exact. */
+  nextAttempt?: string | null;
+}
 
 export interface SceneNarration {
   mode: ScaleMode;
@@ -23,9 +33,11 @@ export interface SceneNarration {
   reducedMotion: boolean;
   shield: boolean;
   cmes?: { shown: boolean; count: number };
-  fieldLines: { lines: number; points: number };
+  fieldLines: { lines: number; points: number; far?: boolean };
   aurora: boolean;
   wind?: boolean;
+  /** Which Earth surface is on the sphere — measured imagery or the vector base. */
+  earthSurface?: 'vector' | 'imagery' | 'loading';
 }
 
 const KP_WORDS: [number, string][] = [
@@ -45,16 +57,53 @@ function cardinal(lat: number, lon: number): string {
   return `${Math.abs(lat).toFixed(1)}°${ns}, ${Math.abs(lon).toFixed(1)}°${ew}`;
 }
 
+/**
+ * When the next attempt happens, for a sentence in the error state. The store
+ * polls on a fixed cadence and reports when the next one is due, so the
+ * sentence states a time rather than "soon".
+ */
+function nextAttemptText(lanes: ReportLanes): string {
+  const t = lanes.nextAttempt ? Date.parse(lanes.nextAttempt) : NaN;
+  return Number.isFinite(t)
+    ? ` The next attempt is at ${hhmmUTC(new Date(t).toISOString())} UTC.`
+    : ' The next attempt is the next refresh cycle.';
+}
+
 export function buildSituationReport(
   env: NowEnvelope | null, scene: SceneNarration, now = new Date(),
   aurora: Envelope<AuroraNow | null> | null = null,
   cmes: Cme[] = [],
   spacecraft: SpacecraftPos[] = [],
+  lanes: ReportLanes = { snapshot: false, aurora: false, cmes: false },
 ): string[] {
   const lines: string[] = [];
   const at = `${hhmmUTC(now.toISOString())} UTC`;
 
+  /**
+   * Cold start. Nothing has been measured *yet* — a different claim from
+   * "no data" — so the whole report is one short paragraph saying what is
+   * already live (positions, terminator, scene) and what is on its way. The
+   * full per-instrument report renders once the snapshot lane resolves.
+   */
   if (!env) {
+    if (lanes.snapshot) {
+      lines.push(
+        `Solar wind: loading. Positions, the terminator and the scene are computed ` +
+        `locally and are already live; the measurements land as the feeds resolve, ` +
+        `snapshot lane first (checked ${at}).`,
+      );
+      // The one scene fact worth stating during a cold start: what is on the
+      // globe while the rasters are still in flight.
+      const ss = subsolarPoint(now);
+      lines.push(
+        `Scene: the Sun at centre, planets at their true positions for ${at} [D]; the ` +
+        `Sun is overhead at ${cardinal(ss.lat, ss.lon)}. ` +
+        (scene.earthSurface === 'imagery'
+          ? `Earth's surface is NASA's Blue Marble composite (2004) [E].`
+          : `Earth's surface imagery is still loading; the vector base map is on the globe.`),
+      );
+      return lines;
+    }
     lines.push(`No space-weather data has loaded yet (checked ${at}). The scene below shows body positions only, which are computed locally and do not depend on the network.`);
   }
 
@@ -66,7 +115,11 @@ export function buildSituationReport(
     const s = stalenessOf(p.solar_wind, now);
     const sw = d.solar_wind;
     if (!sw || s.state === 'no-data') {
-      lines.push(`Solar wind: no data. ${p.solar_wind.error ? `The feed reported ${p.solar_wind.error}.` : ''} Nothing is being substituted for it.`.trim());
+      // A failed feed reads as "unavailable" with its reason; a feed that
+      // answered with nothing usable reads as "no data" — different claims.
+      lines.push(p.solar_wind?.error
+        ? `Solar wind: unavailable (${errorReason(p.solar_wind.error)}). ${nextAttemptText(lanes)} Nothing is being substituted for it.`
+        : `Solar wind: no data. Nothing is being substituted for it.`);
     } else {
       const bz = sw.bz_gsm;
       const dirn = bz === null ? 'unknown'
@@ -151,13 +204,17 @@ export function buildSituationReport(
           : ', below the level that charges satellites.'),
       );
     } else {
-      lines.push('Energetic particle flux: no data. No radiation storm level is shown.');
+      lines.push(p.particles?.error
+        ? `Energetic particle flux: unavailable (${errorReason(p.particles.error)}). ${nextAttemptText(lanes)} No radiation storm level is shown.`
+        : 'Energetic particle flux: no data. No radiation storm level is shown.');
     }
 
     /* --- Kp ------------------------------------------------------------ */
     const ks = stalenessOf(p.kp, now);
     if (!d.kp || ks.state === 'no-data') {
-      lines.push('Planetary K index: no data.');
+      lines.push(p.kp?.error
+        ? `Planetary K index: unavailable (${errorReason(p.kp.error)}). ${nextAttemptText(lanes)}`
+        : 'Planetary K index: no data.');
     } else {
       lines.push(
         `Planetary K index ${d.kp.estimated_kp === null ? 'no data' : d.kp.estimated_kp.toFixed(2)} — ` +
@@ -169,7 +226,9 @@ export function buildSituationReport(
     /* --- Ring current --------------------------------------------------- */
     const ds = stalenessOf(p.dst, now);
     if (!d.dst || ds.state === 'no-data') {
-      lines.push('Ring current (Dst): no data.');
+      lines.push(p.dst?.error
+        ? `Ring current (Dst): unavailable (${errorReason(p.dst.error)}). ${nextAttemptText(lanes)}`
+        : 'Ring current (Dst): no data.');
     } else {
       const ahead = d.dst.lead_minutes;
       lines.push(
@@ -190,7 +249,9 @@ export function buildSituationReport(
     /* --- X-ray --------------------------------------------------------- */
     const xs = stalenessOf(p.xray, now);
     if (!d.xray || xs.state === 'no-data') {
-      lines.push('GOES X-ray flux: no data.');
+      lines.push(p.xray?.error
+        ? `GOES X-ray flux: unavailable (${errorReason(p.xray.error)}). ${nextAttemptText(lanes)}`
+        : 'GOES X-ray flux: no data.');
     } else {
       lines.push(
         `Solar X-ray background is class ${d.xray.class ?? 'no data'} ` +
@@ -210,7 +271,9 @@ export function buildSituationReport(
         `NOAA's own product, modeled [D].`,
       );
     } else {
-      lines.push('NOAA R/S/G scales: no data.');
+      lines.push(p.scales?.error
+        ? `NOAA R/S/G scales: unavailable (${errorReason(p.scales.error)}). ${nextAttemptText(lanes)}`
+        : 'NOAA R/S/G scales: no data.');
     }
 
     /* --- The shield (modeled) ------------------------------------------ */
@@ -295,6 +358,19 @@ export function buildSituationReport(
     `terminator in the scene is drawn from that point [D]. The Moon is shown at its ` +
     `true direction from Earth.`,
   );
+  /* --- The Earth's surface, and where its pixels come from --------------- */
+  lines.push(
+    scene.earthSurface === 'imagery'
+      ? `Earth's surface is measured imagery [E]: NASA's Blue Marble Next Generation ` +
+        `composite, acquired through 2004, with NASA's Black Marble 2016 night lights ` +
+        `drawn as emission on the night side. Nothing about it is live — it is a dated ` +
+        `composite, and it says so here rather than pretending to be today's clouds.`
+      : scene.earthSurface === 'loading'
+        ? `Earth's surface imagery (NASA's Blue Marble and Black Marble composites) is ` +
+          `still loading; the vector base map is on the globe until it arrives.`
+        : `Earth's surface is the vector base map — NASA's raster composites (Blue ` +
+          `Marble 2004, Black Marble 2016) did not load, so no imagery is implied.`,
+  );
   /* --- Aurora --------------------------------------------------------- */
   if (!scene.aurora) {
     lines.push('The aurora overlay is hidden.');
@@ -312,11 +388,14 @@ export function buildSituationReport(
       `The oval encircles the magnetic pole, not the geographic one — which is why it ` +
       `sits off-centre.`,
     );
+  } else if (lanes.aurora) {
+    lines.push('Aurora: loading. The OVATION forecast lands with the slow lane; no oval is drawn yet.');
   } else {
-    lines.push('Aurora: the OVATION forecast has not loaded, so no oval is drawn.');
+    lines.push('Aurora: the OVATION forecast is unavailable, so no oval is drawn.');
   }
 
   if (scene.shield) {
+    const far = scene.fieldLines.far === true;
     lines.push(
       `The magnetic shield is drawn: ${scene.fieldLines.lines} field lines traced through ` +
       `${igrfCitation(new Date())} [D], blue where they close ` +
@@ -328,7 +407,12 @@ export function buildSituationReport(
       `compresses as pressure rises. That clamp is geometry, not magnetohydrodynamics: a ` +
       `full treatment would also stretch the tail. The boundary surfaces stop at 100° ` +
       `from the sunward axis, inside the range Shue et al. fitted; the real magnetotail ` +
-      `continues far beyond.`,
+      `continues far beyond.` +
+      (far
+        ? ' From this far out the full line cage would read as noise, so it gives way to ' +
+          'twelve signature lines and the boundary silhouette; the cage returns as the ' +
+          'camera closes in.'
+        : ''),
     );
   } else {
     lines.push('The magnetic shield is hidden.');

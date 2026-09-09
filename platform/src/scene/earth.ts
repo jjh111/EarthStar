@@ -4,15 +4,25 @@
  * (astronomy-engine, equator-of-date), so the terminator's tilt shows the real
  * season and the real time of day.
  *
- * Tiers: coastlines and colour `[M]`; orientation, sub-solar point and
- * terminator `[D · astronomy-engine]`.
+ * The surface itself is now measured too: NASA's Blue Marble Next Generation
+ * composite (December 2004) on the lit side and the Black Marble 2016 night
+ * lights as emission on the night side, both lazy-loaded after first paint.
+ * Until they arrive the vector base map below is what shows — cartography, not
+ * measurement, and the Situation Report says which one is on screen.
+ *
+ * Tiers: surface and night imagery `[E]` (NASA composites, dated); coastlines
+ * and colour `[M]`; orientation, sub-solar point and terminator
+ * `[D · astronomy-engine]`.
  */
 
 import {
-  AdditiveBlending, BackSide, CanvasTexture, Color, Group, LinearFilter, Mesh,
-  ShaderMaterial, SphereGeometry, SRGBColorSpace, Vector3,
+  AdditiveBlending, BackSide, CanvasTexture, Color, Group, LinearFilter,
+  LinearMipmapLinearFilter, Mesh, ShaderMaterial, SphereGeometry, SRGBColorSpace,
+  Texture, Vector3,
 } from 'three';
-import { buildAuroraTexture, buildEarthTexture } from './earth-texture.js';
+import {
+  buildAuroraTexture, buildCoastOverlayTexture, buildEarthTexture,
+} from './earth-texture.js';
 import type { AuroraNow } from '../contract/types.js';
 import { gastDegrees } from '../models/ephemeris.js';
 
@@ -37,6 +47,10 @@ const vertexShader = /* glsl */ `
 
 const fragmentShader = /* glsl */ `
   uniform sampler2D uSurface;
+  uniform sampler2D uNight;        // Black Marble city lights; black until loaded
+  uniform float uNightStrength;    // 0 hides the lights entirely
+  uniform sampler2D uOverlay;      // vector coastlines, transparent until built
+  uniform float uOverlayOn;        // 0/1 — the optional coastline layer
   uniform sampler2D uAurora;
   uniform float uAuroraStrength;   // 0 hides the layer entirely
   uniform vec3 uSunDir;        // unit, world space
@@ -64,7 +78,13 @@ const fragmentShader = /* glsl */ `
     // disc rather than a globe.
     float lambert = 0.42 + 0.58 * clamp(d, 0.0, 1.0);
     vec3 lit = surface * lambert;
-    vec3 night = surface * uNightTint;
+
+    // Night lights are measured emission (Black Marble, city lights), not
+    // reflected light, so they are added *after* the day blend and are
+    // strongest where the blend is most night. The raster's dark land/ocean
+    // background comes with the lights; it is quiet enough to read as ground.
+    vec3 lights = texture2D(uNight, vec2(u, 1.0 - v)).rgb;
+    vec3 night = surface * uNightTint + lights * uNightStrength;
     vec3 color = mix(night, lit, day);
 
     // Warm scatter at the sunrise/sunset line. The twilight *band* is 18° wide
@@ -89,6 +109,11 @@ const fragmentShader = /* glsl */ `
                              smoothstep(0.35, 1.0, aurora));
       color += auroraColor * aurora * (0.35 + 0.65 * (1.0 - day));
     }
+
+    // Vector coastlines, optional. They are dimmed on the night side so the
+    // lines do not outshine the city lights, which is where the eye should be.
+    vec4 overlay = texture2D(uOverlay, vec2(u, 1.0 - v));
+    color = mix(color, overlay.rgb, overlay.a * uOverlayOn * (0.35 + 0.65 * day));
 
     gl_FragColor = vec4(color, 1.0);
     // A raw ShaderMaterial bypasses Three's automatic output conversion. The
@@ -133,6 +158,25 @@ function blankAurora(): CanvasTexture {
   return new CanvasTexture(c);
 }
 
+/** A 1×1 black texture for slots whose real texture has not arrived. */
+function blankTexture(): Texture {
+  const c = document.createElement('canvas');
+  c.width = 1; c.height = 1;
+  return new CanvasTexture(c);
+}
+
+function imageTexture(img: HTMLImageElement): Texture {
+  const t = new Texture(img);
+  t.colorSpace = SRGBColorSpace;
+  // Power-of-two equirect rasters, so mipmaps are valid and the far side of
+  // the globe does not shimmer.
+  t.magFilter = LinearFilter;
+  t.generateMipmaps = true;
+  t.minFilter = LinearMipmapLinearFilter;
+  t.anisotropy = 8;
+  return t;
+}
+
 export class Earth {
   readonly group = new Group();
   /**
@@ -147,6 +191,10 @@ export class Earth {
   private auroraCanvas: HTMLCanvasElement | null = null;
   private auroraTexture: CanvasTexture | null = null;
   private auroraStamp: string | null = null;
+  private nightTexture: Texture | null = null;
+  private dayTexture: Texture | null = null;
+  private overlayCanvas: HTMLCanvasElement | null = null;
+  private overlayTexture: CanvasTexture | null = null;
 
   constructor(radius = 1) {
     const tex = new CanvasTexture(buildEarthTexture(2048));
@@ -158,6 +206,10 @@ export class Earth {
     this.material = new ShaderMaterial({
       uniforms: {
         uSurface: { value: tex },
+        uNight: { value: blankTexture() },
+        uNightStrength: { value: 0 },
+        uOverlay: { value: blankTexture() },
+        uOverlayOn: { value: 0 },
         uAurora: { value: blankAurora() },
         uAuroraStrength: { value: 0 },
         uSunDir: { value: new Vector3(1, 0, 0) },
@@ -218,6 +270,47 @@ export class Earth {
     this.material.uniforms['uAuroraStrength']!.value = 1 / 100;
   }
 
+  /**
+   * The NASA day raster replaces the vector base once it has decoded. The
+   * vector canvas stays until then, so first paint is never a blank sphere.
+   */
+  setDayImage(img: HTMLImageElement): void {
+    this.dayTexture?.dispose();
+    this.dayTexture = imageTexture(img);
+    this.material.uniforms['uSurface']!.value = this.dayTexture;
+  }
+
+  /** Night lights: black until loaded, then emissive on the night side. */
+  setNightImage(img: HTMLImageElement): void {
+    this.nightTexture?.dispose();
+    this.nightTexture = imageTexture(img);
+    this.material.uniforms['uNight']!.value = this.nightTexture;
+    this.material.uniforms['uNightStrength']!.value = 1;
+  }
+
+  /** Whether the measured imagery is on the sphere — the HUD narrates it. */
+  get surfaceIsImagery(): boolean { return this.dayTexture !== null; }
+  get lightsAreLoaded(): boolean { return this.nightTexture !== null; }
+
+  /**
+   * The vector coastlines, optional. Built lazily — the TopoJSON pass is not
+   * free, and a reader who never enables the layer never pays for it.
+   */
+  setCoastOverlay(on: boolean): void {
+    this.material.uniforms['uOverlayOn']!.value = on ? 1 : 0;
+    if (!on || this.overlayTexture) return;
+    this.overlayCanvas = buildCoastOverlayTexture(2048);
+    this.overlayTexture = new CanvasTexture(this.overlayCanvas);
+    this.overlayTexture.colorSpace = SRGBColorSpace;
+    this.overlayTexture.minFilter = LinearFilter;
+    this.overlayTexture.magFilter = LinearFilter;
+    this.material.uniforms['uOverlay']!.value = this.overlayTexture;
+  }
+
+  get coastOverlayOn(): boolean {
+    return this.material.uniforms['uOverlayOn']!.value > 0;
+  }
+
   setRadius(radius: number): void {
     this.globe.scale.setScalar(radius);
     this.atmosphere.scale.setScalar(radius);
@@ -243,5 +336,8 @@ export class Earth {
     this.atmosphere.geometry.dispose();
     (this.material.uniforms['uSurface']!.value as CanvasTexture).dispose();
     this.auroraTexture?.dispose();
+    this.dayTexture?.dispose();
+    this.nightTexture?.dispose();
+    this.overlayTexture?.dispose();
   }
 }

@@ -64,12 +64,12 @@ export function tail(s: Series, months: number): Series {
   return { time: s.time.slice(from), value: s.value.slice(from) };
 }
 
+/**
+ * A transport failure throws so the panel can show an error state; a completed
+ * fetch that parses to nothing usable returns null — "no data", not "down".
+ */
 export async function fetchSolarCycle(signal?: AbortSignal): Promise<SolarCycle | null> {
-  try {
-    const r = await getJson<unknown>(SOLAR_CYCLE_URL, signal);
-    if (r.json === null) return null;
-    return parseSolarCycle(r.json);
-  } catch {
-    return null;
-  }
+  const r = await getJson<unknown>(SOLAR_CYCLE_URL, signal);
+  if (r.json === null) throw new Error(r.error ?? 'unreachable');
+  return parseSolarCycle(r.json);
 }
