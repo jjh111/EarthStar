@@ -32,13 +32,17 @@
 
   <div class="shell">
     <header class="top">
-      <h1 class="brand">
-        <a class="mark" href="https://earthstar.space/" title="Earth Star">
-          <img src="logo.webp" width="480" height="196" alt="Earth Star" decoding="async">
-        </a>
-        <span class="brand-word">Viewer</span>
-      </h1>
-      <p class="clock" id="clock" role="status"></p>
+      <!-- The timestamp sits under the wordmark: stacking it costs the header
+           row no width, which is what the notice beside it needed. -->
+      <div class="brand-block">
+        <h1 class="brand">
+          <a class="mark" href="https://earthstar.space/" title="Earth Star">
+            <img src="logo.webp" width="480" height="196" alt="Earth Star" decoding="async">
+          </a>
+          <span class="brand-word">Viewer</span>
+        </h1>
+        <p class="clock" id="clock" role="status"></p>
+      </div>
 
       <!-- The newest alert, in the space the header was wasting. Empty and
            hidden when NOAA has nothing outstanding. -->
