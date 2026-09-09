@@ -15,8 +15,10 @@ initArchive();
 initIdeas();
 initSearch();
 
-// The live strip starts its first fetch right away; tiles show "loading" until it lands
-initSky();
+// The live strip fetches after the page has painted — five requests must not
+// compete with the hero image on a slow connection; tiles say "loading" meanwhile
+if (document.readyState === 'complete') initSky();
+else window.addEventListener('load', initSky, { once: true });
 
 // Interaction and ambience can wait for idle
 const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 1));
