@@ -152,19 +152,19 @@ if (process.argv.includes('--images')) {
   await banner.clone().avif({ quality: 60, effort: 6 }).toFile(`${IMG}/banner-1200.avif`);
   await banner.clone().webp({ quality: 80 }).toFile(`${IMG}/banner-1200.webp`);
 
-  // OG card: banner centered on the site's dark ground, 1200×630
+  // OG card: banner centered on the site's night ground (dark green), 1200×630
   const bannerBuf = await sharp(p('Assets/EarthstarBanner.PNG')).resize({ width: 1140 }).png().toBuffer();
   const bh = (await sharp(bannerBuf).metadata()).height;
-  await sharp({ create: { width: 1200, height: 630, channels: 3, background: '#0a0806' } })
+  await sharp({ create: { width: 1200, height: 630, channels: 3, background: '#0e2117' } })
     .composite([{ input: bannerBuf, left: 30, top: Math.round((630 - bh) / 2) }])
     .jpeg({ quality: 86 }).toFile(`${IMG}/og.jpg`);
 
-  // Favicon: gold four-point star on the site's dark ground
+  // Favicon: gold four-point star on the site's night ground
   writeFileSync(`${IMG}/favicon.svg`,
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">` +
-    `<rect width="64" height="64" rx="14" fill="#0a0806"/>` +
-    `<path d="M32 8 L37 27 L56 32 L37 37 L32 56 L27 37 L8 32 L27 27 Z" fill="#ffd700"/>` +
-    `<circle cx="32" cy="32" r="3.4" fill="#0a0806"/>` +
+    `<rect width="64" height="64" rx="14" fill="#0e2117"/>` +
+    `<path d="M32 8 L37 27 L56 32 L37 37 L32 56 L27 37 L8 32 L27 27 Z" fill="#e9b92c"/>` +
+    `<circle cx="32" cy="32" r="3.4" fill="#0e2117"/>` +
     `</svg>`);
 
   console.log('images done');

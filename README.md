@@ -25,6 +25,8 @@ The website at earthstar.space serves as the public face of the project, featuri
   evidence-register badge and links into the Archive and the Viewer
 - The Archive — policy documents, the framework spec, the research protocol, the data catalog
 - One search over all of it (`/` to focus), a sticky wayfinder, and the golden thread down the margin
+- Two schemes, inverted: tan paper with dark-green ink by day, dark-green ground with tan ink by night
+  (follows the system, or the ☾/☀ toggle); gold is reserved for what is alive — automata, equations, live readings
 - Interactive butterfly and plant-growing elements, margin-star constellations, and a coherence meter that grows with your garden
 
 ### Development

@@ -6,8 +6,10 @@ import { initIdeas } from './ideas.js';
 import { initSearch } from './search.js';
 import { initSky } from './sky.js';
 import { initThread } from './thread.js';
+import { initTheme } from './theme.js';
 
-// Time-of-day tint first — it changes what the hero looks like
+// Theme and time-of-day first — they change what the page looks like
+initTheme();
 initTimeOfDay();
 
 // Archive and ideas immediately: deep links (#doc/…, #idea/…) must resolve on load

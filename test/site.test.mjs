@@ -143,6 +143,30 @@ async function newPage(opts = {}) {
   await ctx.close();
 }
 
+{
+  // Day and night: the toggle flips the scheme, the choice survives a reload,
+  // and the page ground actually changes (tan by day, dark green by night)
+  const { ctx, page } = await newPage({ colorScheme: 'light' });
+  await page.goto(BASE + '/', { waitUntil: 'networkidle' });
+  const ground = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  const day = await ground();
+  await page.locator('#themeToggle').click();
+  await page.waitForTimeout(100);
+  const night = await ground();
+  check('theme toggle switches scheme', await page.evaluate(() => document.documentElement.dataset.theme) === 'dark' && day !== night, `${day} → ${night}`);
+  await page.reload({ waitUntil: 'networkidle' });
+  check('theme choice persists', await page.evaluate(() => document.documentElement.dataset.theme) === 'dark');
+  check('no coloured side bars', await page.evaluate(() => {
+    let n = 0;
+    for (const el of document.querySelectorAll('.seed, .idea, .sky-tile, .archive-card, .archive-provenance')) {
+      const cs = getComputedStyle(el);
+      if (parseFloat(cs.borderLeftWidth) > 1.5 || cs.borderLeftColor !== cs.borderRightColor) n++;
+    }
+    return n === 0;
+  }));
+  await ctx.close();
+}
+
 console.log(results.join('\n'));
 console.log('\n--- errors ---');
 console.log(errors.length ? errors.join('\n') : '(none)');

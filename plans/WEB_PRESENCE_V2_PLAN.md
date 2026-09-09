@@ -92,9 +92,15 @@ The footer garden's ∇𝒞 becomes a tile the Viewer can show; a tree grown on 
 releases a butterfly in the Viewer's Deck view. Cosmetic, shared-state, honest about
 what it is (`[M]`).
 
-### W6 · Style guide (blocked on references)
-`plans/STYLE_GUIDE.md`: palette, type, motion, the two surfaces' relationship; then one
-pass on each. Nothing in W1–W5 should pre-empt it.
+### W6 · Style guide (references still to come)
+The splash now carries a baseline the guide can start from: the tokens at the top of
+`src/css/site.css`. Two schemes, inverted — tan paper / dark-green ink by day,
+dark-green ground / tan ink by night — and gold reserved for what is alive (automata,
+the seed equations, live readings, the thread), never for decorating boxes. Flat cards,
+one hairline, one gutter, no side bars, no gradients, no lifts. `plans/STYLE_GUIDE.md`
+should write that down, add type and motion, and carry the same tokens into the Viewer
+(`platform/`), which still wears the old basalt-and-gold. Nothing in W1–W5 should
+pre-empt it.
 
 ## 4. Ownership
 
