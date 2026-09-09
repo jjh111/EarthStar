@@ -24,6 +24,8 @@
   --gold-glow: rgba(200, 150, 12, 0.35);
   --scrim: rgba(20, 46, 29, 0.55);
   --live: #1f6b3a;          /* the one green-on-tan accent: a live reading */
+  --automata-rgb: 180, 138, 14;   /* the Rule 30 ground, read by automata.js */
+  --automata-alpha: 0.13;
 
   --col: 1200px;
   --gutter: 16px;
@@ -49,6 +51,8 @@
     --gold-glow: rgba(255, 215, 0, 0.45);
     --scrim: rgba(8, 20, 12, 0.6);
     --live: #ffe9a8;
+    --automata-rgb: 233, 185, 44;
+    --automata-alpha: 0.15;
   }
 }
 :root[data-theme="dark"] {
@@ -65,13 +69,19 @@
   --gold-glow: rgba(255, 215, 0, 0.45);
   --scrim: rgba(8, 20, 12, 0.6);
   --live: #ffe9a8;
+  --automata-rgb: 233, 185, 44;
+  --automata-alpha: 0.15;
 }
 
 /* ── Base ── */
 * { box-sizing: border-box; margin: 0; padding: 0; }
+/* The root paints the ground so the automata canvas (z-index -1) can sit
+   above it and beneath every word */
+html { background: var(--bg); }
+#bgAutomaton { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: -1; pointer-events: none; }
 body {
   font-family: var(--sans);
-  background: var(--bg);
+  background: transparent;
   color: var(--ink);
   line-height: 1.7;
   min-height: 100vh;
@@ -597,7 +607,7 @@ footer > p { margin-top: 4px; }
 
 /* ── Print: an open archive document prints like a document ── */
 @media print {
-  .emoji-persistent, .emoji-transient, .butterfly-living, .constellation-layer, .gomen-crab, .thread { display: none !important; }
+  .emoji-persistent, .emoji-transient, .butterfly-living, .constellation-layer, .gomen-crab, .thread, #bgAutomaton { display: none !important; }
   body.panel-open > :not(.archive-panel) { display: none !important; }
   body.panel-open { background: #fff; }
   body.panel-open .archive-panel { display: flex !important; position: static; width: 100%; max-width: none; height: auto; background: #fff; color: #111; border: none; }

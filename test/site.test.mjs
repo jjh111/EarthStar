@@ -140,6 +140,13 @@ async function newPage(opts = {}) {
   await page.waitForTimeout(900);
   check('reduced motion: no butterflies', await page.locator('.butterfly-living').count() === 0);
   check('reduced motion: sprout reaches footer', await page.locator('.emoji-footer').count() === 1);
+  // The automata ground renders its full cascade at once under reduced motion
+  check('automata ground paints', await page.evaluate(() => {
+    const c = document.getElementById('bgAutomaton');
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    let lit = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) lit++;
+    return lit > 1000;
+  }));
   await ctx.close();
 }
 
@@ -148,7 +155,7 @@ async function newPage(opts = {}) {
   // and the page ground actually changes (tan by day, dark green by night)
   const { ctx, page } = await newPage({ colorScheme: 'light' });
   await page.goto(BASE + '/', { waitUntil: 'networkidle' });
-  const ground = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  const ground = () => page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor);
   const day = await ground();
   await page.locator('#themeToggle').click();
   await page.waitForTimeout(100);

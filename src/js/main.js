@@ -7,6 +7,7 @@ import { initSearch } from './search.js';
 import { initSky } from './sky.js';
 import { initThread } from './thread.js';
 import { initTheme } from './theme.js';
+import { initAutomata } from './automata.js';
 
 // Theme and time-of-day first — they change what the page looks like
 initTheme();
@@ -25,6 +26,7 @@ else window.addEventListener('load', initSky, { once: true });
 // Interaction and ambience can wait for idle
 const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 1));
 idle(() => {
+  initAutomata(); // the ground accretes beneath everything once the page has painted
   initParallax();
   initConstellations(); // must listen before initGarden fires its first stars event
   initGarden();

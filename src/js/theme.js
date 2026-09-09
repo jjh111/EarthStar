@@ -25,6 +25,10 @@ export function initTheme() {
     document.documentElement.dataset.theme = next;
     try { localStorage.setItem(KEY, next); } catch (e) { /* remembered for this visit only */ }
     label(btn);
+    document.dispatchEvent(new CustomEvent('earthstar:theme', { detail: { theme: next } }));
   });
-  media.addEventListener('change', () => label(btn));
+  media.addEventListener('change', () => {
+    label(btn);
+    document.dispatchEvent(new CustomEvent('earthstar:theme', { detail: { theme: current() } }));
+  });
 }
