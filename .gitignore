@@ -1,3 +1,8 @@
 .DS_Store
 node_modules/
 *.blend1
+
+# Blender working files for the Manta satellite — 39 MB of .blend iterations
+# and renders. The buildable source lives in experiments/manta-sat/ and is
+# tracked; this is the scratch alongside it.
+experiments/manta-design/
