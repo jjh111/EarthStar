@@ -783,3 +783,37 @@ text.l1-idle { fill: var(--ink-faint); }
   font-family: var(--sans); font-size: 0.6rem; letter-spacing: 0.1em;
   text-transform: uppercase; color: var(--ink-dim); margin: 0.7rem 0 0.2rem;
 }
+
+/* Subject links — the graph, wherever it surfaces.
+   A list of things you can open: the Related block at the foot of a detail
+   view, the Models-cited and What-is-drawn lists in Sources, and (next) the
+   scene card. They are buttons rather than anchors because they navigate the
+   panel rather than the document, and they carry their tier badge so a reader
+   can see before clicking whether they are about to read a measurement or a
+   piece of artwork. */
+.subject-links {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.subject-links li {
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--ink-dim);
+}
+.subject-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 28%, transparent);
+}
+.subject-link:hover,
+.subject-link:focus-visible { color: var(--accent); border-bottom-color: var(--accent); }
+.subject-link .badge { margin-right: 0.25rem; }

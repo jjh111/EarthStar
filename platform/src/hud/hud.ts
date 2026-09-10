@@ -116,6 +116,7 @@ export class Hud {
     }
     this.tabsEl = document.getElementById('tabs') as HTMLElement;
     this.bodyEl = document.getElementById('margin-body') as HTMLElement;
+    this.bodyEl.addEventListener('click', this.onBodyClick);
     this.statusEl = document.getElementById('status') as HTMLElement;
     this.perfEl = document.getElementById('perf') as HTMLElement;
     this.headlineEl = document.getElementById('headline-alert') as HTMLAnchorElement;
@@ -404,6 +405,9 @@ export class Hud {
   /** Open a body's detail from a click in the scene. */
   showBody(name: string): void { this.openDetail(BODY_PREFIX + name); }
 
+  /** Open any subject — a model, a drawn layer, an idea — by registry id. */
+  showSubject(id: string): void { this.openDetail(id); }
+
   private openDetail(id: string): void {
     this.tab = 'detail';
     this.detailId = id;
@@ -414,6 +418,17 @@ export class Hud {
     this.renderMargin();
     this.bodyEl.focus();
   }
+
+  /**
+   * Related links are delegated from the panel body rather than bound per
+   * element: the body is replaced wholesale on every render, so any listener
+   * attached to a link would be thrown away with it on the next tick.
+   */
+  private onBodyClick = (e: Event): void => {
+    const el = (e.target as HTMLElement | null)?.closest?.('[data-subject]');
+    const id = (el as HTMLElement | null)?.dataset?.['subject'];
+    if (id) this.openDetail(id);
+  };
 
   /* ---------------- rendering ---------------- */
 

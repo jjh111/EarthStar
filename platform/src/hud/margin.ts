@@ -25,6 +25,7 @@ import { stripProductHeader } from '../data/forecast.js';
 import type { SolarCycle } from '../data/solar-cycle.js';
 import { tail } from '../data/solar-cycle.js';
 import { INSTRUMENTS } from './instruments.js';
+import { TIER_LABEL, bodySubjectId, subject, subjectsOfKind } from './subjects.js';
 import { bodyFacts, distanceText, lightTimeText } from './body-facts.js';
 import type { BodyName } from '../scene/scales.js';
 import { buildSituationReport, type SceneNarration } from './situation-report.js';
@@ -378,18 +379,20 @@ export function renderSources(
       <span class="badge badge-m">M</span> Ambient — artwork. Parameter-driven, sometimes by real
       values, but never itself a measurement.</p>`, false, remembered)}
     ${section('prov-models', 'Models cited', `
-      <p>Shue et al. 1998 (doi:10.1029/98JA01103) — magnetopause.<br>
-      Farris &amp; Russell 1994 — bow shock.<br>
-      ${igrfCitation(new Date())} — the Earth's internal field.<br>
-      Tsyganenko 1989 (T89c, Planet. Space Sci. 37, 5–20) — the external field of the
-      magnetospheric currents, driven by a Kp band and the dipole tilt. No IMF term:
-      it cannot open the dayside under a southward Bz. Together these two are the
-      field the lines are traced through.<br>
-      OVATION Prime (NOAA SWPC) — aurora probability.<br>
-      NOAA Geospace (Univ. Michigan BATS-R-US/RCM) — Dst.<br>
-      WSA-Enlil (NOAA SWPC) — the heliospheric wind forecast.<br>
-      astronomy-engine (VSOP87/Meeus) — every position, the sub-solar point, and the
-      solar rotation axis the imagery is projected about.</p>`, false, remembered)}`;
+      <p class="fine">Each opens what it does — and what it does not.</p>
+      <ul class="subject-links">${subjectsOfKind('model').map((m) => `
+        <li><button type="button" class="subject-link" data-subject="${escapeHtml(m.id)}">
+          <span class="badge badge-${m.tier.toLowerCase()}">${m.tier}</span>
+          ${escapeHtml(m.label)}</button> — ${escapeHtml(m.oneLine)}</li>`).join('')}</ul>
+      <p class="fine">${escapeHtml(igrfCitation(new Date()))}</p>`, false, remembered)}
+    ${section('prov-drawn', 'What is drawn', `
+      <p class="fine">Everything in the scene, by tier. Ambient layers say which of
+      their dimensions carries a real number and which is invented.</p>
+      <ul class="subject-links">${subjectsOfKind('layer').map((l) => `
+        <li><button type="button" class="subject-link" data-subject="${escapeHtml(l.id)}">
+          <span class="badge badge-${l.tier.toLowerCase()}">${l.tier}</span>
+          ${escapeHtml(l.label)}</button> — ${escapeHtml(l.oneLine)}</li>`).join('')}</ul>`,
+      false, remembered)}`;
 }
 
 /** Earth radii to kilometres, for the panel's plain-language distances. */
@@ -822,6 +825,60 @@ function detailSpark(inst: { id: string; series?: string; unit: string }, state:
   );
 }
 
+/**
+ * The prose half of a detail view, from the registry — the same block whatever
+ * kind of thing is being explained. Everything below the value and its
+ * provenance is this, so a body, a tile and (next) a scene card cannot end up
+ * describing the same model in three different ways.
+ */
+export function renderSubjectProse(id: string): string {
+  const s = subject(id);
+  if (!s) return '';
+  const link = (rid: string) => {
+    const r = subject(rid);
+    return r
+      ? `<li><button type="button" class="subject-link" data-subject="${escapeHtml(r.id)}">
+          <span class="badge badge-${r.tier.toLowerCase()}">${r.tier}</span>
+          ${escapeHtml(r.label)}</button> — ${escapeHtml(r.oneLine)}</li>`
+      : '';
+  };
+  return `
+    <h3>What it means</h3>
+    <p>${escapeHtml(s.meaning)}</p>
+    <h3>How it is made</h3>
+    <p>${escapeHtml(s.howMade)}</p>
+    ${s.keyedTo
+      ? `<p class="fine">Ambient, but not arbitrary: ${escapeHtml(s.keyedTo)}.</p>`
+      : ''}
+    <h3>What it does not say</h3>
+    <p>${escapeHtml(s.limits)}</p>
+    ${s.toPromote ? `<p class="fine"><strong>What would sharpen it:</strong>
+      ${escapeHtml(s.toPromote)}</p>` : ''}
+    ${s.sources.length ? `<h3>Cited</h3><ul class="fine">${s.sources.map((src) => `<li>${
+      src.url
+        ? `<a href="${src.url}" rel="noreferrer noopener" target="_blank">${escapeHtml(src.name)}</a>`
+        : escapeHtml(src.name)
+    }${src.ref ? ` — ${escapeHtml(src.ref)}` : ''}</li>`).join('')}</ul>` : ''}
+    ${s.related.length
+      ? `<h3>Related</h3><ul class="subject-links">${s.related.map(link).join('')}</ul>`
+      : ''}`;
+}
+
+/**
+ * A subject with no tile and no ephemeris behind it: a model, a drawn layer,
+ * an idea. Reached from a Related link or, next, from a click in the scene.
+ */
+export function renderSubject(id: string): string {
+  const s = subject(id);
+  if (!s) return '<p>Nothing here explains that yet.</p>';
+  return `
+    <h2>${escapeHtml(s.label)}</h2>
+    <p class="tile-meta"><span class="badge badge-${s.tier.toLowerCase()}">${s.tier}</span>
+      ${escapeHtml(TIER_LABEL[s.tier])}</p>
+    <p>${escapeHtml(s.oneLine)}</p>
+    ${renderSubjectProse(id)}`;
+}
+
 /** Bodies are addressed as `body:Jupiter` so one detail slot serves both. */
 export const BODY_PREFIX = 'body:';
 
@@ -842,9 +899,7 @@ export function renderBody(name: string, now: Date): string {
     <p class="tile-meta"><span class="badge badge-d">D</span> Positions and distances from
     astronomy-engine at ${hhmmUTC(now.toISOString())} UTC — computed, not tabulated, so they
     move with the scene.</p>
-    ${f.note ? `<p>${escapeHtml(f.note)}</p>` : ''}
-    <p class="fine">Rendered size and orbital distance are both compressed at Globe scale;
-    the True scale toggle removes the compression and the label says which is in force.</p>`;
+    ${renderSubjectProse(bodySubjectId(name))}`;
 }
 
 export function renderDetail(
@@ -852,7 +907,9 @@ export function renderDetail(
 ): string {
   if (id.startsWith(BODY_PREFIX)) return renderBody(id.slice(BODY_PREFIX.length), now);
   const inst = INSTRUMENTS.find((i) => i.id === id);
-  if (!inst) return '<p>Unknown instrument.</p>';
+  // A model, a layer or a concept opened from a Related link. It has no live
+  // value and no feed provenance of its own — the prose is the whole of it.
+  if (!inst) return renderSubject(id);
   const env: NowEnvelope | null = state.now;
   const d: Now | null = env?.data ?? null;
   const meta = env?.parts?.[inst.part];
@@ -868,8 +925,6 @@ export function renderDetail(
     <p class="tile-meta"><span class="badge badge-${b.toLowerCase()}">${b}</span>
       ${escapeHtml(s.label)}</p>
     ${detailSpark(inst, state)}
-    <h3>What it means</h3>
-    <p>${escapeHtml(inst.meaning)}</p>
     <h3>Provenance</h3>
     ${meta ? `<table class="prov"><tbody>
       <tr><td>Tier</td><td>${escapeHtml(badgeTitle(meta))}</td></tr>
@@ -880,5 +935,6 @@ export function renderDetail(
       ${meta.mirrored ? `<tr><td>Transport</td><td class="warn">Earth Star mirror (stage B) —
         NOAA was unreachable; these are its bytes and its timestamps, copied</td></tr>` : ''}
       ${meta.error ? `<tr><td>Error</td><td class="err">${escapeHtml(meta.error)}</td></tr>` : ''}
-    </tbody></table>` : '<p>No provenance recorded.</p>'}`;
+    </tbody></table>` : '<p>No provenance recorded.</p>'}
+    ${renderSubjectProse(inst.subject)}`;
 }

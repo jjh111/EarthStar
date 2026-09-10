@@ -10,6 +10,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { bodyFacts, distanceText, lightTimeText } from '../src/hud/body-facts.js';
+import { bodySubjectId, subject } from '../src/hud/subjects.js';
 
 const DATE = new Date('2026-09-07T18:00:00Z');
 
@@ -53,9 +54,13 @@ describe('bodyFacts', () => {
   });
 
   it('says why each body is on a space-weather instrument', () => {
+    // The prose moved to the subject registry; what matters is still that
+    // every body the scene can show has some, so the claim moves with it.
     for (const n of ['Sun', 'Mercury', 'Venus', 'Earth', 'Mars', 'Jupiter',
       'Saturn', 'Uranus', 'Neptune', 'Moon'] as const) {
-      expect(bodyFacts(n, DATE).note.length).toBeGreaterThan(40);
+      const s = subject(bodySubjectId(n));
+      expect(s, n).not.toBeNull();
+      expect(s!.meaning.length, n).toBeGreaterThan(40);
     }
   });
 });
