@@ -448,6 +448,10 @@ export class Magnetosphere {
   readonly group = new Group();
   private magnetopause: LineSegments;
   private bowShock: LineSegments;
+  /** The two surfaces are separate subjects, so the picker addresses them
+   * separately rather than through the group that holds both. */
+  get magnetopauseObject(): LineSegments { return this.magnetopause; }
+  get bowShockObject(): LineSegments { return this.bowShock; }
   private current: { r0: number; alpha: number; bow: number; axis: Vector3 } | null = null;
 
   constructor() {

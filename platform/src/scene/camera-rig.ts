@@ -191,6 +191,11 @@ export class CameraRig {
     this.animateTo(pos, target, immediate);
   }
 
+  /** What the camera is looking at. Picking derives its screen-space
+   * tolerances from the distance to this, not to the scene origin — at Globe
+   * scale the origin is the Sun and the subject is the Earth. */
+  get focus(): Vector3 { return this.controls.target; }
+
   private animateTo(pos: Vector3, target: Vector3, immediate = false): void {
     // The first view is a cut, not a flight: easing in from the constructor's
     // arbitrary starting point means the first painted frame is wrong, and a

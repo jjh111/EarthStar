@@ -388,7 +388,7 @@ const LAYERS: Subject[] = [
   },
   {
     id: 'layer.magnetopause',
-    kind: 'layer', tier: 'D', label: 'Magnetopause',
+    kind: 'layer', tier: 'D', label: 'Magnetopause surface',
     oneLine: 'The teal wireframe: the modelled edge of the magnetosphere, moving with the wind.',
     meaning: 'The outer wall of the cavity the Earth’s field holds open in the solar wind. '
       + 'Watch it compress when the dynamic pressure rises — that is the shield being '
@@ -811,7 +811,7 @@ const BODIES: Subject[] = [
     'The only planet here with a strong, stable dipole. Everything else in this '
     + 'instrument is about what that field is doing today.',
     'The globe’s surface imagery is a fixed composite, not today’s cloud.',
-    ['model.igrf14', 'model.t89', 'layer.field-lines', 'layer.terminator']),
+    ['model.igrf14', 'model.t89', 'layer.field-lines', 'layer.terminator', 'layer.aurora']),
   body('mars', 'Mars', 'Lost its global field, and much of its atmosphere with it.',
     'Lost its global field roughly four billion years ago and kept only crustal '
     + 'patches. MAVEN measured the wind stripping the atmosphere at a rate that, over '
