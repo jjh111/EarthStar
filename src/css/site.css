@@ -477,23 +477,23 @@ footer {
   margin-bottom: 24px; min-height: 40px; padding: 12px 0; border-bottom: 1px solid var(--line);
 }
 .footer-garden-hint { font-size: 0.85em; color: var(--ink-3); font-style: italic; }
-.footer-logo { max-width: 150px; height: auto; margin-bottom: 16px; }
+.footer-logo { display: block; max-width: 150px; height: auto; margin: 0 auto 16px; }
 footer > p { margin-top: 4px; }
 .footer-tagline { font-family: var(--serif); font-style: italic; margin-top: 12px; font-size: 1.15em; color: var(--ink); }
 .footer-equation { margin-top: 14px; font-family: var(--mono); font-size: 0.9em; color: var(--ink-3); }
-.banner-footer { margin-top: 28px; }
+.banner-footer { max-width: 80%; margin: 28px auto 0; }
 .banner-footer img { width: 100%; height: auto; display: block; }
 
 /* The logo is white on transparent; by day it is masked into ink */
 .logo-day { display: none; }
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) .footer-logo { display: none; }
-  :root:not([data-theme="dark"]) .logo-day { display: inline-block; }
+  :root:not([data-theme="dark"]) .logo-day { display: block; }
 }
 :root[data-theme="light"] .footer-logo { display: none; }
-:root[data-theme="light"] .logo-day { display: inline-block; }
+:root[data-theme="light"] .logo-day { display: block; }
 .logo-day {
-  width: 150px; aspect-ratio: 480 / 196; margin-bottom: 16px; background: var(--ink);
+  width: 150px; aspect-ratio: 480 / 196; margin: 0 auto 16px; background: var(--ink);
   -webkit-mask: url(assets/img/logo-480.webp) center / contain no-repeat; mask: url(assets/img/logo-480.webp) center / contain no-repeat;
 }
 
