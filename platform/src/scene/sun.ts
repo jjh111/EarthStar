@@ -218,6 +218,7 @@ class ImagePlane {
   private texture: Texture | null = null;
   private cal: SunPlaneCalibration | null = null;
   private mode: ScaleMode = 'globe';
+  private sunRadius = 1;
 
   constructor(renderOrder: number) {
     this.mat = new ShaderMaterial({
@@ -289,6 +290,9 @@ class ImagePlane {
 
   setScaleMode(mode: ScaleMode): void { this.mode = mode; this.applyScale(); }
 
+  /** The rendered radius of the Sun sphere, in scene units. */
+  setSunRadius(r: number): void { this.sunRadius = r; this.applyScale(); }
+
   setViewGeometry(earthDir: Vector3, north: Vector3): void {
     (this.mat.uniforms['uEarthDir']!.value as Vector3).copy(earthDir).normalize();
     (this.mat.uniforms['uNorth']!.value as Vector3).copy(north).normalize();
@@ -312,7 +316,30 @@ class ImagePlane {
   private applyScale(): void {
     if (!this.cal) return;
     const edge = this.cal.halfWidthRsun;
-    this.mat.uniforms['uExtent']!.value = distanceToScene(edge * SUN_RADIUS_AU, this.mode);
+
+    /**
+     * The hole in the middle of the picture is where the Sun goes.
+     *
+     * On a coronagraph that hole is the occulting disc — the solid circle the
+     * instrument puts over the Sun so the corona beside it can be exposed at
+     * all. On a disk card it is the limb. Either way it is the one feature in
+     * the frame whose meaning is "the Sun is behind this", so the sphere has to
+     * sit inside it: an image scaled so that the Sun pokes out through its own
+     * cutout is a picture of nothing that ever happened.
+     *
+     * Anchoring gives the scale that puts the sphere exactly in the hole. The
+     * true-distance scale is the honest one when it fits. Taking whichever is
+     * larger keeps both properties: True scale is untouched, because there the
+     * occulter genuinely stands off further than the photosphere and the
+     * distance scale already clears the sphere; Globe scale, where the Sun is
+     * exaggerated tenfold and distances are log-compressed, grows the image
+     * until its cutout can hold the enlarged Sun instead of being swallowed by
+     * it.
+     */
+    const byDistance = distanceToScene(edge * SUN_RADIUS_AU, this.mode);
+    const byCutout = (this.sunRadius * edge) / this.cal.innerRsun;
+
+    this.mat.uniforms['uExtent']!.value = Math.max(byDistance, byCutout);
     this.mat.uniforms['uCover']!.value = edge;
     this.mat.uniforms['uEdge']!.value = edge;
   }
@@ -370,6 +397,9 @@ export class Sun {
 
   setRadius(radius: number): void {
     this.disc.scale.setScalar(radius);
+    // Both planes are anchored to the sphere, so they need its rendered size.
+    this.diskPlane.setSunRadius(radius);
+    this.coronaPlane.setSunRadius(radius);
   }
 
   /** Distance compression follows the scene's mode, so the Sun must be told. */

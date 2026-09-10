@@ -67,8 +67,19 @@ const fragmentShader = /* glsl */ `
     // equirectangular texture, and matching the rotation applied on the CPU.
     vec3 n = normalize(vLocalNormal);
     float u = 0.5 - atan(n.z, n.x) / (2.0 * PI);
+
+    // v runs 0 at the south pole to 1 at the north, and is sampled directly.
+    //
+    // Every texture on this globe is equirectangular with north at the top row
+    // -- the NASA rasters, the vector base map, the coastline overlay and the
+    // aurora grid all share (90 - lat) / 180 * height. three.js uploads images
+    // with flipY on by default, which puts the image's *bottom* row at t = 0.
+    // So t = 1 is north, and sampling 1.0 - v put north at t = 0 and read the
+    // southern hemisphere onto the northern one. The whole planet was upside
+    // down, and had been since the base map was flat green blobs where nobody
+    // could tell.
     float v = 0.5 + asin(clamp(n.y, -1.0, 1.0)) / PI;
-    vec3 surface = texture2D(uSurface, vec2(u, 1.0 - v)).rgb;
+    vec3 surface = texture2D(uSurface, vec2(u, v)).rgb;
 
     float d = dot(normalize(vWorldNormal), uSunDir);
     float day = smoothstep(uTwilightStart, uTwilightEnd, d);
@@ -83,7 +94,7 @@ const fragmentShader = /* glsl */ `
     // reflected light, so they are added *after* the day blend and are
     // strongest where the blend is most night. The raster's dark land/ocean
     // background comes with the lights; it is quiet enough to read as ground.
-    vec3 lights = texture2D(uNight, vec2(u, 1.0 - v)).rgb;
+    vec3 lights = texture2D(uNight, vec2(u, v)).rgb;
     vec3 night = surface * uNightTint + lights * uNightStrength;
     vec3 color = mix(night, lit, day);
 
@@ -97,7 +108,7 @@ const fragmentShader = /* glsl */ `
     // OVATION aurora [D · NOAA]: emissive, added on top of the surface. It is
     // added everywhere the model puts it — the day side simply swamps it, which
     // is also why you cannot see the real aurora in daylight.
-    float aurora = texture2D(uAurora, vec2(u, 1.0 - v)).r * uAuroraStrength;
+    float aurora = texture2D(uAurora, vec2(u, v)).r * uAuroraStrength;
     if (aurora > 0.001) {
       // Green at low intensity, reddening at high — the real 557.7 nm / 630 nm
       // ordering, used here as a legend rather than a spectral claim.
@@ -112,7 +123,7 @@ const fragmentShader = /* glsl */ `
 
     // Vector coastlines, optional. They are dimmed on the night side so the
     // lines do not outshine the city lights, which is where the eye should be.
-    vec4 overlay = texture2D(uOverlay, vec2(u, 1.0 - v));
+    vec4 overlay = texture2D(uOverlay, vec2(u, v));
     color = mix(color, overlay.rgb, overlay.a * uOverlayOn * (0.35 + 0.65 * day));
 
     gl_FragColor = vec4(color, 1.0);

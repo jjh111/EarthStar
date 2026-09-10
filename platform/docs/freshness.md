@@ -46,8 +46,7 @@ next attempt a whole refresh interval away. That is what steps 1 and 2 are for.
 
 ## 2b. Stage B — the mirror
 
-`.github/workflows/data-mirror.yml` copies every SWPC feed to the `data` branch every
-half hour; `src/data/fetch-json.ts` reads it **only after a direct fetch has failed**, so
+`.github/workflows/data-mirror.yml` copies every SWPC feed to the `data` branch; `src/data/fetch-json.ts` reads it **only after a direct fetch has failed**, so
 a healthy reader never touches it.
 
 It exists because the Viewer's one structural dependency is not ours: if
@@ -65,14 +64,21 @@ cannot read never reaches the branch.
 **Timestamps stay upstream's own**, so a reader on the mirror sees the true age of each
 measurement and the page still marks it stale on schedule. The only age the mirror could
 hide is its own — which is why `manifest.json` records `mirrored_at` separately and
-`npm run health` fails when it exceeds three hours.
+`npm run health` fails when it exceeds twelve hours (§ the cadence note below).
 
 What is *not* mirrored: solar imagery (megabytes of PNG per frame, and a frame list is
 useless without them) and DONKI (human-curated, hours behind events anyway). Those lanes
 degrade the ordinary way.
 
-**Two lags to expect**, both harmless because the page reports real ages: the half-hour
-write cadence, and up to five minutes of `raw.githubusercontent.com` CDN cache on top.
+**Two lags to expect**, both harmless because the page reports real ages: the write
+cadence, and up to five minutes of `raw.githubusercontent.com` CDN cache on top.
+
+The cadence is not the half hour the cron asks for. GitHub delays scheduled workflows on
+public repositories; measured over five consecutive scheduled runs the intervals were 2.2,
+2.5, 4.9, 5.4 and 4.1 hours. The staleness alarm is set from that, not from the cron — at
+twelve hours it clears the observed spread and still catches a genuine stop within half a
+day. An alarm tuned to a cadence GitHub does not honour would have reported a healthy
+mirror as stopped, and an alarm that is wrong sometimes gets muted.
 
 ### The one liberty: length
 
@@ -159,7 +165,7 @@ silence and the issue is still filed.
 
 | When | What | Who |
 |------|------|-----|
-| Every 30 min | stage-B mirror written to the `data` branch | automatic |
+| Every 2-5 h | stage-B mirror written to the `data` branch (cron asks for 30 min; GitHub delays it) | automatic |
 | Every 6 h | `npm run health` — feeds, deployment, mirror age | automatic |
 | On failure | one standing GitHub issue, plus a webhook if `ALERT_WEBHOOK_URL` is set | automatic |
 | ~Q1 2030 | IGRF-15 coefficients | a person |

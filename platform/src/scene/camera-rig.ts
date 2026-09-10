@@ -138,7 +138,18 @@ export class CameraRig {
       // renders as the flat unobserved grey it is supposed to, and reads as a
       // blank Sun rather than as a camera in the wrong place.
       const back = coronaRadius / Math.tan((this.camera.fov * Math.PI) / 360);
-      pos = sunDir.clone().negate().normalize().multiplyScalar(back * 1.25);
+
+      // Never further from the Sun than Earth is. This view is "from where we
+      // stand", and the framing distance needed for a wide coronagraph can
+      // exceed the Sun-Earth distance outright at Globe scale, where the Sun is
+      // exaggerated tenfold and the distance is log-compressed. Standing beyond
+      // Earth put Earth itself in the middle of the picture, filling the
+      // occulter's cutout — a coronagraph of Earth, which is not a thing.
+      // When the picture will not fit from here, it overflows the frame, which
+      // is what a corona thirty solar radii wide actually does from Earth.
+      const fromEarth = earthPos.length() * 0.92;
+      pos = sunDir.clone().negate().normalize()
+        .multiplyScalar(Math.min(back * 1.25, fromEarth));
     } else if (view === 'deck') {
       // The mirror of Sunward: behind Earth, looking back along the Sun–Earth
       // line, so the Sun is *in the frame* rather than behind the camera.
