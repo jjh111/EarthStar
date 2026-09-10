@@ -32,7 +32,8 @@ import { CmeCones } from './cmes.js';
 import type { SpacecraftPos } from '../data/ephemerides.js';
 import { SpacecraftMarkers } from './spacecraft.js';
 import { calibrateDisk } from './disk-calibration.js';
-import { pickAt, type Candidate, type Pick } from './picking.js';
+import { pickAt, pickLayerAt, type Candidate, type LayerPick, type Pick } from './picking.js';
+import { Pickables } from './pickables.js';
 import { activeCmes, type Cme } from '../data/cme.js';
 import type { ActiveRegion } from '../data/swpc.js';
 import { magnetopause } from '../models/shue1998.js';
@@ -157,6 +158,18 @@ export function nextRung(s: LadderState): LadderResult {
 
 const STAT_WINDOW = 120;
 
+/**
+ * How often a hover may pay for a layer raycast, milliseconds.
+ *
+ * A pointermove can fire at the display's refresh rate; a raycast against the
+ * field-line cage is thousands of segment tests. Sixty milliseconds is fast
+ * enough that the hover label feels attached to the pointer and slow enough
+ * that dragging across the scene cannot saturate a frame. Clicks are never
+ * throttled — they are rare, and a missed one is unforgivable where a late
+ * tooltip is not.
+ */
+const LAYER_PICK_MS = 60;
+
 function push(a: number[], v: number): void {
   a.push(v);
   if (a.length > STAT_WINDOW) a.shift();
@@ -205,6 +218,18 @@ export class Viewer {
   /** Rebuilt each frame; picking needs current positions, not last second's. */
   private candidates: Candidate[] = [];
   private hovered: Pick | null = null;
+  /**
+   * What each drawn layer is, for the picker. Registered here rather than
+   * discovered, so the scene never has to ask what kind of thing an object is.
+   */
+  readonly pickables = new Pickables();
+  private hoveredLayer: string | null = null;
+  private lastLayerPick = 0;
+  private layerPickMs = 0;
+  /** A drawn layer came under the pointer, or left it. */
+  onLayerHover: ((p: LayerPick | null) => void) | null = null;
+  /** A drawn layer was clicked; null means empty space, which dismisses. */
+  onLayerSelect: ((p: LayerPick | null) => void) | null = null;
   onHover: ((p: Pick | null) => void) | null = null;
   onSelect: ((p: Pick) => void) | null = null;
   private shieldVisible = true;
@@ -261,9 +286,13 @@ export class Viewer {
     this.scene.add(makeStarfield());
     this.scene.add(this.sun.group);
     this.sun.group.add(this.activeRegions.group);
+    // The starfield is deliberately not registered: it is the background, and
+    // a click on empty sky should dismiss a card rather than open one.
+    this.pickables.register(this.activeRegions.group, 'layer.active-regions');
     // Cones are heliocentric, so they hang off the scene root rather than the
     // Sun's group, which carries the Sun's own render scale.
     this.scene.add(this.cmeCones.group);
+    this.pickables.register(this.cmeCones.group, 'layer.cme-cones');
     this.scene.add(this.earth.group);
     this.scene.add(this.moon.mesh);
     this.scene.add(this.sunLight);
@@ -272,10 +301,14 @@ export class Viewer {
     this.earth.spin.add(this.fieldLines.group);
     this.earth.group.add(this.magnetosphere.group);
     this.earth.group.add(this.spacecraft.group);
+    this.pickables.register(this.fieldLines.group, 'layer.field-lines');
+    this.pickables.register(this.magnetosphere.magnetopauseObject, 'layer.magnetopause');
+    this.pickables.register(this.magnetosphere.bowShockObject, 'layer.bow-shock');
     // Mid-range devices choke on a large point cloud; halve it when the GPU
     // reports a modest pixel budget.
     this.solarWind = new SolarWind(window.devicePixelRatio > 1.5 ? 4200 : 2600);
     this.earth.group.add(this.solarWind.points);
+    this.pickables.register(this.solarWind.points, 'layer.solar-wind');
     this.scene.add(new AmbientLight(0x24304a, 0.55));
 
     this.planets = makePlanets();
@@ -685,26 +718,67 @@ export class Viewer {
     );
   }
 
+  /**
+   * A layer under the pointer, when no body is. Bodies win: a planet behind a
+   * field line should still pick the planet, because the planet is the thing
+   * the reader is looking at and the line merely crosses it.
+   */
+  private pointerPickLayer(e: PointerEvent | MouseEvent): LayerPick | null {
+    const r = this.canvas.getBoundingClientRect();
+    return pickLayerAt(
+      { x: e.clientX - r.left, y: e.clientY - r.top },
+      this.pickables, this.rig.camera,
+      { width: r.width, height: r.height },
+      this.rig.focus,
+    );
+  }
+
   private onPointerMove = (e: PointerEvent): void => {
     // A drag is a camera move, not a hover; OrbitControls owns the button.
-    if (e.buttons !== 0) { this.setHover(null); return; }
-    this.setHover(this.pointerPick(e));
+    if (e.buttons !== 0) { this.setHover(null); this.setLayerHover(null); return; }
+    const body = this.pointerPick(e);
+    this.setHover(body);
+    // Raycasting ten thousand line vertices on every pointermove is the
+    // obvious way to lose the frame budget, so it runs at most once per
+    // `LAYER_PICK_MS` and is skipped entirely while a body is under the
+    // pointer, which is the common case near the globe.
+    if (body) { this.setLayerHover(null); return; }
+    const now = performance.now();
+    if (now - this.lastLayerPick < LAYER_PICK_MS) return;
+    this.lastLayerPick = now;
+    const t0 = performance.now();
+    const layer = this.pointerPickLayer(e);
+    this.layerPickMs = performance.now() - t0;
+    this.setLayerHover(layer);
   };
 
-  private onPointerLeave = (): void => { this.setHover(null); };
+  private onPointerLeave = (): void => { this.setHover(null); this.setLayerHover(null); };
 
   private setHover(p: Pick | null): void {
     const same = p?.id === this.hovered?.id;
     this.hovered = p;
-    this.canvas.style.cursor = p ? 'pointer' : '';
+    this.canvas.style.cursor = p ? 'pointer' : this.hoveredLayer ? 'pointer' : '';
     // The tooltip follows the pointer, so it is re-emitted even for the same
     // body; the HUD is responsible for not doing DOM work when nothing moved.
     if (!same || p) this.onHover?.(p);
   }
 
+  private setLayerHover(p: LayerPick | null): void {
+    const same = p?.subject === this.hoveredLayer;
+    this.hoveredLayer = p?.subject ?? null;
+    if (!this.hovered) this.canvas.style.cursor = p ? 'pointer' : '';
+    if (!same || p) this.onLayerHover?.(p);
+  }
+
+  /** How long the last layer raycast took, milliseconds. Reported, not guessed. */
+  get layerPickCostMs(): number { return this.layerPickMs; }
+
   private onClick = (e: MouseEvent): void => {
     const p = this.pointerPick(e);
-    if (p) this.onSelect?.(p);
+    if (p) { this.onSelect?.(p); return; }
+    // Only now pay for the ray. A click is rare; a pointermove is not.
+    const layer = this.pointerPickLayer(e);
+    this.onLayerSelect?.(layer);
   };
 
   private resize = (): void => {

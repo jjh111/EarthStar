@@ -22,6 +22,8 @@ import { LOOPS, fetchLoop, preloadLoop, type ImageLoop } from './data/solar-imag
 import { scaleLabel, type ScaleMode } from './scene/scales.js';
 import { VIEWS, type ViewName } from './scene/camera-rig.js';
 import { errorReason } from './data/state.js';
+import { SubjectCard } from './hud/subject-card.js';
+import { subject } from './hud/subjects.js';
 
 const canvas = document.getElementById('scene') as HTMLCanvasElement;
 /**
@@ -495,6 +497,7 @@ afterFirstPaint(loadEarthImagery);
 
 const tipEl = document.getElementById('tip') as HTMLElement;
 let tipKey = '';
+const card = new SubjectCard({ showSubject: (id) => hud.showSubject(id) });
 
 viewer.onHover = (p) => {
   if (!p) {
@@ -517,6 +520,31 @@ viewer.onHover = (p) => {
   if (line !== tipKey) { tipEl.textContent = line; tipKey = line; }
   tipEl.hidden = false;
   tipEl.style.transform = `translate(${p.screen.x + 14}px, ${p.screen.y + 14}px)`;
+};
+
+/**
+ * The layer hover shares the body tooltip: one label, one place on screen,
+ * whichever kind of thing is under the pointer. Its job is to teach that the
+ * scene is clickable at all — without it nobody discovers the card.
+ */
+viewer.onLayerHover = (p) => {
+  if (!p) {
+    if (tipKey.startsWith('layer:')) { tipEl.hidden = true; tipKey = ''; }
+    return;
+  }
+  const s = subject(p.subject);
+  if (!s) return;
+  const key = `layer:${s.id}`;
+  if (key !== tipKey) { tipEl.textContent = `${s.label} · ${s.oneLine}`; tipKey = key; }
+  tipEl.hidden = false;
+  tipEl.style.transform = `translate(${p.screen.x + 14}px, ${p.screen.y + 14}px)`;
+};
+
+viewer.onLayerSelect = (p) => {
+  // Empty sky dismisses. A click that hits nothing is a click that means
+  // "never mind", and leaving the card up would make the scene feel stuck.
+  if (!p) { card.close(); return; }
+  card.open(p.subject, p.screen);
 };
 
 viewer.onSelect = (p) => {

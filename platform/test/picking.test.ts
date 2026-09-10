@@ -9,8 +9,12 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { PerspectiveCamera, Vector3 } from 'three';
-import { pickAt, type Candidate } from '../src/scene/picking.js';
+import {
+  BufferGeometry, Float32BufferAttribute, Group, Line, LineBasicMaterial,
+  PerspectiveCamera, Vector3,
+} from 'three';
+import { pickAt, pickLayerAt, type Candidate } from '../src/scene/picking.js';
+import { Pickables } from '../src/scene/pickables.js';
 
 const SIZE = { width: 800, height: 600 };
 
@@ -70,5 +74,82 @@ describe('pickAt', () => {
 
   it('returns nothing for an empty scene', () => {
     expect(pickAt({ x: 400, y: 300 }, [], cam, SIZE)).toBeNull();
+  });
+});
+
+/**
+ * Picking a drawn layer.
+ *
+ * Lines need a real ray: a field line has no centre, and the nearest point of
+ * a curve to the pointer is exactly what a raycast computes. The failure that
+ * matters here is subtle and silent, so it gets its own test below.
+ */
+describe('picking layers', () => {
+  const FOCUS = new Vector3(0, 0, 0);
+
+  /** A polyline along the X axis, inside a group scaled by `scale`. */
+  function scene(scale: number): { root: Group; pickables: Pickables } {
+    const geom = new BufferGeometry().setAttribute(
+      'position',
+      new Float32BufferAttribute([-1, 0, 0, 1, 0, 0], 3),
+    );
+    const line = new Line(geom, new LineBasicMaterial());
+    const root = new Group();
+    root.name = 'test-layer';
+    root.scale.setScalar(scale);
+    root.add(line);
+    root.updateMatrixWorld(true);
+    const pickables = new Pickables();
+    pickables.register(root, 'layer.field-lines');
+    return { root, pickables };
+  }
+
+  it('hits a line under the pointer and names its subject', () => {
+    const { pickables } = scene(1);
+    const p = pickLayerAt({ x: 400, y: 300 }, pickables, camera(), SIZE, FOCUS);
+    expect(p?.subject).toBe('layer.field-lines');
+  });
+
+  it('misses when the pointer is nowhere near', () => {
+    const { pickables } = scene(1);
+    expect(pickLayerAt({ x: 40, y: 40 }, pickables, camera(), SIZE, FOCUS)).toBeNull();
+  });
+
+  it('ignores a hidden layer', () => {
+    const { root, pickables } = scene(1);
+    root.visible = false;
+    expect(pickLayerAt({ x: 400, y: 300 }, pickables, camera(), SIZE, FOCUS)).toBeNull();
+  });
+
+  /**
+   * The bug this exists for, which cost an afternoon because its symptom is
+   * silence.
+   *
+   * three.js compares its line threshold in the object's own *local* space and
+   * divides only by the object's own scale — not by the accumulated scale of
+   * its parents. Every layer in the Viewer hangs under a scaled group: the
+   * field lines are stored in Earth radii and their group is scaled down to
+   * the rendered globe, which at Globe scale is a small fraction of a scene
+   * unit. A threshold passed in world units therefore arrives orders of
+   * magnitude too small, every ray misses, and nothing anywhere reports an
+   * error. The picker rescales per root; this asserts it keeps doing so.
+   */
+  it('hits a line inside a group scaled far away from 1', () => {
+    for (const scale of [1000, 1, 0.05, 0.002]) {
+      const { pickables } = scene(scale);
+      // Aim just off the line's own axis, so the hit depends on the threshold
+      // rather than landing dead centre where any threshold would do.
+      const p = pickLayerAt({ x: 400, y: 302 }, pickables, camera(), SIZE, FOCUS);
+      expect(p?.subject, `group scaled ${scale}`).toBe('layer.field-lines');
+    }
+  });
+
+  it('walks up to the registered root, not the object that was hit', () => {
+    // Individual field lines, magnetopause ribs and wind particles are not
+    // separately meaningful; only the layer they belong to is.
+    const { root, pickables } = scene(1);
+    const hit = root.children[0]!;
+    expect(pickables.subjectFor(hit)).toBe('layer.field-lines');
+    expect(pickables.subjectFor(new Group())).toBeNull();
   });
 });
