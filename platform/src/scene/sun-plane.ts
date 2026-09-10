@@ -447,3 +447,60 @@ export function calibrateDiskPlane(
 export function cardReachRsun(n: number, cy: number, rsunPx: number): number {
   return Math.min((n / 2) / rsunPx, (CAPTION_FRACTION * n - cy) / rsunPx);
 }
+
+/* ------------------------------------------------------------------ *
+ * What is covered, and what is not
+ * ------------------------------------------------------------------ */
+
+export interface CoverageBand {
+  /** Instrument label, or null for a gap nothing on this page observes. */
+  label: string | null;
+  fromRsun: number;
+  toRsun: number;
+}
+
+/**
+ * The radial coverage of whatever is currently shown, in solar radii, with the
+ * gaps between named as gaps.
+ *
+ * At true radial scale the Sun looks small inside a coronagraph, and it should:
+ * C2's occulting disc stands off at 2.3 solar radii and C3's at 4.4, because
+ * that is where the instrument put them. The temptation is to scale the picture
+ * until the Sun fills its cutout, which reads beautifully and is a lie about
+ * distance — the corona would be drawn two to four times closer in than it is.
+ *
+ * So the geometry stays honest and the page says what it has instead. Built
+ * from each frame's own calibration, so it cannot drift from what is drawn.
+ *
+ * The gap it exposes today is 1.5 to 2.3 R☉ — between where SUVI's off-limb
+ * card runs out and where C2's occulter lets go. MLSO's K-Cor covers exactly
+ * that band, 1.05 to 3 R☉, but it is ground-based: no CORS, weather-dependent,
+ * and the observatory has only just reopened after three years. It is a
+ * stage-B candidate, not a layer.
+ */
+export function coverageBands(
+  disk: SunPlaneCalibration | null,
+  corona: SunPlaneCalibration | null,
+  sphereShown: boolean,
+): CoverageBand[] {
+  const covered: CoverageBand[] = [];
+  if (sphereShown) covered.push({ label: 'disk, on the sphere', fromRsun: 0, toRsun: 1 });
+  if (disk) covered.push({ label: 'off-limb, on the card', fromRsun: 1, toRsun: disk.halfWidthRsun });
+  if (corona) {
+    covered.push({ label: 'coronagraph', fromRsun: corona.innerRsun, toRsun: corona.halfWidthRsun });
+  }
+  covered.sort((a, b) => a.fromRsun - b.fromRsun);
+
+  const out: CoverageBand[] = [];
+  let reach = 0;
+  for (const band of covered) {
+    // Overlaps are not gaps: C3's occulter opens at 4.4 while C2 still runs to
+    // 6.3, and two instruments seeing the same shell is coverage, not a hole.
+    if (band.fromRsun > reach + 0.05) {
+      out.push({ label: null, fromRsun: reach, toRsun: band.fromRsun });
+    }
+    out.push(band);
+    reach = Math.max(reach, band.toRsun);
+  }
+  return out;
+}
