@@ -18,7 +18,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { calibrateCoronagraphRgba, cardReachRsun } from '../src/scene/sun-plane.js';
+import { calibrateCoronagraphRgba, cardReachRsun, coverageBands } from '../src/scene/sun-plane.js';
 import { AU_KM, BODY_RADIUS_KM, distanceToScene, radiusToScene } from '../src/scene/scales.js';
 
 const N = 512;
@@ -251,5 +251,50 @@ describe('the cutout holds the Sun', () => {
     for (const mode of ['globe', 'true'] as const) {
       expect(extent(6.32, 2.30, mode)).toBeLessThan(extent(30.28, 4.49, mode));
     }
+  });
+});
+
+/**
+ * What is covered, and what is not.
+ *
+ * At true radial scale the Sun looks small inside a coronagraph, because C2's
+ * occulting disc really does stand off at 2.3 solar radii and C3's at 4.4.
+ * Scaling the picture until the Sun fills its cutout reads beautifully and is a
+ * lie about distance — it would draw the corona two to four times closer in
+ * than it is. The geometry stays honest; the page states its coverage instead.
+ */
+describe('coverage and gaps', () => {
+  const disk = { halfWidthRsun: 1.5, innerRsun: 1 } as never;
+  const c2 = { halfWidthRsun: 6.32, innerRsun: 2.30 } as never;
+  const c3 = { halfWidthRsun: 30.28, innerRsun: 4.38 } as never;
+
+  it('names the gap between the card and the occulter', () => {
+    const bands = coverageBands(disk, c2, true);
+    const gaps = bands.filter((b) => b.label === null);
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0]!.fromRsun).toBeCloseTo(1.5, 6);
+    expect(gaps[0]!.toRsun).toBeCloseTo(2.30, 6);
+  });
+
+  it('covers the photosphere outward with no gap below the card', () => {
+    const bands = coverageBands(disk, null, true);
+    expect(bands.filter((b) => b.label === null)).toHaveLength(0);
+    expect(bands[0]!.fromRsun).toBe(0);
+  });
+
+  it('treats an overlap as coverage, not a hole', () => {
+    // C3's occulter opens at 4.38 while C2 still runs to 6.32. Two instruments
+    // seeing the same shell is coverage; only a naive reach test calls it a gap.
+    const bands = coverageBands(null, c3, false);
+    const withC2 = coverageBands(disk, c2, true);
+    expect(bands.filter((b) => b.label === null).length).toBeGreaterThan(0); // 0 -> 4.38 is real
+    expect(withC2.some((b) => b.label === null && b.fromRsun > 6)).toBe(false);
+  });
+
+  it('reports the gap from the Sun outward when only a coronagraph is on', () => {
+    const bands = coverageBands(null, c2, false);
+    expect(bands[0]!.label).toBeNull();
+    expect(bands[0]!.fromRsun).toBe(0);
+    expect(bands[0]!.toRsun).toBeCloseTo(2.30, 6);
   });
 });

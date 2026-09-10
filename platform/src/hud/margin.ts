@@ -16,7 +16,7 @@ import type { Cme } from '../data/cme.js';
 import { SPACECRAFT_NOTE, type SpacecraftPos } from '../data/ephemerides.js';
 import { instrumentFor, type ImageLoop, type LoopKind } from '../data/solar-imagery.js';
 import { igrfCitation } from '../models/igrf14.js';
-import type { SunPlaneCalibration } from '../scene/sun-plane.js';
+import { coverageBands, type SunPlaneCalibration } from '../scene/sun-plane.js';
 import { NO_DATA, badgeFor, badgeTitle, formatAge, hhmmUTC, stalenessOf } from './format.js';
 import { panelSpark } from './sparkline.js';
 import { stateSentence, stateSentenceText } from './state-sentence.js';
@@ -638,6 +638,7 @@ export function renderSun(
     </section>
     <section class="sun-sec" data-state="${corona ? corona.state : 'fresh'}" aria-label="Coronagraph">
       ${coronaBody}
+      ${coveragePanel(sun)}
     </section>
     ${solarCyclePanel(cycle, cycleLoading, cycleError)}`;
 }
@@ -705,6 +706,41 @@ function diskCardNote(sun: SunState): string {
     measured from this frame's own limb. Prominences and the low corona are on that card.
     Nothing is extrapolated across the two: inside the limb belongs to the sphere,
     outside it to the plane.</p>`;
+}
+
+/**
+ * What is measured out to where, and where nothing is.
+ *
+ * At true radial scale the Sun sits small inside a coronagraph, because the
+ * occulting disc really does stand off — 2.3 solar radii for C2, 4.4 for C3.
+ * Scaling the picture until the Sun filled its cutout would read better and
+ * would misplace the corona by that same factor, so the geometry stays as
+ * measured and the coverage is stated instead. Built from each frame's own
+ * calibration, so it cannot drift from what is drawn.
+ */
+function coveragePanel(sun: SunState): string {
+  const sphereShown = !!sun.loop && sun.loop.kind === 'disk';
+  const bands = coverageBands(sun.diskPlane, sun.coronaPlane, sphereShown);
+  if (bands.length === 0) return '';
+
+  const rows = bands.map((b) => {
+    const span = `${b.fromRsun.toFixed(1)}\u2013${b.toRsun.toFixed(1)} R\u2609`;
+    return b.label === null
+      ? `<tr><td class="err">not observed</td><td class="num">${span}</td></tr>`
+      : `<tr><td>${escapeHtml(b.label)}</td><td class="num">${span}</td></tr>`;
+  }).join('');
+
+  const gap = bands.find((b) => b.label === null && b.fromRsun > 0);
+  return `
+    <p class="tile-meta"><b>Covered, in solar radii from the Sun's centre.</b>
+      Distances are as measured \u2014 the Sun looks small inside a coronagraph because the
+      occulting disc really does stand off that far.</p>
+    <table class="prov"><tbody>${rows}</tbody></table>
+    ${gap ? `<p class="tile-meta">Nothing on this page observes
+      ${gap.fromRsun.toFixed(1)}\u2013${gap.toRsun.toFixed(1)} R\u2609. MLSO's K-Cor covers
+      exactly that band (1.05\u20133 R\u2609) but is ground-based \u2014 no CORS,
+      weather-dependent, and the observatory reopened only this year \u2014 so it is a
+      mirror candidate, not a layer.</p>` : ''}`;
 }
 
 /**
