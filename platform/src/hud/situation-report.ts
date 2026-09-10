@@ -17,6 +17,7 @@ import { errorReason } from '../data/state.js';
 import { scaleLabel, type ScaleMode } from '../scene/scales.js';
 import { subsolarPoint } from '../models/ephemeris.js';
 import { igrfCitation } from '../models/igrf14.js';
+import { t89BandLabel, t89Citation } from '../models/t89.js';
 
 /** Which fetch lanes are still in flight — the cold start's shape. */
 export interface ReportLanes {
@@ -33,7 +34,13 @@ export interface SceneNarration {
   reducedMotion: boolean;
   shield: boolean;
   cmes?: { shown: boolean; count: number };
-  fieldLines: { lines: number; points: number; far?: boolean };
+  fieldLines: {
+    lines: number; points: number; far?: boolean;
+    /** T89 Kp band 0–6, or null when no Kp reached us and the field is IGRF alone. */
+    band?: number | null;
+    tiltDeg?: number | null;
+    truncated?: number;
+  };
   aurora: boolean;
   wind?: boolean;
   /** Which Earth surface is on the sphere — measured imagery or the vector base. */
@@ -396,16 +403,34 @@ export function buildSituationReport(
 
   if (scene.shield) {
     const far = scene.fieldLines.far === true;
+    const band = scene.fieldLines.band ?? null;
+    const tilt = scene.fieldLines.tiltDeg ?? null;
+    const cut = scene.fieldLines.truncated ?? 0;
     lines.push(
       `The magnetic shield is drawn: ${scene.fieldLines.lines} field lines traced through ` +
       `${igrfCitation(new Date())} [D], blue where they close ` +
       `between hemispheres and violet where they stay open toward the solar wind. The ` +
       `teal boundary is the Shue et al. 1998 magnetopause and the orange one the ` +
       `Farris & Russell 1994 bow shock, both re-shaped by the live solar wind above. ` +
-      `The field lines rotate with the Earth because the main field is fixed to it, and ` +
-      `they are clamped where they would cross the magnetopause — so the dayside visibly ` +
-      `compresses as pressure rises. That clamp is geometry, not magnetohydrodynamics: a ` +
-      `full treatment would also stretch the tail. The boundary surfaces stop at 100° ` +
+      (band === null
+        ? `No Kp index reached us, so the external field is not modelled and these lines ` +
+          `are the Earth's internal field alone — a tilted dipole, with none of the ` +
+          `compression or tail stretching the solar wind actually imposes. Read the shape ` +
+          `as incomplete rather than quiet.`
+        : `Added to it is ${t89Citation()} [D], ${t89BandLabel(band)}, at a dipole ` +
+          `tilt of ${tilt === null ? '—' : `${tilt.toFixed(1)}°`}. That is what compresses ` +
+          `the dayside, stretches the nightside into lobes and inflates the inner region: ` +
+          `the shape is the field's, integrated, not a surface drawn around a dipole. T89 ` +
+          `bins Kp into seven fits, so the field steps between them rather than gliding, ` +
+          `and it carries no IMF term at all — a southward Bz opens the real dayside and ` +
+          `changes nothing here.`) +
+      (cut > 0
+        ? ` ${cut} line${cut === 1 ? '' : 's'} run past where ${cut === 1 ? 'it is' : 'they are'} ` +
+          `drawn, and ${cut === 1 ? 'is' : 'are'} cut rather than ended: T89 is fitted inside ` +
+          `70 Rₑ and has no magnetopause, so the trace stops at the edge of what the model ` +
+          `describes — down the tail, and 20 Rₑ sunward.`
+        : '') +
+      ` The boundary surfaces stop at 100° ` +
       `from the sunward axis, inside the range Shue et al. fitted; the real magnetotail ` +
       `continues far beyond.` +
       (far

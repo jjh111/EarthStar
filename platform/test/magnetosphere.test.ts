@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { Vector3 } from 'three';
-import { shueWireframe, MAX_THETA_DEG } from '../src/scene/magnetosphere.js';
+import { FieldLines, shueWireframe, MAX_THETA_DEG } from '../src/scene/magnetosphere.js';
 import { magnetopause, shueRadius } from '../src/models/shue1998.js';
 
 function vertices(geom: ReturnType<typeof shueWireframe>): Vector3[] {
@@ -79,5 +79,92 @@ describe('Shue surface geometry', () => {
     const n = shueWireframe(R0, ALPHA, new Vector3(1, 0, 0)).getAttribute('position').count;
     expect(n).toBeGreaterThan(500);
     expect(n).toBeLessThan(6000);
+  });
+});
+
+/**
+ * The retrace, spread over frames.
+ *
+ * With IGRF alone the trace was a once-a-day event and its cost could simply
+ * be spent in one frame. T89 is Sun-fixed, so the Earth turning under it makes
+ * the shape stale every twelve minutes — a stall that size, that often, on a
+ * page people leave open is the thing this scheduling exists to prevent.
+ */
+describe('FieldLines retraces without stalling a frame', () => {
+  const date = new Date('2026-09-10T18:00:00Z');
+
+  it('spreads a retrace over several calls and swaps in once', () => {
+    const fl = new FieldLines();
+    // Nothing is drawn until the whole set is ready: a half-traced cage on
+    // screen would be a picture of a magnetosphere with a hole in it.
+    fl.ensureTraced(date, 3);
+    expect(fl.retracing).toBe(true);
+    expect(fl.lineCount).toBe(0);
+
+    let calls = 1;
+    while (fl.retracing && calls < 500) { fl.ensureTraced(date, 3); calls++; }
+    expect(fl.retracing).toBe(false);
+    expect(calls).toBeGreaterThan(1);
+    expect(fl.lineCount).toBeGreaterThan(50);
+    // And once complete it stops working: the same field is not retraced.
+    const settled = calls;
+    fl.ensureTraced(date, 3);
+    expect(fl.retracing).toBe(false);
+    expect(settled).toBe(calls);
+    fl.dispose();
+  });
+
+  it('keeps each call inside a frame budget', () => {
+    const fl = new FieldLines();
+    const spent: number[] = [];
+    while (fl.retracing || spent.length === 0) {
+      const t0 = performance.now();
+      fl.ensureTraced(date, 6);
+      spent.push(performance.now() - t0);
+      if (spent.length > 500) break;
+    }
+
+    // The structural claim first, because it cannot flake: no single call may
+    // trace the whole set. A regression that goes back to one monolithic
+    // traceAll finishes in one call, whatever the machine is doing.
+    expect(spent.length, 'calls to complete an 80-line retrace')
+      .toBeGreaterThan(8);
+
+    // Then the timing, on the median rather than the worst. The budget is
+    // 4 ms; a single seed can overrun it and the last call also builds the
+    // geometry, but more to the point this is wall clock on a shared machine
+    // — under a full parallel suite one call in forty lands at 20 ms for
+    // reasons that have nothing to do with this code. Asserting the worst
+    // case here would be measuring the test runner.
+    const median = [...spent].sort((a, b) => a - b)[spent.length >> 1]!;
+    expect(median, `median ${median.toFixed(1)} ms over ${spent.length} calls`)
+      .toBeLessThan(12);
+    fl.dispose();
+  });
+
+  it('abandons a retrace whose field has moved on rather than finishing it', () => {
+    const fl = new FieldLines();
+    fl.ensureTraced(date, 1);
+    expect(fl.retracing).toBe(true);
+    // Kp crosses a band edge mid-retrace. The half-finished set was traced
+    // through a field that no longer applies, so it is dropped, not shown.
+    fl.ensureTraced(date, 6);
+    let calls = 0;
+    while (fl.retracing && calls < 500) { fl.ensureTraced(date, 6); calls++; }
+    expect(fl.retracing).toBe(false);
+    expect(fl.externalUsed?.band).toBe(6);
+    fl.dispose();
+  });
+
+  it('draws IGRF alone, and says so, when no Kp reached us', () => {
+    const fl = new FieldLines();
+    let calls = 0;
+    while (fl.retracing || calls === 0) { fl.ensureTraced(date, null); if (++calls > 500) break; }
+    expect(fl.lineCount).toBeGreaterThan(50);
+    // Null, not band 0. Band 0 is the quiet fit, and rendering it would turn a
+    // missing measurement into a reassuring claim.
+    expect(fl.externalUsed).toBeNull();
+    expect(fl.truncatedCount).toBe(0);
+    fl.dispose();
   });
 });

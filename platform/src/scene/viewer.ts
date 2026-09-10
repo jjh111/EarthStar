@@ -440,11 +440,21 @@ export class Viewer {
   get windOn(): boolean { return this.windVisible; }
 
   /** Field-line counts, for the Situation Report and the perf readout. */
-  get fieldLineStats(): { lines: number; points: number; far: boolean } {
+  get fieldLineStats(): {
+    lines: number; points: number; far: boolean;
+    band: number | null; tiltDeg: number | null; truncated: number; traceMs: number;
+  } {
+    const ext = this.fieldLines.externalUsed;
     return {
       lines: this.fieldLines.lineCount,
       points: this.fieldLines.pointCount,
       far: this.fieldLines.farSet,
+      // Null band means no Kp reached us, so the lines are IGRF alone. The
+      // report says which, because the two are different claims about the sky.
+      band: ext?.band ?? null,
+      tiltDeg: ext ? (ext.basis.tilt * 180) / Math.PI : null,
+      truncated: this.fieldLines.truncatedCount,
+      traceMs: this.fieldLines.traceMs,
     };
   }
 
@@ -539,17 +549,18 @@ export class Viewer {
     );
 
     if (this.shieldVisible) {
-      this.fieldLines.ensureTraced(date);
+      // Kp is T89's only driver, so it decides the shape of the field lines,
+      // not just the ambience. No Kp means no external field: IGRF alone, and
+      // the Situation Report says so rather than the scene implying quiet.
+      const kp = this.now?.kp?.estimated_kp ?? null;
+      this.fieldLines.ensureTraced(date, kp);
       this.fieldLines.setScale(earthRadius);
       // Line density and opacity answer to the camera: the tangle that is the
       // subject at Deck is noise at System scale, so past ~100 Rₑ it gives way
       // to twelve signature lines and the boundary silhouette.
       const camDistScene = this.rig.camera.position.distanceTo(earthPos);
       this.fieldLines.setCamera(camDistScene / Math.max(earthRadius, 1e-6), earthRadius, camDistScene);
-      this.fieldLines.setDynamics(
-        elapsed, this.sunDirEarthFixed,
-        mp?.r0Re ?? null, mp?.alpha ?? null, this.now?.kp?.estimated_kp ?? null,
-      );
+      this.fieldLines.setDynamics(elapsed, kp);
       this.magnetosphere.setScale(earthRadius);
       this.magnetosphere.update(mp, sunDir);
     }
