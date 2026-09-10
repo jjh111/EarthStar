@@ -8,8 +8,10 @@
 import { describe, expect, it } from 'vitest';
 import { Vector3 } from 'three';
 import {
-  DEFAULT_SEEDS, EARTH_RADIUS_KM, geoToEcefKm, seedPoints, traceFieldLine, traceFullLine,
+  DEFAULT_SEEDS, EARTH_RADIUS_KM, externalField, geoToEcefKm, lastClosedSunwardRe,
+  seedPoints, totalField, traceAll, traceFieldLine, traceFullLine,
 } from '../src/models/fieldlines.js';
+import { T89_SUNWARD_LIMIT_RE, T89_VALID_RE } from '../src/models/t89.js';
 import { igrfVector } from '../src/models/igrf14.js';
 
 const DATE = new Date('2026-09-06T00:00:00Z');
@@ -129,5 +131,143 @@ describe('seed layout', () => {
     expect(pts.some((p) => p.z > 0)).toBe(true);
     expect(pts.some((p) => p.z < 0)).toBe(true);
     for (const p of pts) expect(Re(p)).toBeCloseTo((EARTH_RADIUS_KM + 120) / EARTH_RADIUS_KM, 3);
+  });
+});
+
+/**
+ * What the external field changes. These are the claims the brief was written
+ * to make true: IGRF alone is a dipole in empty space, and adding T89 has to
+ * deform it in the specific ways the current systems deform the real one. If a
+ * future change quietly drops the external term, every one of these fails.
+ */
+describe('tracing IGRF + T89 rather than IGRF alone', () => {
+  const noon = new Date('2026-03-20T12:00:00Z');
+  const ext = (kp: number) => externalField(noon, kp)!;
+
+  it('supplies an external field only when Kp is known', () => {
+    expect(externalField(noon, 3)).not.toBeNull();
+    // No Kp is not the same as quiet, and must not render as quiet.
+    expect(externalField(noon, null)).toBeNull();
+    expect(externalField(noon, Number.NaN)).toBeNull();
+  });
+
+  it('stretches the nightside — the same seed reaches further with T89 in', () => {
+    // The cross-tail current sheet is the largest deformation IGRF is missing.
+    // A high-latitude nightside seed is where it shows.
+    const seed = geoToEcefKm(70, 180, 120);
+    const internal = traceFullLine(seed, noon, {});
+    const total = traceFullLine(seed, noon, { external: ext(3) });
+    expect(total.apexRe).toBeGreaterThan(internal.apexRe * 1.2);
+  });
+
+  it('opens the polar cap wider under a storm than under a quiet field', () => {
+    // Not a threshold on a number: a larger set of the same seeds stops closing
+    // as the disturbance level goes up. That is the polar cap growing, and it
+    // is a property of the field rather than of the drawing.
+    //
+    // Quiet against storm, not band against band. T89's seven bands are seven
+    // separate least-squares fits, not a smooth family, and adjacent ones do
+    // wobble: over this ladder Kp 0 closes 38 lines and Kp 1 closes 39. That is
+    // the model, not a defect, and asserting monotonicity across every step
+    // would be testing a smoothness T89 never claimed.
+    const ladder = { latitudes: [60, 64, 68, 72, 76, 80, 84], meridianCount: 8, altitudeKm: 120 };
+    const closedAt = (kp: number) =>
+      traceAll(noon, ladder, { external: ext(kp) }).filter((l) => l.closed).length;
+    const quiet = closedAt(0);
+    const storm = closedAt(6);
+    expect(storm, `quiet ${quiet} vs storm ${storm}`).toBeLessThan(quiet);
+    // And the boundary is the thing moving: at 80° the quiet field still has
+    // closed lines and the storm field has none.
+    const at80 = (kp: number) => traceAll(
+      noon, { latitudes: [80], meridianCount: 8, altitudeKm: 120 }, { external: ext(kp) },
+    ).filter((l) => l.closed).length;
+    expect(at80(0)).toBeGreaterThan(0);
+    expect(at80(6)).toBe(0);
+  });
+
+  it('puts the tail on the night side, which a mirrored frame would not', () => {
+    // The failure this exists for: a sign error in the GSM basis mirrors the
+    // whole magnetosphere about the noon-midnight plane. Every other test here
+    // still passes — the tail is still stretched, the cap still opens — and
+    // the render still looks exactly like a magnetosphere, pointing the wrong
+    // way. So measure the asymmetry against the Sun direction explicitly.
+    const e = ext(6);
+    const lines = traceAll(noon, DEFAULT_SEEDS, { external: e });
+    let sunward = 0;
+    let antisunward = 0;
+    const t = new Vector3();
+    for (const l of lines) {
+      for (const p of l.points) {
+        const x = t.copy(p).divideScalar(EARTH_RADIUS_KM).dot(e.basis.x);
+        sunward = Math.max(sunward, x);
+        antisunward = Math.min(antisunward, x);
+      }
+    }
+    // The tail runs to the model's edge; the dayside is bounded by the
+    // magnetopause at a fraction of that.
+    expect(-antisunward, `tail ${(-antisunward).toFixed(1)} Rₑ`).toBeGreaterThan(40);
+    expect(sunward, `dayside ${sunward.toFixed(1)} Rₑ`).toBeLessThan(20);
+    expect(-antisunward).toBeGreaterThan(sunward * 3);
+  });
+
+  it('marks the lines it cut rather than letting them appear to end', () => {
+    const lines = traceAll(noon, DEFAULT_SEEDS, { external: ext(6) });
+    const cut = lines.filter((l) => l.truncated);
+    expect(cut.length).toBeGreaterThan(0);
+    const e = ext(6);
+    const t = new Vector3();
+    for (const l of cut) {
+      expect(l.closed).toBe(false);
+      expect([l.startsAt, l.endsAt]).toContain('out-of-model');
+      // It stopped at one of the two edges the model itself declares, not at
+      // some drawing limit: the 70 Rₑ fit sphere down the tail, or the 20 Rₑ
+      // sunward plane past which T89's Chapman–Ferraro term is a runaway.
+      const ends = [l.points[0]!, l.points[l.points.length - 1]!];
+      const atAnEdge = ends.some((p) =>
+        p.length() / EARTH_RADIUS_KM > T89_VALID_RE - 1
+        || t.copy(p).divideScalar(EARTH_RADIUS_KM).dot(e.basis.x) > T89_SUNWARD_LIMIT_RE - 1);
+      expect(atAnEdge, `apex ${l.apexRe.toFixed(1)} Rₑ, ends nowhere the model ends`).toBe(true);
+    }
+    // And a closed line is never marked cut: it ended because it ended.
+    for (const l of lines.filter((l) => l.closed)) expect(l.truncated).toBe(false);
+  });
+
+  it('stops at the model edge instead of falling back to IGRF alone', () => {
+    // A line traced past 70 Rₑ with the external term silently dropped would
+    // straighten into a tidy dipole arc in a region where the real field is
+    // nothing of the kind — plausible, and wrong.
+    const far = new Vector3(0, 0, EARTH_RADIUS_KM * 71);
+    expect(totalField(far, noon, ext(3), new Vector3())).toBeNull();
+    expect(totalField(far, noon, null, new Vector3())).not.toBeNull();
+  });
+
+  it('compresses the dayside standoff as Kp rises', () => {
+    // T89's own answer to where the magnetopause is, read off the closed/open
+    // transition. It must move inward with disturbance, and land in the range
+    // Shue's pressure-driven boundary occupies — two unrelated models.
+    const quiet = lastClosedSunwardRe(noon, ext(0))!;
+    const storm = lastClosedSunwardRe(noon, ext(6))!;
+    expect(quiet).toBeGreaterThan(storm);
+    expect(quiet).toBeGreaterThan(9);
+    expect(quiet).toBeLessThan(13);
+    expect(storm).toBeGreaterThan(6);
+    expect(storm).toBeLessThan(10);
+  });
+
+  it('finds the standoff at every dipole tilt, not only near equinox', () => {
+    // The bug this replaced: bracketing the search between 30° and 88° of GSM
+    // latitude found no closed/open transition at solstice, because with the
+    // dipole leaning 26° one hemisphere has none. Half the year returned null.
+    for (const iso of [
+      '2026-03-20T12:00:00Z', '2026-06-21T12:00:00Z',
+      '2026-09-22T12:00:00Z', '2026-12-21T00:00:00Z',
+    ]) {
+      const date = new Date(iso);
+      const r = lastClosedSunwardRe(date, externalField(date, 3)!);
+      expect(r, `${iso} (tilt ${(externalField(date, 3)!.basis.tilt * 180 / Math.PI).toFixed(0)}°)`)
+        .not.toBeNull();
+      expect(r!).toBeGreaterThan(7);
+      expect(r!).toBeLessThan(13);
+    }
   });
 });

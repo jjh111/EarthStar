@@ -346,6 +346,109 @@ computed from the ephemeris — a third independent quantity. A transposed, mirr
 rotated grid puts the oval on the dayside and fails immediately. The claim is deliberately
 weaker than the old one and, unlike the old one, it is true.
 
+### Tsyganenko T89c, checked against `geopack`
+
+IGRF is the field of the Earth's interior. It contains no external currents at all, so the
+shape it draws is a tilted dipole in empty space — none of the compression, tail stretching
+or ring-current inflation that makes a magnetosphere a magnetosphere. Those come from
+**T89c** (N. A. Tsyganenko, *Planet. Space Sci.* **37**(1) 5–20, 1989; the April 1992
+revision, release dated 12 Feb 1996), which returns the external field in nT. The traced
+field is IGRF-14 + T89c.
+
+**No JavaScript or TypeScript port existed.** Python, IDL and Fortran only. So the Fortran
+is vendored at `vendor/t89c.f` and `src/models/t89.ts` is a line-by-line translation of it,
+with the 210 coefficients generated from that file rather than retyped
+(`scripts/gen-t89.mjs`). Provenance, and the corrupt third-party copy that was rejected,
+are recorded in `vendor/README.md`.
+
+Reference implementation: the Python **`geopack`** package (`github.com/tsssss/geopack`),
+an independent translation of the same Fortran. `scripts/gen-t89-reference.py` evaluates it
+over **1540 points** — 44 positions spanning the inner region, the dayside, the cusps, the
+near and far tail, the lobes and the flanks × 7 Kp bands × 5 dipole tilts including exactly
+zero — and vendors the table as a test fixture.
+
+**Worst deviation across all 4620 component comparisons: 4.3 × 10⁻¹⁴ nT.** That is
+double-precision round-off and nothing else; there is no model difference to allow for. The
+assertion is set at 10⁻⁶ nT purely so a one-ULP difference in a platform's `exp` cannot fail
+the suite.
+
+The model's limits are stated in the app rather than hidden:
+
+| | |
+|---|---|
+| **Inputs** | a Kp band and the dipole tilt. Nothing else. |
+| **Kp resolution** | seven fits, not a continuum. Kp 3.0 and Kp 3.9 draw the same field. |
+| **No IMF** | no By, no Bz. Southward-Bz dayside opening is **not** represented. That is T96's job. |
+| **No pressure** | the wind's dynamic pressure does not enter. Only Kp does. |
+| **Fit region** | 70 Rₑ geocentric, per the source header. Beyond it the port returns null and the trace stops rather than falling back to IGRF alone. |
+| **Dayside limit** | 20 Rₑ sunward in GSM — **ours, not the paper's**, see below. |
+
+The dayside limit is worth explaining because it is the one number here that is not
+published. T89 has no magnetopause in it: the Chapman–Ferraro term is `exp(x/dx)` with
+dx ≈ 20–27 Rₑ, fitted to cancel the dipole *at* the boundary, and outside the boundary it
+simply keeps growing. The total field magnitude on the Sun–Earth line rises monotonically
+with distance instead of falling — measured, not assumed: at Kp ≥ 6 it goes 155 nT at
+5 Rₑ and climbs from there.
+
+Without a guard, **one field line in the drawn set of eighty** — a cusp seed, only at
+Kp ≥ 6 — escapes through the dayside and runs to 69 Rₑ sunward, drawing a confident line
+through a region the model does not describe. Twenty Earth radii is well clear of
+everything legitimate: T89's own last closed line reaches 10.7 Rₑ at its quietest and
+7.7 Rₑ at its most disturbed, and the sunward-most line in the drawn cage reaches 9.0 Rₑ.
+Lines cut there are marked truncated and the Situation Report says so, the same as the
+tail lines cut at 70 Rₑ.
+
+### GSM and the dipole tilt, checked against `geopack`
+
+T89 is written in GSM: +X to the Sun, +Z chosen so the dipole lies in the X–Z plane, +Y
+completing the right-handed set. The angle the dipole makes with +Z is the **dipole tilt**,
+and it is the input a sign error hides in — reverse it and the tail warps the wrong way
+while still drawing a plausible magnetosphere.
+
+`scripts/gen-gsm-reference.py` records `geopack.recalc()`'s tilt and its GEO→GSM rotation at
+16 epochs walking both the annual cycle (solstices, equinoxes) and the diurnal one.
+
+**Worst disagreement: 0.0044° of tilt, 0.0070° of axis.** Both come from the solar ephemeris
+rather than the frame: `geopack` carries the classic low-precision `SUN` routine, good to
+about a hundredth of a degree, while we use astronomy-engine's VSOP87 reduction. The dipole
+halves agree far more closely — `geopack` loads the same IGRF-14 coefficients, and the two
+extrapolated pole positions differ by 4 × 10⁻⁵ degrees.
+
+One number worth recording because the textbooks disagree with it: the tilt's annual extreme
+is **±32.6°**, not the ±35° usually quoted. The extreme is the obliquity (23.44°) plus the
+dipole's offset from the spin axis, and that offset is **9.14°** at the IGRF-14 epoch, down
+from the 11.5° of the mid-20th-century figures the textbooks were written from. The test
+derives it rather than asserting the constant.
+
+### T89's dayside standoff vs Shue 1998
+
+Two independent readings of the same surface, and they can disagree:
+
+| | driver | cadence |
+|---|---|---|
+| T89's last closed field line | Kp band | 3-hourly index, 7 steps |
+| Shue et al. 1998 nose | wind pressure and Bz at L1 | 1 minute |
+
+T89 has no boundary in it — it is a fit to the field *inside* the magnetosphere — so its
+standoff has to be read off the closed/open transition on the noon meridian. Measured
+values, sunward reach of the last closed line, at equinox:
+
+| Kp | 0 | 1 | 2 | 3 | 4 | 5 | ≥6 |
+|---|---|---|---|---|---|---|---|
+| Rₑ | 10.7 | 10.2 | 9.9 | 9.5 | 9.0 | 9.1 | 8.8 |
+
+Shue gives 10.9 Rₑ for a quiet wind (Bz 0, 5 cm⁻³, 400 km/s) and 9.1 Rₑ for a disturbed one
+(Bz −5, 8 cm⁻³, 500 km/s) — the same range, arrived at from entirely different inputs, which
+is what makes the comparison worth running as a check.
+
+**The search is a scan, not a bisection, and the reason is a bug that returned a confident
+number.** The obvious algorithm — closed near the equator, open over the pole, bisect
+between them — is correct at equinox and wrong at solstice. With the dipole leaning 26° the
+transition on the GSM noon meridian sits at 51° latitude in one hemisphere and *does not
+exist at all* in the other, where every seed from equator to pole stays closed. The first
+implementation bracketed [30°, 88°], found no transition, and returned null for half the
+year.
+
 ---
 
 ## 5b. Spacecraft ephemerides — `json/rtsw/rtsw_ephemerides_1h`

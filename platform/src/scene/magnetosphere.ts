@@ -1,7 +1,7 @@
 /**
- * The shield: IGRF-14 field lines, the Shue et al. 1998 magnetopause, and the
- * Farris & Russell 1994 bow shock. All tier `[D]` — deterministic geometry from
- * cited models, driven by the live solar wind.
+ * The shield: IGRF-14 + Tsyganenko T89c field lines, the Shue et al. 1998
+ * magnetopause, and the Farris & Russell 1994 bow shock. All tier `[D]` —
+ * deterministic geometry from cited models, driven by the live solar wind.
  *
  * Everything here lives in a group that co-rotates with the globe, because the
  * main field is fixed to the Earth. The magnetopause is the exception: it is
@@ -13,8 +13,10 @@ import {
   AdditiveBlending, BufferGeometry, Color, Float32BufferAttribute,
   Group, Line, LineBasicMaterial, LineSegments, ShaderMaterial, Vector3,
 } from 'three';
-import { DEFAULT_SEEDS, EARTH_RADIUS_KM, SIGNATURE_SEEDS, traceAll } from '../models/fieldlines.js';
-import type { FieldLine } from '../models/fieldlines.js';
+import {
+  DEFAULT_SEEDS, EARTH_RADIUS_KM, SIGNATURE_SEEDS, externalField, seedPoints, traceFullLine,
+} from '../models/fieldlines.js';
+import type { ExternalField, FieldLine } from '../models/fieldlines.js';
 import { shueRadius, type Magnetopause } from '../models/shue1998.js';
 import { toScene } from '../models/ephemeris.js';
 
@@ -36,6 +38,43 @@ function smoothstep(a: number, b: number, x: number): number {
 const FAR_ON_RE = 120;
 const FAR_OFF_RE = 80;
 
+/**
+ * How far the Sun may drift through the Earth-fixed frame before the lines are
+ * retraced: 3°, which the Earth covers in twelve minutes.
+ *
+ * The trade is a visible one either way. Let it run longer and the nose of the
+ * modelled magnetosphere sits measurably off the subsolar point — 15° an hour,
+ * which at a 10 Rₑ standoff is more than two Earth radii of lateral error
+ * against a terminator the viewer can see. Retrace more often and the cost is
+ * one full trace, which `traceMs` reports.
+ */
+const SUN_DRIFT_LIMIT_DEG = 3;
+const SUN_DRIFT_COS = Math.cos((SUN_DRIFT_LIMIT_DEG * Math.PI) / 180);
+
+/**
+ * How much of a frame a retrace may take. Four milliseconds against a 16.7 ms
+ * budget leaves the rest of the scene its own time, and spends a full 80-line
+ * retrace over about a second of wall clock instead of one dropped quarter-
+ * second. Nothing changes on screen until the whole set is ready.
+ */
+const TRACE_BUDGET_MS = 4;
+
+/** A retrace in flight. Its date and field are frozen at the moment it starts:
+ * a field line is an instantaneous object, so the field must not move under it
+ * while the set is being drawn. */
+interface TraceJob {
+  date: Date;
+  ext: ExternalField | null;
+  set: 'full' | 'signature';
+  band: number | null;
+  day: number;
+  sun: Vector3;
+  seeds: Vector3[];
+  done: FieldLine[];
+  next: number;
+  spentMs: number;
+}
+
 /** Earth-fixed km → the Earth mesh's local frame, in units of Earth radii. */
 function ecefToLocal(p: Vector3): Vector3 {
   return toScene(p).divideScalar(EARTH_RADIUS_KM);
@@ -45,15 +84,17 @@ const CLOSED_COLOR = new Color(0.42, 0.78, 0.95);
 const OPEN_COLOR = new Color(0.72, 0.55, 1.0);
 
 /**
- * Field lines are traced from IGRF-14 alone, which knows nothing about the
- * solar wind — an unconfined internal field extends forever. Four effects are
- * applied on the GPU on top of that:
+ * Field lines are traced from **IGRF-14 + Tsyganenko T89c**, so their shape is
+ * the field's own: the dayside compresses, the tail stretches into lobes and
+ * the inner region inflates because the external currents are in the integrand,
+ * not because a surface was drawn around them.
  *
- *  · CONFINEMENT `[D, approximate]` — vertices outside the Shue magnetopause
- *    are pulled back onto it. The magnetosphere really is bounded there, so the
- *    dayside visibly compresses when pressure rises. It is a geometric clamp,
- *    not an MHD solution: a proper treatment (Tsyganenko) would also stretch
- *    the tail and add current-sheet fields. The Situation Report says so.
+ * There used to be a fourth effect here, a CONFINEMENT step that pulled any
+ * vertex outside the Shue magnetopause back onto it. It was a geometric clamp
+ * — it stopped lines at a boundary instead of letting a field shape them — and
+ * with T89 in the trace there is nothing left for it to do. Three effects
+ * remain, all of them presentational:
+ *
  *  · SHIVER `[M]` — a small transverse oscillation whose amplitude follows Kp.
  *    Pure ambience. The real field does not wobble like this; disturbance is
  *    genuinely higher at high Kp, and this is a legend for that, nothing more.
@@ -68,10 +109,6 @@ const OPEN_COLOR = new Color(0.72, 0.55, 1.0);
 const lineVert = /* glsl */ `
   uniform float uTime;
   uniform float uShiver;      // 0-1, from Kp
-  uniform float uR0;          // Shue standoff, Earth radii
-  uniform float uAlpha;
-  uniform vec3  uSunDir;      // unit, Earth-fixed frame
-  uniform float uConfine;     // 0 = raw IGRF, 1 = clamped to the magnetopause
   varying float vDepth;
   varying float vViewZ;
 
@@ -84,13 +121,6 @@ const lineVert = /* glsl */ `
       float amp = uShiver * 0.0225 * min(r, 5.0);
       p += axis * amp * sin(uTime * 1.9 + r * 2.3 + p.y * 2.7);
       r = max(length(p), 0.0001);
-    }
-
-    if (uConfine > 0.001) {
-      float ct = clamp(dot(p / r, uSunDir), -1.0, 1.0);
-      float denom = max(1.0 + cos(acos(ct)), 0.004);
-      float rmp = uR0 * pow(2.0 / denom, uAlpha);
-      if (r > rmp) p *= mix(1.0, rmp / r, uConfine);
     }
 
     vDepth = r;
@@ -127,28 +157,106 @@ export class FieldLines {
   private tracedFor: number | null = null;
   /** Which seed set the current lines were traced from. */
   private tracedSet: 'full' | 'signature' | null = null;
+  /** The T89 Kp band the current lines carry; null = IGRF alone. */
+  private tracedBand: number | null = null;
+  /** The sunward direction, Earth-fixed, the current lines were traced for. */
+  private tracedSun: Vector3 | null = null;
   /** Hysteresis between the two sets, from the camera's distance in Rₑ. */
   private far = false;
   private reduced = false;
   private frozenAt = 0;
+  private lastTraceMs = 0;
+  private truncated = 0;
+  private external: ExternalField | null = null;
+  /** A retrace in progress, spread over frames. See `ensureTraced`. */
+  private job: TraceJob | null = null;
 
   constructor() {
-    this.group.name = 'igrf-field-lines';
+    this.group.name = 'field-lines-igrf14-t89';
   }
 
   /**
-   * Tracing is a one-off: the main field is Earth-fixed and changes only by
-   * secular variation, so retrace at most once a day rather than per frame —
-   * or when the camera's distance moves the line across the far-set threshold.
+   * Retrace when the field the lines were traced through is no longer the
+   * field. Four things can make that true:
+   *
+   *  · the **Kp band** changes — T89's only driver, and a step, not a glide,
+   *    so this fires a few times a day at most;
+   *  · the **Earth turns** far enough under the external field. This is the
+   *    one the internal field never had: IGRF is Earth-fixed and the lines
+   *    co-rotate with the globe quite correctly, but T89 is Sun-fixed, so the
+   *    nose of the magnetosphere walks backwards through the Earth-fixed frame
+   *    at 15°/hour. `SUN_DRIFT_LIMIT_DEG` sets how far it may walk before the
+   *    shape is redrawn;
+   *  · the **day** changes, for IGRF's secular variation;
+   *  · the **camera** crosses the far-set threshold and the seed set changes.
+   *
+   * That second trigger is the reason the work is **spread over frames**. With
+   * IGRF alone a retrace was a once-a-day event and its 125 ms could simply be
+   * spent; adding T89 makes it 155–185 ms *and* moves it to every twelve
+   * minutes, which is a visible stall on a page people leave open. So the
+   * seeds are traced a few per frame against `TRACE_BUDGET_MS`, the old lines
+   * stay on screen until the new set is complete, and the swap happens once.
+   * Roughly a second of wall clock, none of it in one frame.
    */
-  ensureTraced(date: Date): void {
+  ensureTraced(date: Date, kp: number | null): void {
     const day = Math.floor(date.getTime() / 86_400_000);
     const want: 'full' | 'signature' = this.far ? 'signature' : 'full';
-    if (this.tracedFor === day && this.tracedSet === want) return;
-    this.tracedFor = day;
-    this.tracedSet = want;
-    this.build(traceAll(date, want === 'signature' ? SIGNATURE_SEEDS : DEFAULT_SPEC));
+    const ext = externalField(date, kp);
+    const band = ext?.band ?? null;
+    const stale = (sun: Vector3 | null) => ext !== null && sun !== null
+      && sun.dot(ext.basis.x) < SUN_DRIFT_COS;
+
+    const current = this.tracedSun !== null && this.tracedFor === day
+      && this.tracedSet === want && this.tracedBand === band && !stale(this.tracedSun);
+
+    // A job already running for the same field keeps running; one running for
+    // a field that has since moved on is abandoned rather than finished.
+    if (this.job && (this.job.set !== want || this.job.band !== band
+      || this.job.day !== day || stale(this.job.sun))) {
+      this.job = null;
+    }
+    if (current && !this.job) return;
+
+    if (!this.job) {
+      const spec = want === 'signature' ? SIGNATURE_SEEDS : DEFAULT_SPEC;
+      this.job = {
+        date: new Date(date.getTime()), ext, set: want, band, day,
+        sun: ext ? ext.basis.x.clone() : new Vector3(1, 0, 0),
+        seeds: seedPoints(spec), done: [], next: 0, spentMs: 0,
+      };
+    }
+
+    const job = this.job;
+    const t0 = performance.now();
+    while (job.next < job.seeds.length && performance.now() - t0 < TRACE_BUDGET_MS) {
+      job.done.push(traceFullLine(job.seeds[job.next]!, job.date, { external: job.ext }));
+      job.next++;
+    }
+    job.spentMs += performance.now() - t0;
+    if (job.next < job.seeds.length) return;
+
+    this.tracedFor = job.day;
+    this.tracedSet = job.set;
+    this.tracedBand = job.band;
+    this.tracedSun = job.sun;
+    this.external = job.ext;
+    this.lastTraceMs = job.spentMs;
+    this.truncated = job.done.filter((l) => l.truncated).length;
+    this.build(job.done);
+    this.job = null;
   }
+
+  /** True while a retrace is still being spread across frames. */
+  get retracing(): boolean { return this.job !== null; }
+
+  /** Milliseconds of CPU the last retrace took in total, across all its frames. */
+  get traceMs(): number { return this.lastTraceMs; }
+
+  /** How many drawn lines were cut for drawing rather than ending. */
+  get truncatedCount(): number { return this.truncated; }
+
+  /** The external field the current lines carry, or null for IGRF alone. */
+  get externalUsed(): ExternalField | null { return this.external; }
 
   private build(traced: FieldLine[]): void {
     this.dispose();
@@ -165,10 +273,6 @@ export class FieldLines {
         uniforms: {
           uTime: { value: 0 },
           uShiver: { value: 0 },
-          uR0: { value: 10.5 },
-          uAlpha: { value: 0.58 },
-          uSunDir: { value: new Vector3(1, 0, 0) },
-          uConfine: { value: 1 },
           uCamDist: { value: 20 },
           uGlobeR: { value: 0.1 },
           uFarFade: { value: 1 },
@@ -231,25 +335,18 @@ export class FieldLines {
   }
 
   /**
-   * `sunDirLocal` must be in the Earth-FIXED frame: these lines co-rotate with
-   * the globe, so the inertial Sun direction has to be counter-rotated into it.
-   * `kp` drives the shiver; null leaves it still rather than guessing.
+   * Per-frame presentation only. The shape is settled at trace time now, so
+   * the Sun direction and the Shue solution no longer appear here at all —
+   * they were the clamp's inputs. `kp` drives the shiver; null leaves it still
+   * rather than guessing.
    */
-  setDynamics(
-    elapsed: number, sunDirLocal: Vector3,
-    r0Re: number | null, alpha: number | null, kp: number | null,
-  ): void {
+  setDynamics(elapsed: number, kp: number | null): void {
     const t = this.reduced ? this.frozenAt : elapsed;
     // Kp 0-4 is quiet through unsettled and gets nothing; 5-9 is storm.
     const shiver = kp === null ? 0 : Math.max(0, Math.min(1, (kp - 4) / 5));
     for (const m of this.materials) {
       m.uniforms['uTime']!.value = t;
       m.uniforms['uShiver']!.value = shiver;
-      (m.uniforms['uSunDir']!.value as Vector3).copy(sunDirLocal).normalize();
-      // No measured wind means no modelled boundary, so nothing to confine to.
-      m.uniforms['uConfine']!.value = r0Re === null ? 0 : 1;
-      if (r0Re !== null) m.uniforms['uR0']!.value = r0Re;
-      if (alpha !== null) m.uniforms['uAlpha']!.value = alpha;
     }
   }
 

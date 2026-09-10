@@ -380,7 +380,11 @@ export function renderSources(
     ${section('prov-models', 'Models cited', `
       <p>Shue et al. 1998 (doi:10.1029/98JA01103) — magnetopause.<br>
       Farris &amp; Russell 1994 — bow shock.<br>
-      ${igrfCitation(new Date())} — the geomagnetic field and its lines.<br>
+      ${igrfCitation(new Date())} — the Earth's internal field.<br>
+      Tsyganenko 1989 (T89c, Planet. Space Sci. 37, 5–20) — the external field of the
+      magnetospheric currents, driven by a Kp band and the dipole tilt. No IMF term:
+      it cannot open the dayside under a southward Bz. Together these two are the
+      field the lines are traced through.<br>
       OVATION Prime (NOAA SWPC) — aurora probability.<br>
       NOAA Geospace (Univ. Michigan BATS-R-US/RCM) — Dst.<br>
       WSA-Enlil (NOAA SWPC) — the heliospheric wind forecast.<br>

@@ -15,6 +15,9 @@ import { SWPC_URL, auroraAt, parseXrayLatestClass, xrayClass } from './swpc.js';
 import { angularSeparationDeg, decimalYear, geomagneticNorthPole, igrfInValidity } from '../models/igrf14.js';
 import { IGRF_EPOCH, IGRF_VALID_UNTIL } from '../models/igrf14-coeffs.js';
 import { subsolarPoint } from '../models/ephemeris.js';
+import { externalField, lastClosedSunwardRe } from '../models/fieldlines.js';
+import { kpBandFraction, kpBandIndex, t89BandLabel } from '../models/t89.js';
+import { magnetopause } from '../models/shue1998.js';
 import { GEOSYNC_RE, dipoleFieldAtRe } from './geosync.js';
 import { EPHEM_URL, parseEphemerides } from './ephemerides.js';
 import { DST_URL, parseDst } from './dst.js';
@@ -461,6 +464,87 @@ export async function runChecks(
             + `Reporting a defect on this evidence would be crying wolf.`,
       });
     }
+  }
+
+  /**
+   * Two independent readings of the same surface.
+   *
+   * The shield's field lines are traced through IGRF + T89, and T89's only
+   * driver is a Kp band — a three-hourly planetary index, in seven steps. The
+   * magnetopause wireframe beside them is Shue et al. 1998, driven by the
+   * minute-cadence solar-wind pressure and Bz measured at L1. Both are claims
+   * about where the dayside boundary is, and nothing makes them agree.
+   *
+   * So this row can fail, which is the point of it. A large, sustained
+   * disagreement is real information: Kp is an average over three hours of
+   * ground magnetometer ranges, so it lags a pressure pulse badly, and during
+   * a sudden commencement the wind knows the magnetosphere has been squeezed
+   * while Kp still says it is quiet.
+   *
+   * It reports `inconclusive` mid-band. T89 steps between seven fits; a Kp of
+   * 3.5 is drawn with exactly the same field as a Kp of 3.0, so holding it to
+   * a pressure-driven boundary's precision there would be testing the
+   * quantisation, not the models.
+   */
+  const windMp = magnetopause(
+    d.propagated?.bz ?? d.solar_wind?.bz_gsm ?? null,
+    d.propagated?.density ?? d.solar_wind?.density ?? null,
+    d.propagated?.speed ?? d.solar_wind?.speed ?? null,
+  );
+  const band = kpNow === null ? null : kpBandIndex(kpNow);
+  const ext = kpNow === null ? null : externalField(new Date(), kpNow);
+  const t89Nose = ext ? lastClosedSunwardRe(new Date(), ext) : null;
+
+  if (t89Nose === null || windMp === null || band === null || kpNow === null) {
+    rows.push({
+      name: 'Dayside standoff: T89 (Kp) vs Shue 1998 (wind)',
+      ours: t89Nose === null ? 'no Kp' : `${t89Nose.toFixed(1)} Rₑ`,
+      theirs: windMp === null ? 'no wind' : `${windMp.r0Re.toFixed(1)} Rₑ`,
+      ok: false,
+      inconclusive: true,
+      note: 'One of the two drivers is missing, so there is nothing to compare. '
+        + 'Absent evidence, not disagreement — with no Kp the shield is IGRF alone, '
+        + 'and with no wind there is no modelled boundary to draw.',
+    });
+  } else {
+    const gap = t89Nose - windMp.r0Re;
+    /**
+     * Three Earth radii, and the width is the finding rather than a fudge.
+     *
+     * T89 has no pressure term at all: one Kp band is one field, whatever the
+     * wind is doing. But the wind varies enormously *within* a quiet Kp — from
+     * 0.2 nPa to 10 nPa is all consistent with Kp 0–1 — and Shue puts the nose
+     * anywhere from 14.5 Rₑ to 8.0 Rₑ across that range, against T89's single
+     * 10.7 Rₑ for the band. A tighter threshold would report a defect every
+     * time the wind was thin, which is the mistake the aurora-oval row above
+     * was rewritten to stop making: it would be measuring the weather.
+     *
+     * So this catches gross faults — a transposed GSM axis, a broken standoff
+     * search, a Shue solution reading pressure upside down — and it reports
+     * the gap on every run whether or not it passes, because the number is
+     * more use than the verdict.
+     */
+    const TOL_RE = 3.0;
+    const midBand = kpBandFraction(kpNow) > 0.25 && kpBandFraction(kpNow) < 0.75;
+    rows.push({
+      name: 'Dayside standoff: T89 (Kp) vs Shue 1998 (wind)',
+      ours: `${t89Nose.toFixed(1)} Rₑ at Kp ${kpNow.toFixed(1)} (${t89BandLabel(band)})`,
+      theirs: `${windMp.r0Re.toFixed(1)} Rₑ from ${windMp.dynPressureNPa.toFixed(2)} nPa`,
+      ok: Math.abs(gap) <= TOL_RE,
+      inconclusive: midBand && Math.abs(gap) > TOL_RE,
+      note: `${gap >= 0 ? '+' : ''}${gap.toFixed(2)} Rₑ. Ours is the sunward reach of the last `
+        + `closed field line through the traced field — T89's own answer, since the model has `
+        + `no boundary in it. Theirs is the Shue nose from the propagated wind. `
+        + `The two share no inputs. `
+        + (midBand
+          ? `Kp ${kpNow.toFixed(1)} sits mid-band, where T89 draws exactly the field it would `
+            + `at Kp ${Math.floor(kpNow).toFixed(1)} — too coarse to be held to a `
+            + `pressure-driven boundary. A gap beyond ${TOL_RE} Rₑ on this run would be `
+            + `reported as unsettled rather than as a fault in either model.`
+          : `Kp is near a band edge, so the comparison is as sharp as a seven-band model gets. `
+            + `A gap beyond ${TOL_RE} Rₑ means the wind has moved somewhere the three-hourly `
+            + `index cannot follow — or that one of the two is wired wrong.`),
+    });
   }
 
   /**
