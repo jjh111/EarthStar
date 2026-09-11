@@ -542,13 +542,15 @@ viewer.onLayerHover = (p) => {
 };
 
 viewer.onLayerSelect = (p) => {
-  // Empty sky dismisses. A click that hits nothing is a click that means
-  // "never mind", and leaving the card up would make the scene feel stuck.
-  if (!p) { card.close(); return; }
-  card.open(p.subject, p.screen);
+  // One click to put a card away, the next to open one — see `sceneClick`.
+  // Empty sky dismisses too: a click that hits nothing means "never mind".
+  card.sceneClick(p?.subject ?? null, p?.screen ?? { x: 0, y: 0 });
 };
 
 viewer.onSelect = (p) => {
+  // A body click puts an open card away first, for the same reason a layer
+  // click does: with a card up, the next click means "not this one".
+  if (card.isOpen) { card.close(); return; }
   // The Sun has a whole panel of its own — live imagery in six passbands, the
   // region list, and 278 years of cycle history. Sending a click there beats
   // sending it to a distance table.

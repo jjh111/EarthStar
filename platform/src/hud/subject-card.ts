@@ -47,10 +47,35 @@ export class SubjectCard {
     document.body.appendChild(this.el);
 
     this.el.addEventListener('click', this.onClick);
-    this.el.addEventListener('keydown', this.onKeyDown);
+    // Escape is bound to the document, not to the card.
+    //
+    // Binding it to the card only works while the card holds focus, which it
+    // does for exactly as long as it takes to click anything else — drag the
+    // camera once and Escape silently stops closing it. A reader has no way to
+    // tell that focus is why, and the key that should always work is the one
+    // that must never be conditional.
+    document.addEventListener('keydown', this.onKeyDown);
   }
 
   get openId(): string | null { return this.current; }
+
+  get isOpen(): boolean { return !this.el.hidden; }
+
+  /**
+   * A click in the scene, with whatever it landed on.
+   *
+   * **The first click after a card opens only dismisses it.** With a card up,
+   * the next click is almost always "put this away, I want to look at
+   * something else" — and in a scene this dense it will usually land on
+   * another layer, so answering it by opening a second card made the whole
+   * thing feel like flypaper: you could not click your way *out*. One click
+   * to close, the next to select. Nothing is lost, because the thing you
+   * clicked is still there to click again.
+   */
+  sceneClick(subjectId: string | null, at: { x: number; y: number }): void {
+    if (this.isOpen) { this.close(); return; }
+    if (subjectId) this.open(subjectId, at);
+  }
 
   /**
    * Show `id` anchored near a point in canvas coordinates.
@@ -164,10 +189,15 @@ export class SubjectCard {
   };
 
   private onKeyDown = (e: KeyboardEvent): void => {
-    if (e.key === 'Escape') { e.stopPropagation(); this.close(); }
+    if (e.key !== 'Escape' || this.el.hidden) return;
+    // Only swallow the key when there was something to close, so Escape keeps
+    // working for whatever else on the page wants it.
+    e.stopPropagation();
+    this.close();
   };
 
   dispose(): void {
+    document.removeEventListener('keydown', this.onKeyDown);
     this.el.remove();
   }
 }

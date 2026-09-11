@@ -75,6 +75,28 @@ export function pickAt(
   return best;
 }
 
+/**
+ * Was that a click, or the end of a camera move?
+ *
+ * The browser fires `click` on mouse-up whatever happened in between, so
+ * rotating the view with OrbitControls ends in a click on the canvas — and the
+ * scene answered every one of them by selecting whatever was under the
+ * pointer. Dragging the camera around opened a card, then another, then
+ * another.
+ *
+ * Distance, not duration: a careful slow click is still a click, and a fast
+ * flick of the camera is still a drag. Five pixels is past hand tremor and
+ * well short of any deliberate rotation.
+ */
+export const CLICK_SLOP_PX = 5;
+
+export function isClick(
+  down: { x: number; y: number } | null, up: { x: number; y: number },
+): boolean {
+  if (!down) return true;
+  return Math.hypot(up.x - down.x, up.y - down.y) <= CLICK_SLOP_PX;
+}
+
 /* ------------------------------------------------------------------ *
  * Layers
  * ------------------------------------------------------------------ */
