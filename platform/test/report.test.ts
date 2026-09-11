@@ -70,6 +70,40 @@ describe('the briefing export', () => {
   });
 });
 
+/**
+ * The report's sentences are escaped by `renderReport` exactly as the registry's
+ * are, so markup in them renders as literal punctuation too — and unlike the
+ * registry they are assembled at runtime from live values, so a stray asterisk
+ * can arrive through a feed's own text.
+ *
+ * The briefing *export* is a different document and markdown is correct there;
+ * `briefing.ts` adds the headings and bullets around these lines.
+ */
+describe('the report is prose too', () => {
+  const MARKUP: [RegExp, string][] = [
+    [/\*/, 'an asterisk'],
+    [/`/, 'a backtick'],
+    [/\[[^\]]+\]\([^)]+\)/, 'a markdown link'],
+    [/<[a-z/]/i, 'an HTML tag'],
+  ];
+
+  it('carries no markup in any line, live or cold', () => {
+    for (const [label, lines] of [['live', FIXTURE.live], ['cold', FIXTURE.cold]] as const) {
+      for (const line of lines) {
+        for (const [pattern, why] of MARKUP) {
+          expect(line, `${label} line contains ${why}: ${line.slice(0, 80)}`).not.toMatch(pattern);
+        }
+      }
+    }
+  });
+
+  it('holds the section titles to it as well', () => {
+    for (const title of Object.values(SECTION_TITLES)) {
+      expect(title).not.toMatch(/[*`<]/);
+    }
+  });
+});
+
 describe('sections', () => {
   const lines = buildReportLines(env, scene, NOW, null, [], []);
 

@@ -160,17 +160,52 @@ describe('tier labels', () => {
 });
 
 describe('the prose is prose', () => {
-  it('carries no markup, because it is escaped on the way out', () => {
-    // Every surface escapes these strings, so `**bold**` renders as asterisks
-    // and `<em>` renders as angle brackets. Caught in the browser the first
-    // time; asserted here so it cannot come back.
+  /**
+   * Every surface escapes these strings, so any markup in them renders as
+   * literal punctuation: `**bold**` comes out with its asterisks, `<em>` with
+   * its angle brackets.
+   *
+   * The first version of this test forbade `**` and `__` only, because those
+   * were what had leaked. Five single-asterisk emphases then leaked past it and
+   * shipped — *only*, *here*, *modelled*, *draping*, *around* — and were found
+   * by looking at a rendered panel, not by the suite. So the rule is now the
+   * whole class rather than the instances that happened to be caught: these
+   * strings are prose, and prose has no markup in it at all.
+   *
+   * Emphasis is not lost by this, it is written differently. "a boundary drawn
+   * around the field rather than one the field produces" carries its contrast
+   * in the sentence; it never needed the asterisks.
+   */
+  const MARKUP: [RegExp, string][] = [
+    [/\*/, 'an asterisk — markdown emphasis renders literally'],
+    [/`/, 'a backtick — code spans render literally'],
+    [/(?<![\w\\])_[A-Za-z][^_]*_(?![\w])/, 'underscore emphasis'],
+    [/\[[^\]]+\]\([^)]+\)/, 'a markdown link — use sources[] instead'],
+    [/<[a-z/]/i, 'an HTML tag'],
+    [/^\s*(?:[-*+]\s|#{1,6}\s)/, 'a markdown list or heading marker'],
+  ];
+
+  it('carries no markup of any kind, because it is escaped on the way out', () => {
     const fields = (s: { meaning: string; limits: string; oneLine: string;
-      howMade: string; toPromote?: string }) =>
-      [s.oneLine, s.meaning, s.howMade, s.limits, s.toPromote ?? ''];
+      howMade: string; toPromote?: string; keyedTo?: string | null }) =>
+      [s.oneLine, s.meaning, s.howMade, s.limits, s.toPromote ?? '', s.keyedTo ?? ''];
     for (const s of SUBJECTS) {
       for (const text of fields(s)) {
-        expect(text, `${s.id} contains markdown emphasis`).not.toMatch(/\*\*|__/);
-        expect(text, `${s.id} contains a tag`).not.toMatch(/<[a-z/]/i);
+        for (const [pattern, why] of MARKUP) {
+          expect(text, `${s.id} contains ${why}: ${text.slice(0, 80)}`).not.toMatch(pattern);
+        }
+      }
+    }
+  });
+
+  it('holds the labels and source names to the same rule', () => {
+    // A source name is rendered inside a link's text and escaped the same way.
+    for (const s of SUBJECTS) {
+      for (const text of [s.label, ...s.sources.map((src) => src.name),
+        ...s.sources.map((src) => src.ref ?? '')]) {
+        for (const [pattern, why] of MARKUP) {
+          expect(text, `${s.id} label/source contains ${why}: ${text}`).not.toMatch(pattern);
+        }
       }
     }
   });
