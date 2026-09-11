@@ -297,6 +297,7 @@ function syncNarration(): void {
     aurora: viewer.auroraOn, wind: viewer.windOn,
     earthSurface: viewer.earthSurfaceState,
     cmes: { shown: viewer.cmesOn, count: viewer.cmeCount },
+    drawn: viewer.drawnSubjects,
   });
   hud.render(store.get());
 }
