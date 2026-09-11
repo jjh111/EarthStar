@@ -13,7 +13,7 @@ import {
   BufferGeometry, Float32BufferAttribute, Group, Line, LineBasicMaterial,
   PerspectiveCamera, Vector3,
 } from 'three';
-import { pickAt, pickLayerAt, type Candidate } from '../src/scene/picking.js';
+import { isClick, pickAt, pickLayerAt, type Candidate } from '../src/scene/picking.js';
 import { Pickables } from '../src/scene/pickables.js';
 
 const SIZE = { width: 800, height: 600 };
@@ -151,5 +151,27 @@ describe('picking layers', () => {
     const hit = root.children[0]!;
     expect(pickables.subjectFor(hit)).toBe('layer.field-lines');
     expect(pickables.subjectFor(new Group())).toBeNull();
+  });
+});
+
+describe('telling a click from a camera move', () => {
+  it('accepts a click that did not travel', () => {
+    expect(isClick({ x: 400, y: 300 }, { x: 400, y: 300 })).toBe(true);
+    expect(isClick({ x: 400, y: 300 }, { x: 403, y: 302 })).toBe(true);
+  });
+
+  it('rejects the click that ends a drag', () => {
+    // The browser fires `click` on mouse-up whatever happened in between, so
+    // rotating the camera used to select whatever ended up under the pointer —
+    // which meant dragging the view around opened one card after another.
+    expect(isClick({ x: 400, y: 300 }, { x: 460, y: 300 })).toBe(false);
+    expect(isClick({ x: 400, y: 300 }, { x: 400, y: 340 })).toBe(false);
+    expect(isClick({ x: 400, y: 300 }, { x: 406, y: 304 })).toBe(false);
+  });
+
+  it('accepts a click with no recorded press, rather than swallowing it', () => {
+    // A synthetic click, or one whose pointerdown landed elsewhere. Losing a
+    // real click is worse than honouring an unusual one.
+    expect(isClick(null, { x: 10, y: 10 })).toBe(true);
   });
 });

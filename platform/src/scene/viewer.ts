@@ -32,7 +32,9 @@ import { CmeCones } from './cmes.js';
 import type { SpacecraftPos } from '../data/ephemerides.js';
 import { SpacecraftMarkers } from './spacecraft.js';
 import { calibrateDisk } from './disk-calibration.js';
-import { pickAt, pickLayerAt, type Candidate, type LayerPick, type Pick } from './picking.js';
+import {
+  isClick, pickAt, pickLayerAt, type Candidate, type LayerPick, type Pick,
+} from './picking.js';
 import { Pickables } from './pickables.js';
 import { activeCmes, type Cme } from '../data/cme.js';
 import type { ActiveRegion } from '../data/swpc.js';
@@ -335,6 +337,7 @@ export class Viewer {
     window.addEventListener('resize', this.resize);
     canvas.addEventListener('pointermove', this.onPointerMove);
     canvas.addEventListener('pointerleave', this.onPointerLeave);
+    canvas.addEventListener('pointerdown', this.onPointerDown);
     canvas.addEventListener('click', this.onClick);
   }
 
@@ -800,7 +803,20 @@ export class Viewer {
     return out;
   }
 
+  /** Where the pointer went down, so a drag can be told from a click. */
+  private downAt: { x: number; y: number } | null = null;
+
+  private onPointerDown = (e: PointerEvent): void => {
+    this.downAt = { x: e.clientX, y: e.clientY };
+  };
+
   private onClick = (e: MouseEvent): void => {
+    // A camera move ends in a click event too, and the scene used to answer
+    // every one of them. Drag to rotate, and you opened a card, then another.
+    const down = this.downAt;
+    this.downAt = null;
+    if (!isClick(down, { x: e.clientX, y: e.clientY })) return;
+
     const p = this.pointerPick(e);
     if (p) { this.onSelect?.(p); return; }
     // Only now pay for the ray. A click is rare; a pointermove is not.
@@ -820,6 +836,7 @@ export class Viewer {
     window.removeEventListener('resize', this.resize);
     this.canvas.removeEventListener('pointermove', this.onPointerMove);
     this.canvas.removeEventListener('pointerleave', this.onPointerLeave);
+    this.canvas.removeEventListener('pointerdown', this.onPointerDown);
     this.canvas.removeEventListener('click', this.onClick);
     this.earth.dispose();
     this.sun.dispose();
