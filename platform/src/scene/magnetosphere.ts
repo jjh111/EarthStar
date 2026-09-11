@@ -1,5 +1,5 @@
 /**
- * The shield: IGRF-14 + Tsyganenko T89c field lines, the Shue et al. 1998
+ * The shield: IGRF-14 + Tsyganenko field lines, the Shue et al. 1998
  * magnetopause, and the Farris & Russell 1994 bow shock. All tier `[D]` —
  * deterministic geometry from cited models, driven by the live solar wind.
  *
@@ -16,7 +16,7 @@ import {
 import {
   DEFAULT_SEEDS, EARTH_RADIUS_KM, SIGNATURE_SEEDS, externalField, seedPoints, traceFullLine,
 } from '../models/fieldlines.js';
-import type { ExternalField, FieldLine } from '../models/fieldlines.js';
+import type { ExternalDrivers, ExternalField, FieldLine } from '../models/fieldlines.js';
 import { shueRadius, type Magnetopause } from '../models/shue1998.js';
 import { toScene } from '../models/ephemeris.js';
 
@@ -59,6 +59,39 @@ const SUN_DRIFT_COS = Math.cos((SUN_DRIFT_LIMIT_DEG * Math.PI) / 180);
  */
 const TRACE_BUDGET_MS = 4;
 
+/**
+ * How far each T96 driver may move before the lines are retraced.
+ *
+ * Measured against the drift the retrace already tolerates rather than chosen.
+ * Twelve minutes of the Earth turning — the `SUN_DRIFT_LIMIT_DEG` allowance —
+ * moves the median drawn vertex by 0.008 Rₑ. Against a 2 nPa, −30 nT, By 3,
+ * Bz −4 background these steps move it by 0.014, 0.037, 0.013 and 0.019 Rₑ
+ * respectively: the same order, so no driver is being held to a looser
+ * standard than the clock is.
+ *
+ * Bz is the one worth stating. One nanotesla of it moves the lines *further*
+ * than twelve minutes of rotation does, and flips one line of the eighty
+ * between closed and open. Under T89 the same nanotesla changed nothing at all,
+ * because T89 has no IMF term — which is the whole reason T96 is here.
+ */
+const T96_RETRACE_STEP = { pdynNPa: 0.25, dstNt: 5, byNt: 1, bzNt: 1 };
+
+/**
+ * A key that changes only when the field would visibly change.
+ *
+ * `null` for IGRF alone, the band number for T89 — its Kp bins are already
+ * discrete — and the quantised drivers for T96. Keying T96 on its raw inputs
+ * would retrace on every one-minute wind sample whether or not the shape moved.
+ */
+function fieldKey(ext: ExternalField | null): string | null {
+  if (!ext) return null;
+  if (ext.model.name === 't89') return `t89:${ext.model.band}`;
+  const q = (v: number, step: number) => Math.round(v / step);
+  const i = ext.model.input;
+  return `t96:${q(i.pdynNPa, T96_RETRACE_STEP.pdynNPa)}:${q(i.dstNt, T96_RETRACE_STEP.dstNt)}`
+    + `:${q(i.byNt, T96_RETRACE_STEP.byNt)}:${q(i.bzNt, T96_RETRACE_STEP.bzNt)}`;
+}
+
 /** A retrace in flight. Its date and field are frozen at the moment it starts:
  * a field line is an instantaneous object, so the field must not move under it
  * while the set is being drawn. */
@@ -66,7 +99,7 @@ interface TraceJob {
   date: Date;
   ext: ExternalField | null;
   set: 'full' | 'signature';
-  band: number | null;
+  key: string | null;
   day: number;
   sun: Vector3;
   seeds: Vector3[];
@@ -157,8 +190,8 @@ export class FieldLines {
   private tracedFor: number | null = null;
   /** Which seed set the current lines were traced from. */
   private tracedSet: 'full' | 'signature' | null = null;
-  /** The T89 Kp band the current lines carry; null = IGRF alone. */
-  private tracedBand: number | null = null;
+  /** The field key the current lines carry; null = IGRF alone. */
+  private tracedKey: string | null = null;
   /** The sunward direction, Earth-fixed, the current lines were traced for. */
   private tracedSun: Vector3 | null = null;
   /** Hysteresis between the two sets, from the camera's distance in Rₑ. */
@@ -172,46 +205,50 @@ export class FieldLines {
   private job: TraceJob | null = null;
 
   constructor() {
-    this.group.name = 'field-lines-igrf14-t89';
+    this.group.name = 'field-lines-igrf14-external';
   }
 
   /**
    * Retrace when the field the lines were traced through is no longer the
    * field. Four things can make that true:
    *
-   *  · the **Kp band** changes — T89's only driver, and a step, not a glide,
-   *    so this fires a few times a day at most;
+   *  · the **drivers** change enough to move the shape — a Kp band step under
+   *    T89, which fires a few times a day; or a `T96_RETRACE_STEP` of pressure,
+   *    Dst or the IMF under T96, which during a storm fires about as often as
+   *    the wind is sampled;
    *  · the **Earth turns** far enough under the external field. This is the
    *    one the internal field never had: IGRF is Earth-fixed and the lines
-   *    co-rotate with the globe quite correctly, but T89 is Sun-fixed, so the
-   *    nose of the magnetosphere walks backwards through the Earth-fixed frame
-   *    at 15°/hour. `SUN_DRIFT_LIMIT_DEG` sets how far it may walk before the
-   *    shape is redrawn;
+   *    co-rotate with the globe quite correctly, but the external field is
+   *    Sun-fixed, so the nose of the magnetosphere walks backwards through the
+   *    Earth-fixed frame at 15°/hour. `SUN_DRIFT_LIMIT_DEG` sets how far it may
+   *    walk before the shape is redrawn;
    *  · the **day** changes, for IGRF's secular variation;
    *  · the **camera** crosses the far-set threshold and the seed set changes.
    *
    * That second trigger is the reason the work is **spread over frames**. With
    * IGRF alone a retrace was a once-a-day event and its 125 ms could simply be
-   * spent; adding T89 makes it 155–185 ms *and* moves it to every twelve
-   * minutes, which is a visible stall on a page people leave open. So the
-   * seeds are traced a few per frame against `TRACE_BUDGET_MS`, the old lines
-   * stay on screen until the new set is complete, and the swap happens once.
-   * Roughly a second of wall clock, none of it in one frame.
+   * spent; adding an external field makes it 180 ms under T89 or about 800 ms
+   * under T96 — T96 costs 23× as much per field evaluation — *and* moves it to
+   * every twelve minutes at worst, which is a visible stall on a page people
+   * leave open. So the seeds are traced a few per frame against
+   * `TRACE_BUDGET_MS`, the old lines stay on screen until the new set is
+   * complete, and the swap happens once. A few seconds of wall clock under T96,
+   * none of it in one frame.
    */
-  ensureTraced(date: Date, kp: number | null): void {
+  ensureTraced(date: Date, drivers: ExternalDrivers): void {
     const day = Math.floor(date.getTime() / 86_400_000);
     const want: 'full' | 'signature' = this.far ? 'signature' : 'full';
-    const ext = externalField(date, kp);
-    const band = ext?.band ?? null;
+    const ext = externalField(date, drivers);
+    const key = fieldKey(ext);
     const stale = (sun: Vector3 | null) => ext !== null && sun !== null
       && sun.dot(ext.basis.x) < SUN_DRIFT_COS;
 
     const current = this.tracedSun !== null && this.tracedFor === day
-      && this.tracedSet === want && this.tracedBand === band && !stale(this.tracedSun);
+      && this.tracedSet === want && this.tracedKey === key && !stale(this.tracedSun);
 
     // A job already running for the same field keeps running; one running for
     // a field that has since moved on is abandoned rather than finished.
-    if (this.job && (this.job.set !== want || this.job.band !== band
+    if (this.job && (this.job.set !== want || this.job.key !== key
       || this.job.day !== day || stale(this.job.sun))) {
       this.job = null;
     }
@@ -220,7 +257,7 @@ export class FieldLines {
     if (!this.job) {
       const spec = want === 'signature' ? SIGNATURE_SEEDS : DEFAULT_SPEC;
       this.job = {
-        date: new Date(date.getTime()), ext, set: want, band, day,
+        date: new Date(date.getTime()), ext, set: want, key, day,
         sun: ext ? ext.basis.x.clone() : new Vector3(1, 0, 0),
         seeds: seedPoints(spec), done: [], next: 0, spentMs: 0,
       };
@@ -237,7 +274,7 @@ export class FieldLines {
 
     this.tracedFor = job.day;
     this.tracedSet = job.set;
-    this.tracedBand = job.band;
+    this.tracedKey = job.key;
     this.tracedSun = job.sun;
     this.external = job.ext;
     this.lastTraceMs = job.spentMs;

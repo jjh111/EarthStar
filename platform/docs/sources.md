@@ -398,6 +398,164 @@ everything legitimate: T89's own last closed line reaches 10.7 Rₑ at its quiet
 Lines cut there are marked truncated and the Situation Report says so, the same as the
 tail lines cut at 70 Rₑ.
 
+### Tsyganenko T96, checked against `geopack`
+
+T89's table above ends with *"That is T96's job."* This is that job.
+
+**T96** (N. A. Tsyganenko, *J. Geophys. Res.* **100**, 5599, 1995; Tsyganenko and Stern,
+*J. Geophys. Res.* **101**, 27187, 1996; the `T96_01` release of 22 June 1996 with the two
+T. Sotirelis corrections of April 1997) takes four measured drivers where T89 takes one
+index: solar-wind dynamic pressure, Dst, and the IMF's By and Bz. **The Viewer already
+fetched all four.** It traces through T96 whenever the wind is complete and falls back to
+T89 on Kp alone when it is not; `externalField` in `src/models/fieldlines.ts` is that
+ladder, and the Situation Report says which rung it is on.
+
+Three things T96 has that T89 does not:
+
+- **An IMF term.** A fraction of the interplanetary field penetrates the boundary and
+  crosses the cavity, which is the mechanism a southward Bz actually acts by.
+- **A magnetopause.** An explicit boundary whose size follows the dynamic pressure, so the
+  20 Rₑ sunward guard T89 needs — ours, not the paper's — has nothing to do under T96.
+- **Region 1 and Region 2 Birkeland currents**, as separate systems with their own
+  shielding fields rather than one lumped field-aligned term.
+
+**No JavaScript or TypeScript port existed**, same as T89. The Fortran is vendored at
+`vendor/t96.f` — 34 routines, 1338 statements — and `src/models/t96.ts` is a line-by-line
+translation, with all **848 coefficients** generated from that file by `scripts/gen-t96.mjs`
+rather than retyped. Provenance and the three-way diff behind the choice of copy are in
+`vendor/README.md`.
+
+#### The check, and the account of what is left over
+
+`scripts/gen-t96-reference.py` evaluates the Python **`geopack`** package over **2520
+points** — 63 positions × 8 wind states × 5 dipole tilts. The positions are chosen to reach
+every branch rather than to cover space evenly, because T96 is piecewise and most of its
+bugs would hide in one piece: either side of the magnetopause and inside the boundary layer
+between; a latitude sweep crossing the Region 1 oval and both of its boundary layers, north
+and south; and the five zones of the Region 2 current layer.
+
+**Worst deviation: 4.9 × 10⁻⁵ nT.** That is not round-off, and it is not tolerated — it is
+accounted for. Three deviations, each isolated by restoring it and re-measuring:
+
+| restored | worst disagreement |
+|---|---|
+| nothing — published `geopack` | 4.9 × 10⁻⁵ nT |
+| `TAIL87`'s three truncated constants | 1.2 × 10⁻⁶ nT |
+| + the Fortran's own Bessel polynomials | 8.0 × 10⁻⁷ nT |
+| + the Fortran's truncated 2π literal | 7.1 × 10⁻⁷ nT |
+
+All three are places where `geopack` silently modernised a literal, and in each the
+vendored source is what this port follows:
+
+- **`TAIL87`** recomputes `xn21`, `xnr` and `adln` from the formulas written in the
+  Fortran's *comments*. The released `DATA` statement holds them truncated — `xnr` to
+  `-0.1071` where the formula gives `-0.10710378…` — and those truncated numbers are what
+  the model was fitted with. This is the largest of the three by a factor of forty.
+- **`CYLHARM`/`CYLHAR1`** call scipy's exact Bessel functions; the Fortran carries its own
+  Abramowitz & Stegun polynomial approximations, good to about 10⁻⁸, and was fitted with
+  them.
+- **`T96_01`** wraps the IMF clock angle with `2π` where the Fortran writes `6.2831853`, and
+  tests `< 0` where the Fortran tests `.LE. 0`. Visible only through `facteps`, which a
+  storm amplifies.
+
+A fourth, smaller still: `BIRK1TOT_02` uses `np.pi` where the Fortran writes
+`3.141592654`, which moves the Region 1 oval by 4 × 10⁻¹⁰ radians.
+
+The test asserts an **absolute** bound of 10⁻⁴ nT rather than a relative one, because the
+disagreement comes from fixed constants and so does not scale with the field: it is a
+near-uniform 1.7–4.9 × 10⁻⁵ nT across the whole grid, and a relative bound would say
+nothing wherever the components cancel.
+
+#### What T96 does not know
+
+| | |
+|---|---|
+| **Inputs** | Pdyn, Dst, IMF By and Bz, and the dipole tilt. All four or none — three of four would mean inventing the fourth. |
+| **No history** | a static fit. A magnetosphere driven hard for six hours looks the same to it as one just struck, so a substorm is not in it. |
+| **Magnetopause driver** | pressure alone. The author: *"The only parameter which controls the size of the model magnetopause is the solar wind ram pressure Pdyn. No IMF dependence has been introduced so far."* Shue 1998, drawn beside it, does have a Bz term — hence the check below. |
+| **Fitted ranges** | Pdyn 0.5–10 nPa, Dst −100 to +20 nT, By and Bz within ±10 nT, per the original distribution header. Every source amplitude depends **linearly** on √Pdyn, Dst and the IMF coupling term, so outside these the extrapolation is arithmetic rather than physics. |
+| **Outside the range** | the Viewer still draws it, and names the driver that has left. A severe storm is exactly when someone looks; refusing would lose the one case the IMF terms exist for, and clamping would report a milder storm than the one being measured. |
+| **Drawing limit** | 70 Rₑ geocentric — **ours, not the paper's.** T96 states no radial limit, so a line stopped there is marked `truncated`, never `out-of-model`. |
+
+#### What it costs, and what it buys
+
+**Cost.** T96 is **23× T89 per field evaluation** — 16.7 µs against 0.72 µs, measured on
+this machine. A full 80-line retrace goes from 182 ms to about 800 ms of CPU, spread across
+frames at 4 ms each, so nothing stalls; in the browser, against a real quiet wind, a
+complete retrace measured 310–380 ms.
+
+**What it buys**, measured the same way. Same instant, same pressure, same Dst, swinging
+only Bz:
+
+| | open (polar-cap) lines of 80 | truncated |
+|---|---|---|
+| T96, Bz +12 nT | 2 | 2 |
+| T89 (Kp 0.67) | 4 | 4 |
+| T96, Bz −12 nT | 8 | 8 |
+
+The polar cap opens fourfold between a strongly northward and a strongly southward IMF.
+Under T89 that same swing changes **nothing at all** — T89 has no term for it, so its 4 is
+whatever its Kp band says whatever the Sun is doing.
+
+The retrace cadence was calibrated against the drift the code already tolerates rather than
+chosen. Twelve minutes of the Earth turning — the `SUN_DRIFT_LIMIT_DEG` allowance — moves
+the median drawn vertex by 0.008 Rₑ. Against a 2 nPa, −30 nT, By 3, Bz −4 background:
+
+| driver step | median vertex shift |
+|---|---|
+| Pdyn 0.25 nPa | 0.014 Rₑ |
+| Dst 5 nT | 0.037 Rₑ |
+| By 1 nT | 0.013 Rₑ |
+| Bz 1 nT | 0.019 Rₑ |
+
+Those are the steps `T96_RETRACE_STEP` uses. One nanotesla of Bz moves the drawn lines
+*further than twelve minutes of rotation does*, and flips one line of the eighty between
+closed and open.
+
+### T96's magnetopause vs Shue 1998
+
+A second pair of independent readings of the dayside boundary, and this one disagrees **by
+construction**:
+
+| | driver |
+|---|---|
+| T96's own magnetopause | wind pressure only |
+| Shue et al. 1998 nose | wind pressure **and** Bz |
+
+T96's nose is closed-form — on the Sun–Earth line the σ = s₀ surface reduces to
+`s₀·am − am + x₀` with `am` and `x₀` scaled by pressure — and sits at **11.08 Rₑ** at the
+model's own 2 nPa reference.
+
+Comparing the two noses directly would only measure how southward the IMF is, so the check
+compares the part where they *should* agree: **Shue evaluated at Bz = 0**, where both are
+driven by the measured pressure alone.
+
+| Pdyn (nPa) | 0.1 | 0.5 | 2 | 10 | 30 |
+|---|---|---|---|---|---|
+| T96 − Shue(Bz 0), Rₑ | 0.712 | 0.805 | 0.828 | 0.811 | 0.782 |
+
+**0.71 to 0.83 Rₑ across Pdyn 0.1–30**, T96's boundary consistently the outer one, by about
+8% and essentially independently of pressure. Two independent fits, a decade apart, to
+different spacecraft databases, agreeing that closely on how hard the wind pushes. A wrong
+exponent in either, or a dynamic pressure assembled wrongly from density and speed, moves
+it straight out of that band — so the Checks tolerance is 0.5–1.1 Rₑ, that measurement
+widened a little, and the row reports the offset on every run.
+
+The remainder — the gap at the *measured* Bz, minus that offset — is the IMF term Shue has
+and T96 does not. At 2.5 nPa it spans about 2.2 Rₑ between Bz +15 and Bz −15.
+
+A first attempt at this row compared the raw noses with a 2.5 Rₑ tolerance derived from the
+span of Shue's tanh bracket. It was wrong, and the test caught it before it shipped: the
+measured worst gap is **3.5 Rₑ**, because the two models also differ slightly in their
+pressure exponents — T96 scales as Pdyn^−0.14, Shue as Pdyn^−0.1515 — and in their leading
+constants. The gap is also **one-signed**: T96's boundary is outside Shue's everywhere
+plausible, smallest measured 0.61 Rₑ, so a negative gap in the Checks tab would mean
+something is wired wrong rather than that the wind turned.
+
+The field lines stop at T96's boundary; the teal wireframe draws Shue's. When they part
+company, that is two boundaries on screen, not one drawn twice — and the magnetopause card
+says so.
+
 ### GSM and the dipole tilt, checked against `geopack`
 
 T89 is written in GSM: +X to the Sun, +Z chosen so the dipole lies in the X–Z plane, +Y

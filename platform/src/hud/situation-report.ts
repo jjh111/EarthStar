@@ -18,6 +18,8 @@ import { scaleLabel, type ScaleMode } from '../scene/scales.js';
 import { subsolarPoint } from '../models/ephemeris.js';
 import { igrfCitation } from '../models/igrf14.js';
 import { t89BandLabel, t89Citation } from '../models/t89.js';
+import { t96Citation, t96OutOfRange } from '../models/t96.js';
+import type { ExternalModel } from '../models/fieldlines.js';
 
 /**
  * The report used to be thirty-six `push` calls producing one wall of prose,
@@ -90,8 +92,12 @@ export interface SceneNarration {
   cmes?: { shown: boolean; count: number };
   fieldLines: {
     lines: number; points: number; far?: boolean;
-    /** T89 Kp band 0–6, or null when no Kp reached us and the field is IGRF alone. */
-    band?: number | null;
+    /**
+     * Which external model the drawn lines carry, or null when no driver
+     * reached us and the field is IGRF alone. Three different claims about the
+     * sky, so the report says which one rather than describing "the model".
+     */
+    external?: ExternalModel | null;
     tiltDeg?: number | null;
     truncated?: number;
   };
@@ -504,32 +510,68 @@ export function buildReportLines(
 
   if (scene.shield) {
     const far = scene.fieldLines.far === true;
-    const band = scene.fieldLines.band ?? null;
+    const external = scene.fieldLines.external ?? null;
     const tilt = scene.fieldLines.tiltDeg ?? null;
+    const tiltSaid = tilt === null ? '—' : `${tilt.toFixed(1)}°`;
     const cut = scene.fieldLines.truncated ?? 0;
-    say('shield', 
+
+    // Three different claims about the sky, so three different sentences — and
+    // the subjects the reader can open differ with them.
+    let externalSaid: string;
+    const externalSubjects: string[] = [];
+    if (external === null) {
+      externalSaid =
+        `Neither the solar wind nor a Kp index reached us, so the external field is not ` +
+        `modelled and these lines are the Earth's internal field alone — a tilted dipole, ` +
+        `with none of the compression or tail stretching the solar wind actually imposes. ` +
+        `Read the shape as incomplete rather than quiet.`;
+    } else if (external.name === 't89') {
+      externalSubjects.push('model.t89');
+      externalSaid =
+        `Added to it is ${t89Citation()} [D], ${t89BandLabel(external.band)}, at a dipole ` +
+        `tilt of ${tiltSaid}. That is what compresses the dayside, stretches the nightside ` +
+        `into lobes and inflates the inner region: the shape is the field's, integrated, ` +
+        `not a surface drawn around a dipole. This is the fallback — the solar wind was ` +
+        `incomplete, so T96 could not run. T89 bins Kp into seven fits, so the field steps ` +
+        `between them rather than gliding, and it carries no IMF term at all: a southward ` +
+        `Bz opens the real dayside and changes nothing here.`;
+    } else {
+      externalSubjects.push('model.t96');
+      const i = external.input;
+      const beyond = t96OutOfRange(i);
+      externalSaid =
+        `Added to it is ${t96Citation()} [D], driven by ${i.pdynNPa.toFixed(2)} nPa of ` +
+        `dynamic pressure, Dst ${i.dstNt.toFixed(0)} nT and an IMF of By ` +
+        `${i.byNt.toFixed(1)}, Bz ${i.bzNt.toFixed(1)} nT, at a dipole tilt of ${tiltSaid}. ` +
+        `That is what compresses the dayside, stretches the nightside into lobes and ` +
+        `inflates the inner region: the shape is the field's, integrated, not a surface ` +
+        `drawn around a dipole. Because T96 has an IMF term, the Bz above is doing ` +
+        `something here — one nanotesla of it moves these lines further than twelve ` +
+        `minutes of the Earth turning does. It has no memory, though: a magnetosphere ` +
+        `driven hard for six hours looks the same to it as one just struck.` +
+        (beyond.length > 0
+          ? ` Outside the fitted range: ${beyond.join('; ')} — the model still runs, ` +
+            `because a severe storm is when this matters most, but out there it is ` +
+            `extrapolating a straight line.`
+          : '');
+    }
+
+    say('shield',
       `The magnetic shield is drawn: ${scene.fieldLines.lines} field lines traced through ` +
       `${igrfCitation(new Date())} [D], blue where they close ` +
       `between hemispheres and violet where they stay open toward the solar wind. The ` +
       `teal boundary is the Shue et al. 1998 magnetopause and the orange one the ` +
       `Farris & Russell 1994 bow shock, both re-shaped by the live solar wind above. ` +
-      (band === null
-        ? `No Kp index reached us, so the external field is not modelled and these lines ` +
-          `are the Earth's internal field alone — a tilted dipole, with none of the ` +
-          `compression or tail stretching the solar wind actually imposes. Read the shape ` +
-          `as incomplete rather than quiet.`
-        : `Added to it is ${t89Citation()} [D], ${t89BandLabel(band)}, at a dipole ` +
-          `tilt of ${tilt === null ? '—' : `${tilt.toFixed(1)}°`}. That is what compresses ` +
-          `the dayside, stretches the nightside into lobes and inflates the inner region: ` +
-          `the shape is the field's, integrated, not a surface drawn around a dipole. T89 ` +
-          `bins Kp into seven fits, so the field steps between them rather than gliding, ` +
-          `and it carries no IMF term at all — a southward Bz opens the real dayside and ` +
-          `changes nothing here.`) +
+      externalSaid +
       (cut > 0
         ? ` ${cut} line${cut === 1 ? '' : 's'} run past where ${cut === 1 ? 'it is' : 'they are'} ` +
-          `drawn, and ${cut === 1 ? 'is' : 'are'} cut rather than ended: T89 is fitted inside ` +
-          `70 Rₑ and has no magnetopause, so the trace stops at the edge of what the model ` +
-          `describes — down the tail, and 20 Rₑ sunward.`
+          `drawn, and ${cut === 1 ? 'is' : 'are'} cut rather than ended: ` +
+          (external?.name === 't96'
+            ? `either they crossed T96's own magnetopause, where what a line joins is the ` +
+              `solar wind's field rather than ours, or they ran past the arc length the ` +
+              `tail is drawn to.`
+            : `T89 is fitted inside 70 Rₑ and has no magnetopause, so the trace stops at ` +
+              `the edge of what the model describes — down the tail, and 20 Rₑ sunward.`)
         : '') +
       ` The boundary surfaces stop at 100° ` +
       `from the sunward axis, inside the range Shue et al. fitted; the real magnetotail ` +
@@ -539,7 +581,8 @@ export function buildReportLines(
           'twelve signature lines and the boundary silhouette; the cage returns as the ' +
           'camera closes in.'
         : ''),
-      'layer.field-lines', 'model.igrf14', 'model.t89', 'layer.magnetopause', 'layer.bow-shock',
+      'layer.field-lines', 'model.igrf14', ...externalSubjects,
+      'layer.magnetopause', 'layer.bow-shock',
     );
   } else {
     say('shield', 'The magnetic shield is hidden.', 'layer.field-lines');

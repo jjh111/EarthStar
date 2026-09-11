@@ -16,8 +16,9 @@ import { angularSeparationDeg, decimalYear, geomagneticNorthPole, igrfInValidity
 import { IGRF_EPOCH, IGRF_VALID_UNTIL } from '../models/igrf14-coeffs.js';
 import { subsolarPoint } from '../models/ephemeris.js';
 import { externalField, lastClosedSunwardRe } from '../models/fieldlines.js';
+import { t96StandoffRe } from '../models/t96.js';
 import { kpBandFraction, kpBandIndex, t89BandLabel } from '../models/t89.js';
-import { magnetopause } from '../models/shue1998.js';
+import { magnetopause, shueR0 } from '../models/shue1998.js';
 import { GEOSYNC_RE, dipoleFieldAtRe } from './geosync.js';
 import { EPHEM_URL, parseEphemerides } from './ephemerides.js';
 import { DST_URL, parseDst } from './dst.js';
@@ -492,7 +493,7 @@ export async function runChecks(
     d.propagated?.speed ?? d.solar_wind?.speed ?? null,
   );
   const band = kpNow === null ? null : kpBandIndex(kpNow);
-  const ext = kpNow === null ? null : externalField(new Date(), kpNow);
+  const ext = kpNow === null ? null : externalField(new Date(), { kp: kpNow, wind: null });
   const t89Nose = ext ? lastClosedSunwardRe(new Date(), ext) : null;
 
   if (t89Nose === null || windMp === null || band === null || kpNow === null) {
@@ -544,6 +545,74 @@ export async function runChecks(
           : `Kp is near a band edge, so the comparison is as sharp as a seven-band model gets. `
             + `A gap beyond ${TOL_RE} Rₑ means the wind has moved somewhere the three-hourly `
             + `index cannot follow — or that one of the two is wired wrong.`),
+    });
+  }
+
+  /**
+   * The same surface again, from the model the field lines are actually traced
+   * through when the wind is complete.
+   *
+   * T96 carries a magnetopause of its own, and the author is explicit about
+   * what drives it: *"The only parameter which controls the size of the model
+   * magnetopause is the solar wind ram pressure Pdyn. No IMF dependence has
+   * been introduced so far."* Shue et al. 1998 fitted the same surface and kept
+   * a Bz term. So the two disagree by construction, and comparing their noses
+   * directly would only measure how southward the IMF is.
+   *
+   * What is worth checking is the part where they *should* agree: evaluate
+   * Shue at Bz = 0 and both are driven by the measured pressure alone. Two
+   * independent fits, a decade apart, to different spacecraft databases, and
+   * this is where they either agree on the pressure response or do not.
+   *
+   * Measured across Pdyn 0.1–30 nPa, that offset stays between **0.71 and 0.83
+   * Rₑ** — T96's boundary consistently the outer one, by about 8%, essentially
+   * independently of pressure. A wrong exponent in either model, or a pressure
+   * assembled wrongly from density and speed, moves it straight out of that
+   * band. The tolerance below is that measurement widened a little, not a
+   * guess.
+   *
+   * The remainder — the gap at the *measured* Bz minus this offset — is the
+   * IMF term Shue has and T96 does not, and the row reports it because the
+   * number is the interesting part.
+   */
+  const t96Nose = windMp === null ? null : t96StandoffRe(windMp.dynPressureNPa);
+  if (t96Nose === null || windMp === null) {
+    rows.push({
+      name: 'Dayside standoff: T96 vs Shue 1998, pressure response',
+      ours: 'no wind',
+      theirs: 'no wind',
+      ok: false,
+      inconclusive: true,
+      note: 'Both need the measured wind, and it has not arrived. Absent evidence, '
+        + 'not disagreement.',
+    });
+  } else {
+    const shueNoBz = shueR0(0, windMp.dynPressureNPa);
+    const offset = t96Nose - shueNoBz;
+    const gap = t96Nose - windMp.r0Re;
+    const imfPart = gap - offset;
+    /**
+     * 0.5 to 1.1 Rₑ: the measured 0.71–0.83 band with room either side for a
+     * pressure the two feeds disagree about. Narrow enough that a broken
+     * pressure fails it, wide enough that weather does not.
+     */
+    const LO_RE = 0.5;
+    const HI_RE = 1.1;
+    rows.push({
+      name: 'Dayside standoff: T96 vs Shue 1998, pressure response',
+      ours: `${t96Nose.toFixed(2)} Rₑ from ${windMp.dynPressureNPa.toFixed(2)} nPa`,
+      theirs: `${shueNoBz.toFixed(2)} Rₑ, same pressure at Bz 0`,
+      ok: offset >= LO_RE && offset <= HI_RE,
+      note: `${offset >= 0 ? '+' : ''}${offset.toFixed(2)} Rₑ apart on pressure alone, `
+        + `against ${LO_RE}–${HI_RE} Rₑ measured across the whole plausible wind. Two `
+        + `independent fits to different spacecraft databases, agreeing on how hard the `
+        + `wind pushes to about 8%. `
+        + `At the Bz actually measured, Shue puts the nose at ${windMp.r0Re.toFixed(2)} Rₑ `
+        + `— a further ${imfPart >= 0 ? '' : '−'}${Math.abs(imfPart).toFixed(2)} Rₑ `
+        + `${imfPart >= 0 ? 'inside' : 'outside'} — and that part is the IMF term T96 does `
+        + `not have. The field lines stop at T96's boundary; the teal wireframe draws `
+        + `Shue's. When they part company, that is two boundaries on screen, not one `
+        + `drawn twice.`,
     });
   }
 

@@ -97,18 +97,18 @@ describe('FieldLines retraces without stalling a frame', () => {
     const fl = new FieldLines();
     // Nothing is drawn until the whole set is ready: a half-traced cage on
     // screen would be a picture of a magnetosphere with a hole in it.
-    fl.ensureTraced(date, 3);
+    fl.ensureTraced(date, { kp: 3, wind: null });
     expect(fl.retracing).toBe(true);
     expect(fl.lineCount).toBe(0);
 
     let calls = 1;
-    while (fl.retracing && calls < 500) { fl.ensureTraced(date, 3); calls++; }
+    while (fl.retracing && calls < 500) { fl.ensureTraced(date, { kp: 3, wind: null }); calls++; }
     expect(fl.retracing).toBe(false);
     expect(calls).toBeGreaterThan(1);
     expect(fl.lineCount).toBeGreaterThan(50);
     // And once complete it stops working: the same field is not retraced.
     const settled = calls;
-    fl.ensureTraced(date, 3);
+    fl.ensureTraced(date, { kp: 3, wind: null });
     expect(fl.retracing).toBe(false);
     expect(settled).toBe(calls);
     fl.dispose();
@@ -119,7 +119,7 @@ describe('FieldLines retraces without stalling a frame', () => {
     const spent: number[] = [];
     while (fl.retracing || spent.length === 0) {
       const t0 = performance.now();
-      fl.ensureTraced(date, 6);
+      fl.ensureTraced(date, { kp: 6, wind: null });
       spent.push(performance.now() - t0);
       if (spent.length > 500) break;
     }
@@ -144,22 +144,24 @@ describe('FieldLines retraces without stalling a frame', () => {
 
   it('abandons a retrace whose field has moved on rather than finishing it', () => {
     const fl = new FieldLines();
-    fl.ensureTraced(date, 1);
+    fl.ensureTraced(date, { kp: 1, wind: null });
     expect(fl.retracing).toBe(true);
     // Kp crosses a band edge mid-retrace. The half-finished set was traced
     // through a field that no longer applies, so it is dropped, not shown.
-    fl.ensureTraced(date, 6);
+    fl.ensureTraced(date, { kp: 6, wind: null });
     let calls = 0;
-    while (fl.retracing && calls < 500) { fl.ensureTraced(date, 6); calls++; }
+    while (fl.retracing && calls < 500) { fl.ensureTraced(date, { kp: 6, wind: null }); calls++; }
     expect(fl.retracing).toBe(false);
-    expect(fl.externalUsed?.band).toBe(6);
+    const model = fl.externalUsed?.model;
+    expect(model?.name).toBe('t89');
+    expect(model?.name === 't89' && model.band).toBe(6);
     fl.dispose();
   });
 
   it('draws IGRF alone, and says so, when no Kp reached us', () => {
     const fl = new FieldLines();
     let calls = 0;
-    while (fl.retracing || calls === 0) { fl.ensureTraced(date, null); if (++calls > 500) break; }
+    while (fl.retracing || calls === 0) { fl.ensureTraced(date, { kp: null, wind: null }); if (++calls > 500) break; }
     expect(fl.lineCount).toBeGreaterThan(50);
     // Null, not band 0. Band 0 is the quiet fit, and rendering it would turn a
     // missing measurement into a reassuring claim.

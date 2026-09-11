@@ -6,3 +6,6 @@ node_modules/
 # and renders. The buildable source lives in experiments/manta-sat/ and is
 # tracked; this is the scratch alongside it.
 experiments/manta-design/
+
+# Python venv for the model reference generators (scripts/gen-*-reference.py)
+.venv/
