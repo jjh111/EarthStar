@@ -1,0 +1,62 @@
+:Product: Forecast Discussion
+:Issued: 2026 Sep 11 0030 UTC
+# Prepared by the U.S. Dept. of Commerce, NOAA, Space Weather Prediction Center
+#
+Solar Activity
+
+.24 hr Summary...
+Solar activity was low due to weak C-class flare activity observed from
+Region 4524 (N12W27, Hsx/alpha), the largest a C1.6/Sf at 10/1712 UTC.
+B-class flare activity was observed from Region 4521 (N09W67, Hsx/alpha)
+and 4525 (N11W10, Cri/beta). Both Regions 4525 and 4530 (N19W21,
+Dri/beta) exhibited some intermediate spot growth. The remaining regions
+were either stable or in decay.
+
+Other activity included a faint CME observed off the western limb at
+about 09/1900 UTC in STEREO A and CCOR imagery from a potential filament
+liftoff near center disk. Another filament liftoff was observed near
+S15W30 at about 10/0315 UTC with a more obvious CME off the western
+limb. Both CMEs were modelled as slow-moving with potential weak Earth
+impact late on the 14th into the 15th.
+
+.Forecast...
+Solar activity is anticipated to remain low, with a slight chance of
+low-level M-class flares (R1-Minor) 11-13 Sep. There is little evidence
+in NSO GONG helioseismology of any looming active regions of note just
+beyond the east limb.
+
+Energetic Particle
+
+.24 hr Summary...
+The greater than 2 MeV electron flux reached high levels with a maximum
+flux of 3,077 pfu observed at 10/1745 UTC. The greater than 10 MeV
+proton flux was at background values.
+
+.Forecast...
+The greater than 2 MeV electron flux is expected to reach high levels
+11-12 Sep and decline to low to moderate on 13 Sep. The greater than 10
+MeV proton flux is expected to remain at background levels.
+
+Solar Wind
+
+.24 hr Summary...
+Solar wind conditions were at mostly background levels. Total IMF
+strength peaked at 6 nT, while the Bz component varied between +3 to -4
+nT. Solar wind speed changes were minimal, varying between 417-486 km/s
+The phi angle was mostly in a negative orientation from 10/0000-10/1015
+UTC, and predominantly positive through the end of the period.
+
+.Forecast...
+Solar wind conditions are anticipated to experience some minor
+disturbances due mainly to a small, positive polarity CH HSS
+anticipated to be geoeffective through 12 Sep. Negative CH HSS effects
+are anticipated to begin on 13 Sep.
+
+Geospace
+
+.24 hr Summary...
+The geomagnetic field was at quiet to unsettled levels.
+
+.Forecast...
+The geomagnetic field is expected to be quiet to unsettled through 13
+Sep with active periods possible on 11 Sep due to CH HSS onset.
