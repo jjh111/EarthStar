@@ -886,3 +886,47 @@ text.l1-idle { fill: var(--ink-faint); }
   border-radius: 0.6rem 0.6rem 0 0;
   border-bottom: 0;
 }
+
+/* A subject named inside the report's prose.
+   Underlined rather than coloured: a paragraph with six coloured words in it
+   stops being a paragraph. The underline says "this is a thing you can open"
+   without competing with the sentence for attention. */
+.subject-mention {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border-bottom: 1px dotted color-mix(in srgb, var(--accent) 70%, transparent);
+}
+.subject-mention:hover,
+.subject-mention:focus-visible { color: var(--accent); border-bottom-style: solid; }
+
+/* The caveat block at the foot of a report section. Closed by default: the
+   reader who wants the headline has it, and the one who wants the edges opens
+   it. This is where the accuracy charter finally meets a reader. */
+.limits {
+  margin-top: 0.7rem;
+  border-top: 1px solid var(--line);
+  padding-top: 0.5rem;
+}
+.limits > summary {
+  cursor: pointer;
+  color: var(--ink-dim);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.limits > summary:hover { color: var(--ink); }
+.limits > ul { margin-top: 0.5rem; }
+
+.index-tier {
+  margin: 0.8rem 0 0;
+  font-size: 0.76rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.subject-links em { color: var(--ink-faint); font-style: italic; }

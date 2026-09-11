@@ -679,7 +679,9 @@ export class Hud {
     if (!state) return;
     const now = new Date();
     switch (this.tab) {
-      case 'report': this.bodyEl.innerHTML = renderReport(state, this.narration, now); break;
+      case 'report':
+        this.bodyEl.innerHTML = renderReport(state, this.narration, now, this.remembered);
+        break;
       case 'forecast':
         this.bodyEl.innerHTML = renderForecast(
           this.forecast, this.forecastLoading, state?.cmes ?? [], this.remembered,

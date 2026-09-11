@@ -25,10 +25,15 @@ import { stripProductHeader } from '../data/forecast.js';
 import type { SolarCycle } from '../data/solar-cycle.js';
 import { tail } from '../data/solar-cycle.js';
 import { INSTRUMENTS } from './instruments.js';
-import { TIER_LABEL, bodySubjectId, subject, subjectsOfKind } from './subjects.js';
+import {
+  TIER_LABEL, bodySubjectId, firstLimit, subject, subjectsOfKind,
+  type Subject, type Tier,
+} from './subjects.js';
 import { bodyFacts, distanceText, lightTimeText } from './body-facts.js';
 import type { BodyName } from '../scene/scales.js';
-import { buildSituationReport, type SceneNarration } from './situation-report.js';
+import {
+  buildReportLines, reportSections, type SceneNarration,
+} from './situation-report.js';
 
 export type TabId = 'report' | 'forecast' | 'sun' | 'sources' | 'checks' | 'detail';
 
@@ -76,14 +81,74 @@ export function section(
   </details>`;
 }
 
+/**
+ * Link the first mention of each subject a sentence has declared.
+ *
+ * Only declared subjects, only their own aliases, only the first occurrence,
+ * and only on an escaped string — so a name can never be linked somewhere it
+ * was not meant, and no prose had to be rewritten to make it linkable. A
+ * sentence that mentions "Shue et al. 1998" three times links it once; the
+ * rest of the paragraph stays readable.
+ */
+function linkSubjects(escaped: string, ids: string[]): string {
+  let out = escaped;
+  for (const id of ids) {
+    const s = subject(id);
+    if (!s) continue;
+    // Longest alias first: "Tsyganenko 1989 (T89c)" before "T89", or the
+    // shorter one wins inside the longer one and leaves a broken fragment.
+    const names = [...(s.aliases ?? []), s.label]
+      .map(escapeHtml)
+      .sort((a, b) => b.length - a.length);
+    for (const name of names) {
+      const at = out.indexOf(name);
+      // Never inside an attribute or an existing anchor: a match that lands in
+      // markup would produce a tag inside a tag.
+      if (at < 0 || out.lastIndexOf('<', at) > out.lastIndexOf('>', at)) continue;
+      out = out.slice(0, at)
+        + `<button type="button" class="subject-mention" data-subject="${escapeHtml(id)}">`
+        + name + '</button>'
+        + out.slice(at + name.length);
+      break;
+    }
+  }
+  return out;
+}
+
+/** The caveats a section's subjects carry, each one click from its full text. */
+function sectionLimits(ids: string[]): string {
+  const rows = ids.map((id) => subject(id)).filter((s): s is Subject => !!s)
+    .map((s) => `<li><button type="button" class="subject-link" data-subject="${
+      escapeHtml(s.id)}"><span class="badge badge-${s.tier.toLowerCase()}">${s.tier}</span>
+      ${escapeHtml(s.label)}</button> — ${escapeHtml(firstLimit(s))}</li>`).join('');
+  return rows
+    ? `<details class="limits"><summary>What this does not say</summary>
+        <ul class="subject-links">${rows}</ul></details>`
+    : '';
+}
+
 export function renderReport(
   state: StoreState, narration: SceneNarration, now: Date,
+  remembered?: (id: string) => boolean | undefined,
 ): string {
-  const lines = buildSituationReport(
+  const lines = buildReportLines(
     state.now, narration, now, state.aurora, state.cmes, state.spacecraft?.data ?? [],
     { snapshot: state.lanes.snapshot, aurora: state.lanes.aurora, cmes: state.lanes.cmes,
       nextAttempt: state.nextAttempt },
   );
+  const sections = reportSections(lines);
+
+  // Collapsed to the first section by default. The report is thorough on
+  // purpose and nobody reads a thousand words of it cold; opening one heading
+  // at a time is the difference between a reference and a wall. Which ones a
+  // reader has opened is remembered, the same way the Sources sections are.
+  const body = sections.map((sec, i) => section(
+    `report-${sec.id}`, sec.title,
+    sec.lines.map((l) => `<p>${linkSubjects(escapeHtml(l.text), l.subjects)}</p>`).join('')
+    + sectionLimits(sec.subjects),
+    i === 0, remembered,
+  )).join('');
+
   // The sentence carries its own evidence: each quantity appears as glyph,
   // sparkline and number together. The prose report follows it, and the
   // screen-reader text alternative sits alongside.
@@ -92,7 +157,46 @@ export function renderReport(
     <p class="state-sentence" aria-hidden="true">${stateSentence(state)}</p>
     <p class="sr-only">${escapeHtml(stateSentenceText(state))}</p>
     <h3>Situation Report</h3>
-    ${lines.map((l) => `<p>${escapeHtml(l)}</p>`).join('')}`;
+    ${body}
+    ${renderDrawnIndex(narration)}`;
+}
+
+/**
+ * What am I looking at.
+ *
+ * Generated from what the scene is actually drawing right now, not from a
+ * hand-kept list — so it cannot describe something that is switched off or
+ * omit something that is on. Grouped by tier, because the first thing worth
+ * knowing about anything here is whether it was measured, computed or drawn.
+ */
+export function renderDrawnIndex(narration: SceneNarration): string {
+  const drawn = (narration.drawn ?? []).map((id) => subject(id))
+    .filter((s): s is Subject => !!s);
+  if (drawn.length === 0) return '';
+  const groups: [Tier, string][] = [
+    ['E', 'Measured — read from an instrument'],
+    ['D', 'Modelled — computed by a named model'],
+    ['M', 'Ambient — drawn, not measured'],
+  ];
+  const body = groups.map(([tier, title]) => {
+    const rows = drawn.filter((s) => s.tier === tier).map((s) => `
+      <li><button type="button" class="subject-link" data-subject="${escapeHtml(s.id)}">
+        <span class="badge badge-${tier.toLowerCase()}">${tier}</span>
+        ${escapeHtml(s.label)}</button> — ${escapeHtml(s.oneLine)}${
+        s.keyedTo ? ` <em>Keyed to ${escapeHtml(s.keyedTo)}.</em>` : ''}</li>`).join('');
+    return rows ? `<h4 class="index-tier">${escapeHtml(title)}</h4>
+      <ul class="subject-links">${rows}</ul>` : '';
+  }).join('');
+  return `<details class="sect" data-sect="report-index">
+    <summary>What am I looking at — ${drawn.length} things on screen</summary>
+    <div class="sect-body">
+      <p class="fine">Everything the scene is drawing at this moment, read from the
+      scene itself rather than a list kept beside it. Some are reached by clicking the
+      body they belong to — the Sun's imagery, the monitors, the Earth's surface — and
+      the rest answer a click where they are drawn.</p>
+      ${body}
+    </div>
+  </details>`;
 }
 
 /* ------------------------------------------------------------------ *

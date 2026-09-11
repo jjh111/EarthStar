@@ -368,6 +368,12 @@ export class Sun {
   private diskPlane = new ImagePlane(2);
   private coronaPlane = new ImagePlane(3);
 
+  /**
+   * Whether a coronagraph frame is on the card right now. The report's index
+   * claims to list everything on screen, so it needs to be able to ask.
+   */
+  get coronagraphShown(): boolean { return this.coronaPlane.visible; }
+
   constructor(radius = 1) {
     this.discMat = new ShaderMaterial({
       uniforms: {

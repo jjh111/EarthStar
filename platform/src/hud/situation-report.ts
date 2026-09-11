@@ -19,6 +19,60 @@ import { subsolarPoint } from '../models/ephemeris.js';
 import { igrfCitation } from '../models/igrf14.js';
 import { t89BandLabel, t89Citation } from '../models/t89.js';
 
+/**
+ * The report used to be thirty-six `push` calls producing one wall of prose,
+ * in the order the code happened to run. It was the most carefully written
+ * thing in the app and almost nobody read past the third paragraph.
+ *
+ * Each sentence now carries two extra facts — which section it belongs to, and
+ * which subjects it is about — and `buildSituationReport` still returns the
+ * same array of strings it always did. One builder, two renderers: the panel
+ * groups and links, the briefing export joins the text. `test/report.test.ts`
+ * holds that export identical against a fixture, because a briefing that
+ * silently changes shape is worse than one that never improved.
+ */
+export type ReportSectionId = 'wind' | 'geomagnetic' | 'sun' | 'shield' | 'scene';
+
+export interface ReportLine {
+  text: string;
+  section: ReportSectionId;
+  /** Subject ids this sentence is about. Rendered as links; absent from export. */
+  subjects: string[];
+}
+
+export interface ReportSection {
+  id: ReportSectionId;
+  title: string;
+  lines: ReportLine[];
+  /** Distinct subjects across the section, in order of first mention. */
+  subjects: string[];
+}
+
+export const SECTION_TITLES: Record<ReportSectionId, string> = {
+  wind: 'The solar wind',
+  geomagnetic: 'What it is doing to Earth',
+  sun: 'The Sun',
+  shield: 'The shield',
+  scene: 'The scene itself',
+};
+
+/** Group lines into sections, in the order the sections first appear. */
+export function reportSections(lines: ReportLine[]): ReportSection[] {
+  const out: ReportSection[] = [];
+  const byId = new Map<ReportSectionId, ReportSection>();
+  for (const l of lines) {
+    let sec = byId.get(l.section);
+    if (!sec) {
+      sec = { id: l.section, title: SECTION_TITLES[l.section], lines: [], subjects: [] };
+      byId.set(l.section, sec);
+      out.push(sec);
+    }
+    sec.lines.push(l);
+    for (const id of l.subjects) if (!sec.subjects.includes(id)) sec.subjects.push(id);
+  }
+  return out;
+}
+
 /** Which fetch lanes are still in flight — the cold start's shape. */
 export interface ReportLanes {
   snapshot: boolean;
@@ -45,6 +99,13 @@ export interface SceneNarration {
   wind?: boolean;
   /** Which Earth surface is on the sphere — measured imagery or the vector base. */
   earthSurface?: 'vector' | 'imagery' | 'loading';
+  /**
+   * Subject ids for every layer the scene is drawing right now, from the
+   * scene's own pickable registry. The "what am I looking at" index is
+   * generated from this rather than from a kept list, so it cannot describe
+   * something switched off or omit something that is on.
+   */
+  drawn?: string[];
 }
 
 const KP_WORDS: [number, string][] = [
@@ -76,6 +137,12 @@ function nextAttemptText(lanes: ReportLanes): string {
     : ' The next attempt is the next refresh cycle.';
 }
 
+/**
+ * The text-only view, unchanged since before the report had sections. The
+ * briefing export and the screen-reader alternative both read this, and it is
+ * derived from the structured lines rather than built separately — so the two
+ * cannot say different things.
+ */
 export function buildSituationReport(
   env: NowEnvelope | null, scene: SceneNarration, now = new Date(),
   aurora: Envelope<AuroraNow | null> | null = null,
@@ -83,7 +150,26 @@ export function buildSituationReport(
   spacecraft: SpacecraftPos[] = [],
   lanes: ReportLanes = { snapshot: false, aurora: false, cmes: false },
 ): string[] {
-  const lines: string[] = [];
+  return buildReportLines(env, scene, now, aurora, cmes, spacecraft, lanes)
+    .map((l) => l.text);
+}
+
+export function buildReportLines(
+  env: NowEnvelope | null, scene: SceneNarration, now = new Date(),
+  aurora: Envelope<AuroraNow | null> | null = null,
+  cmes: Cme[] = [],
+  spacecraft: SpacecraftPos[] = [],
+  lanes: ReportLanes = { snapshot: false, aurora: false, cmes: false },
+): ReportLine[] {
+  const acc: ReportLine[] = [];
+  /**
+   * Where the sentence goes, and what it is about. The subject ids are what
+   * turn the report into something a reader can walk out of: the panel links
+   * them and shows what each does not say, and the export ignores them.
+   */
+  const say = (section: ReportSectionId, text: string, ...subjects: string[]): void => {
+    acc.push({ text, section, subjects });
+  };
   const at = `${hhmmUTC(now.toISOString())} UTC`;
 
   /**
@@ -94,7 +180,7 @@ export function buildSituationReport(
    */
   if (!env) {
     if (lanes.snapshot) {
-      lines.push(
+      say('wind', 
         `Solar wind: loading. Positions, the terminator and the scene are computed ` +
         `locally and are already live; the measurements land as the feeds resolve, ` +
         `snapshot lane first (checked ${at}).`,
@@ -102,16 +188,17 @@ export function buildSituationReport(
       // The one scene fact worth stating during a cold start: what is on the
       // globe while the rasters are still in flight.
       const ss = subsolarPoint(now);
-      lines.push(
+      say('scene', 
         `Scene: the Sun at centre, planets at their true positions for ${at} [D]; the ` +
         `Sun is overhead at ${cardinal(ss.lat, ss.lon)}. ` +
         (scene.earthSurface === 'imagery'
           ? `Earth's surface is NASA's Blue Marble composite (2004) [E].`
           : `Earth's surface imagery is still loading; the vector base map is on the globe.`),
+        'model.astronomy-engine', 'layer.terminator',
       );
-      return lines;
+      return acc;
     }
-    lines.push(`No space-weather data has loaded yet (checked ${at}). The scene below shows body positions only, which are computed locally and do not depend on the network.`);
+    say('wind', `No space-weather data has loaded yet (checked ${at}). The scene below shows body positions only, which are computed locally and do not depend on the network.`);
   }
 
   const d = env?.data;
@@ -124,16 +211,16 @@ export function buildSituationReport(
     if (!sw || s.state === 'no-data') {
       // A failed feed reads as "unavailable" with its reason; a feed that
       // answered with nothing usable reads as "no data" — different claims.
-      lines.push(p.solar_wind?.error
+      say('wind', p.solar_wind?.error
         ? `Solar wind: unavailable (${errorReason(p.solar_wind.error)}). ${nextAttemptText(lanes)} Nothing is being substituted for it.`
-        : `Solar wind: no data. Nothing is being substituted for it.`);
+        : `Solar wind: no data. Nothing is being substituted for it.`, 'inst.bz', 'inst.speed', 'inst.density');
     } else {
       const bz = sw.bz_gsm;
       const dirn = bz === null ? 'unknown'
         : bz < -5 ? 'strongly southward, which couples energy into the magnetosphere'
         : bz < 0 ? 'southward'
         : 'northward, which keeps the magnetosphere relatively closed';
-      lines.push(
+      say('wind', 
         `Solar wind at L1, measured by ${sw.spacecraft ?? 'the active spacecraft'}: ` +
         `Bz ${bz === null ? 'no data' : `${bz.toFixed(1)} nanotesla`} (${dirn}); ` +
         `total field ${sw.bt === null ? 'no data' : `${sw.bt.toFixed(1)} nT`}; ` +
@@ -141,6 +228,7 @@ export function buildSituationReport(
         `density ${sw.density === null ? 'no data' : `${sw.density.toFixed(1)} protons per cubic centimetre`}. ` +
         `Measured [E], timestamped ${hhmmUTC(sw.time)} UTC` +
         (s.state === 'stale' ? `, and now STALE — ${formatAge(s.ageS ?? 0)} old.` : `, ${formatAge(s.ageS ?? 0)} old.`),
+        'inst.bz', 'inst.bt', 'inst.speed', 'inst.density', 'layer.l1-monitors',
       );
     }
 
@@ -156,7 +244,7 @@ export function buildSituationReport(
           + `sunward and ${craft.offAxisRe.toFixed(0)} Earth radii off the Sun–Earth line `
           + `(${craft.offAxisDeg.toFixed(1)}°) [E]`
         : 'at L1, about 1.5 million kilometres sunward';
-      lines.push(
+      say('wind', 
         `That wind was measured ${where}, and takes ` +
         `roughly an hour to arrive. NOAA propagates it to the bow shock nose [D · NOAA]: ` +
         `what is reaching Earth right now was observed at ` +
@@ -167,6 +255,7 @@ export function buildSituationReport(
           ? `There are about ${Math.round(lead)} minutes of already-measured wind still in ` +
             `flight — that is the warning currently in hand.`
           : 'No further measured wind is in flight.'),
+        'layer.l1-monitors', 'inst.speed',
       );
     }
 
@@ -174,7 +263,7 @@ export function buildSituationReport(
     const gs = d.geosync;
     if (gs && gs.total_nt !== null) {
       const standoff = d.magnetopause?.standoff_re ?? null;
-      lines.push(
+      say('geomagnetic', 
         `GOES-${gs.satellite ?? '?'} measures ${gs.total_nt.toFixed(0)} nT at geostationary ` +
         `orbit, 6.6 Earth radii out [E], ${hhmmUTC(gs.time)} UTC` +
         (gs.arcjet ? ' — though its thruster was firing, so the reading is suspect' : '') +
@@ -189,6 +278,7 @@ export function buildSituationReport(
             : 'The modelled boundary is outside 6.6 Rₑ, so the spacecraft should be inside ' +
               'the magnetosphere, which is what this field says.'
           : ''),
+        'inst.geosync', 'inst.mpause', 'model.igrf14',
       );
     }
 
@@ -197,7 +287,7 @@ export function buildSituationReport(
     if (pt) {
       const sTxt = pt.s_scale === null ? 'no data'
         : `S${pt.s_scale}${pt.s_text ? ` (${pt.s_text})` : ''}`;
-      lines.push(
+      say('geomagnetic', 
         `Energetic particles at geostationary orbit, measured by GOES [E], ` +
         `${hhmmUTC(pt.time)} UTC: protons above 10 MeV at ` +
         `${pt.proton_10mev === null ? 'no data' : `${pt.proton_10mev.toFixed(2)} pfu`}, ` +
@@ -209,36 +299,38 @@ export function buildSituationReport(
         (pt.electron_2mev !== null && pt.electron_2mev >= 1000
           ? ', above NOAA\u2019s alert level for satellite charging.'
           : ', below the level that charges satellites.'),
+        'inst.protons', 'inst.electrons',
       );
     } else {
-      lines.push(p.particles?.error
+      say('geomagnetic', p.particles?.error
         ? `Energetic particle flux: unavailable (${errorReason(p.particles.error)}). ${nextAttemptText(lanes)} No radiation storm level is shown.`
-        : 'Energetic particle flux: no data. No radiation storm level is shown.');
+        : 'Energetic particle flux: no data. No radiation storm level is shown.', 'inst.protons', 'inst.electrons');
     }
 
     /* --- Kp ------------------------------------------------------------ */
     const ks = stalenessOf(p.kp, now);
     if (!d.kp || ks.state === 'no-data') {
-      lines.push(p.kp?.error
+      say('geomagnetic', p.kp?.error
         ? `Planetary K index: unavailable (${errorReason(p.kp.error)}). ${nextAttemptText(lanes)}`
-        : 'Planetary K index: no data.');
+        : 'Planetary K index: no data.', 'inst.kp');
     } else {
-      lines.push(
+      say('geomagnetic', 
         `Planetary K index ${d.kp.estimated_kp === null ? 'no data' : d.kp.estimated_kp.toFixed(2)} — ` +
         `geomagnetic conditions are ${kpWord(d.kp.estimated_kp)}. Measured [E], ` +
         `${hhmmUTC(d.kp.time)} UTC${ks.state === 'stale' ? ' — STALE' : ''}.`,
+        'inst.kp',
       );
     }
 
     /* --- Ring current --------------------------------------------------- */
     const ds = stalenessOf(p.dst, now);
     if (!d.dst || ds.state === 'no-data') {
-      lines.push(p.dst?.error
+      say('geomagnetic', p.dst?.error
         ? `Ring current (Dst): unavailable (${errorReason(p.dst.error)}). ${nextAttemptText(lanes)}`
-        : 'Ring current (Dst): no data.');
+        : 'Ring current (Dst): no data.', 'inst.dst');
     } else {
       const ahead = d.dst.lead_minutes;
-      lines.push(
+      say('geomagnetic', 
         `Ring current index Dst ${d.dst.value_nt === null ? 'no data' : `${d.dst.value_nt.toFixed(0)} nanotesla`} — ` +
         `${d.dst.level ?? 'unclassified'}. This is how much a torus of trapped ions ` +
         `drifting around Earth is subtracting from the surface field; it is the ` +
@@ -250,35 +342,37 @@ export function buildSituationReport(
           ? `The model runs ${ahead} minutes ahead of that; the value quoted is the newest ` +
             `one whose time has arrived, not the newest one in the file.`
           : 'The model has no lead beyond that sample.'),
+        'inst.dst', 'model.geospace-dst',
       );
     }
 
     /* --- X-ray --------------------------------------------------------- */
     const xs = stalenessOf(p.xray, now);
     if (!d.xray || xs.state === 'no-data') {
-      lines.push(p.xray?.error
+      say('sun', p.xray?.error
         ? `GOES X-ray flux: unavailable (${errorReason(p.xray.error)}). ${nextAttemptText(lanes)}`
-        : 'GOES X-ray flux: no data.');
+        : 'GOES X-ray flux: no data.', 'inst.xray');
     } else {
-      lines.push(
+      say('sun', 
         `Solar X-ray background is class ${d.xray.class ?? 'no data'} ` +
         `(${d.xray.flux_long === null ? 'no data' : `${d.xray.flux_long.toExponential(1)} watts per square metre`}, ` +
         `0.1–0.8 nanometre band, GOES). Measured [E], ${hhmmUTC(d.xray.time)} UTC` +
         `${xs.state === 'stale' ? ' — STALE' : ''}.`,
+        'inst.xray', 'layer.active-regions',
       );
     }
 
     /* --- NOAA scales --------------------------------------------------- */
     if (d.scales) {
       const g = d.scales.G, r = d.scales.R, sS = d.scales.S;
-      lines.push(
+      say('geomagnetic', 
         `NOAA scales today: radio blackouts R${r.scale ?? '–'} (${r.text ?? 'no data'}), ` +
         `solar radiation S${sS.scale ?? '–'} (${sS.text ?? 'no data'}), ` +
         `geomagnetic storms G${g.scale ?? '–'} (${g.text ?? 'no data'}). ` +
         `NOAA's own product, modeled [D].`,
       );
     } else {
-      lines.push(p.scales?.error
+      say('geomagnetic', p.scales?.error
         ? `NOAA R/S/G scales: unavailable (${errorReason(p.scales.error)}). ${nextAttemptText(lanes)}`
         : 'NOAA R/S/G scales: no data.');
     }
@@ -289,7 +383,7 @@ export function buildSituationReport(
       const compressed = mp.standoff_re < 9
         ? ' That is a compressed magnetosphere — the shield is being pushed in.'
         : mp.standoff_re > 11.5 ? ' That is an expanded, quiet magnetosphere.' : '';
-      lines.push(
+      say('shield', 
         `Modeled [D] magnetopause standoff: ${mp.standoff_re.toFixed(1)} Earth radii on the ` +
         `sunward side, with flaring parameter ${mp.alpha?.toFixed(2) ?? 'no data'}, computed from ` +
         `the ${d.propagated ? 'propagated' : 'L1'} solar wind above (dynamic pressure ` +
@@ -299,20 +393,21 @@ export function buildSituationReport(
           ? ` The bow shock stands off at ${mp.bow_shock_re.toFixed(1)} Earth radii ` +
             `(Farris & Russell 1994).`
           : ''),
+        'inst.mpause', 'model.shue1998', 'model.farris-russell',
       );
     } else {
-      lines.push('Magnetopause standoff: not computed, because the solar-wind inputs it needs are missing. No boundary is drawn.');
+      say('shield', 'Magnetopause standoff: not computed, because the solar-wind inputs it needs are missing. No boundary is drawn.', 'inst.mpause', 'model.shue1998');
     }
 
     /* --- Alerts --------------------------------------------------------- */
     if (d.alerts.length > 0) {
       const a = d.alerts[0]!;
-      lines.push(
+      say('geomagnetic', 
         `Most recent NOAA notice, ${hhmmUTC(a.issued)} UTC: ${a.headline || a.product}. ` +
         `${d.alerts.length} notices in the last three days.`,
       );
     } else {
-      lines.push('No NOAA alerts, watches or warnings in the feed.');
+      say('geomagnetic', 'No NOAA alerts, watches or warnings in the feed.');
     }
   }
 
@@ -324,7 +419,7 @@ export function buildSituationReport(
   if (inbound.length > 0) {
     const c = inbound[0]!;
     const hours = (Date.parse(c.arrival!.time) - now.getTime()) / 3.6e6;
-    lines.push(
+    say('sun', 
       `A coronal mass ejection is on its way. NASA's DONKI catalogue analysed it leaving ` +
       `the Sun at ${Math.round(c.speedKms)} km/s on ${hhmmUTC(c.time215)} UTC, with a ` +
       `${Math.round(c.halfAngle)}° half-angle cone pointed ${c.offAxisDeg < 5 ? 'almost directly at Earth'
@@ -338,35 +433,39 @@ export function buildSituationReport(
           'so fast ones tend to arrive later than this and slow ones earlier. The window ' +
           'is an order-of-magnitude bound, not a fitted error.'}` +
       `${inbound.length > 1 ? ` ${inbound.length - 1} more are also inbound.` : ''}`,
+      'model.cme-cone', 'model.enlil', 'layer.cme-cones',
     );
   } else if (cmes.length > 0) {
-    lines.push(
+    say('sun', 
       `${cmes.length} coronal mass ejection${cmes.length > 1 ? 's have' : ' has'} been ` +
       `analysed in the last few days, none of them Earth-directed with an arrival still ` +
       `ahead of us. Nothing is inbound.`,
+      'model.cme-cone',
     );
   }
 
   if (scene.cmes && scene.cmes.count > 0) {
-    lines.push(
+    say('sun', 
       `${scene.cmes.count} cone${scene.cmes.count > 1 ? 's are' : ' is'} drawn expanding ` +
       `from the Sun [D], warm where Earth lies inside the cone and cool where it does not. ` +
       `The apex direction, half-angle and speed are DONKI's analysis of coronagraph ` +
       `imagery; the radial propagation is ours.`,
+      'layer.cme-cones', 'model.cme-cone',
     );
   }
 
   /* --- The scene itself ------------------------------------------------ */
   const ss = subsolarPoint(now);
-  lines.push(
+  say('scene', 
     `Scene: the Sun at centre, with all eight planets at their true ` +
     `positions for ${at}, computed locally with astronomy-engine [D]. ` +
     `The Sun is currently overhead at ${cardinal(ss.lat, ss.lon)}, and Earth's day/night ` +
     `terminator in the scene is drawn from that point [D]. The Moon is shown at its ` +
     `true direction from Earth.`,
+    'model.astronomy-engine', 'layer.orbits', 'layer.terminator',
   );
   /* --- The Earth's surface, and where its pixels come from --------------- */
-  lines.push(
+  say('scene', 
     scene.earthSurface === 'imagery'
       ? `Earth's surface is measured imagery [E]: NASA's Blue Marble Next Generation ` +
         `composite, acquired through 2004, with NASA's Black Marble 2016 night lights ` +
@@ -377,15 +476,16 @@ export function buildSituationReport(
           `still loading; the vector base map is on the globe until it arrives.`
         : `Earth's surface is the vector base map — NASA's raster composites (Blue ` +
           `Marble 2004, Black Marble 2016) did not load, so no imagery is implied.`,
+    'body.earth', 'layer.terminator',
   );
   /* --- Aurora --------------------------------------------------------- */
   if (!scene.aurora) {
-    lines.push('The aurora overlay is hidden.');
+    say('geomagnetic', 'The aurora overlay is hidden.', 'layer.aurora');
   } else if (aurora?.data) {
     const a = aurora.data;
     const ageS = (now.getTime() - Date.parse(a.observation_time)) / 1000;
     const stale = ageS > aurora.stale_after_s;
-    lines.push(
+    say('geomagnetic', 
       `Aurora: NOAA's OVATION Prime model [D · NOAA] puts the peak probability of visible ` +
       `aurora at ${a.max_probability}% in this forecast, valid ${hhmmUTC(a.forecast_time)} UTC ` +
       `and computed from an observation at ${hhmmUTC(a.observation_time)} UTC ` +
@@ -394,11 +494,12 @@ export function buildSituationReport(
       `a legend for intensity, not the aurora's real colours. ` +
       `The oval encircles the magnetic pole, not the geographic one — which is why it ` +
       `sits off-centre.`,
+      'layer.aurora', 'model.ovation',
     );
   } else if (lanes.aurora) {
-    lines.push('Aurora: loading. The OVATION forecast lands with the slow lane; no oval is drawn yet.');
+    say('geomagnetic', 'Aurora: loading. The OVATION forecast lands with the slow lane; no oval is drawn yet.', 'layer.aurora', 'model.ovation');
   } else {
-    lines.push('Aurora: the OVATION forecast is unavailable, so no oval is drawn.');
+    say('geomagnetic', 'Aurora: the OVATION forecast is unavailable, so no oval is drawn.', 'layer.aurora', 'model.ovation');
   }
 
   if (scene.shield) {
@@ -406,7 +507,7 @@ export function buildSituationReport(
     const band = scene.fieldLines.band ?? null;
     const tilt = scene.fieldLines.tiltDeg ?? null;
     const cut = scene.fieldLines.truncated ?? 0;
-    lines.push(
+    say('shield', 
       `The magnetic shield is drawn: ${scene.fieldLines.lines} field lines traced through ` +
       `${igrfCitation(new Date())} [D], blue where they close ` +
       `between hemispheres and violet where they stay open toward the solar wind. The ` +
@@ -438,36 +539,40 @@ export function buildSituationReport(
           'twelve signature lines and the boundary silhouette; the cage returns as the ' +
           'camera closes in.'
         : ''),
+      'layer.field-lines', 'model.igrf14', 'model.t89', 'layer.magnetopause', 'layer.bow-shock',
     );
   } else {
-    lines.push('The magnetic shield is hidden.');
+    say('shield', 'The magnetic shield is hidden.', 'layer.field-lines');
   }
-  lines.push(
+  say('scene', 
     `${scaleLabel(scene.mode)}. Camera: ${VIEWS.find((v) => v.id === scene.view)?.label
       ?? scene.view} — ${VIEWS.find((v) => v.id === scene.view)?.title ?? ''}. ` +
     `${scene.reducedMotion ? 'Reduced motion is on — camera moves cut rather than glide.' : 'Motion is enabled.'}`,
   );
   if (scene.wind !== false && d?.solar_wind?.speed != null) {
-    lines.push(
+    say('wind', 
       `The streaming particles are ambient [M] — far sparser and brighter than the real ` +
       `wind, which is invisible. What is real is their behaviour: they move at a rate set ` +
       `by the measured ${Math.round(d.solar_wind.speed)} km/s, their number follows the ` +
       `measured density, and they part around the same modelled magnetopause the HUD ` +
       `reports. When the boundary is pushed in, the flow closes in with it.`,
+      'layer.solar-wind', 'inst.speed', 'inst.density',
     );
   }
   if ((d?.kp?.estimated_kp ?? 0) > 4) {
-    lines.push(
+    say('shield', 
       `The field lines are shivering. That is ambient [M] — a legend for the elevated ` +
       `Kp above, not a motion the real field makes.`,
+      'layer.field-lines', 'concept.tiers',
     );
   }
-  lines.push(
+  say('scene', 
     `Colour and the starfield are ambient [M] — parameter-driven artwork, not ` +
     `measurements. There is no invented glow around the Sun: the region a painted ` +
     `corona would have occupied is the region the LASCO coronagraphs actually ` +
     `photograph, and that imagery is shown there instead when it is switched on.`,
+    'layer.starfield', 'layer.coronagraph', 'concept.tiers',
   );
 
-  return lines;
+  return acc;
 }

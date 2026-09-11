@@ -283,11 +283,17 @@ export class Viewer {
 
     this.rig = new CameraRig(canvas, canvas.clientWidth / Math.max(1, canvas.clientHeight));
 
-    this.scene.add(makeStarfield());
+    const stars = makeStarfield();
+    this.scene.add(stars);
     this.scene.add(this.sun.group);
     this.sun.group.add(this.activeRegions.group);
-    // The starfield is deliberately not registered: it is the background, and
-    // a click on empty sky should dismiss a card rather than open one.
+    // Registered but not pickable: the starfield is background, and a click on
+    // empty sky should dismiss a card rather than open one. The Sun's imagery
+    // and the coronagraph planes are reached as the Sun itself, which wins the
+    // tie and is the better answer. All three still appear in the report's
+    // index, which claims to list everything on screen and must be able to.
+    this.pickables.register(stars, 'layer.starfield', false);
+    this.pickables.register(this.sun.group, 'layer.sun-disc', false);
     this.pickables.register(this.activeRegions.group, 'layer.active-regions');
     // Cones are heliocentric, so they hang off the scene root rather than the
     // Sun's group, which carries the Sun's own render scale.
@@ -301,6 +307,8 @@ export class Viewer {
     this.earth.spin.add(this.fieldLines.group);
     this.earth.group.add(this.magnetosphere.group);
     this.earth.group.add(this.spacecraft.group);
+    this.pickables.register(this.spacecraft.group, 'layer.l1-monitors', false);
+    this.pickables.register(this.earth.group, 'layer.terminator', false);
     this.pickables.register(this.fieldLines.group, 'layer.field-lines');
     this.pickables.register(this.magnetosphere.magnetopauseObject, 'layer.magnetopause');
     this.pickables.register(this.magnetosphere.bowShockObject, 'layer.bow-shock');
@@ -318,6 +326,9 @@ export class Viewer {
       const ring = new OrbitRing(name, this.mode, new Date());
       this.rings.set(name, ring);
       this.scene.add(ring.line);
+      // Orbits are one subject however many rings there are; the index shows
+      // the idea, not eight copies of it.
+      this.pickables.register(ring.line, 'layer.orbits');
     }
 
     this.resize();
@@ -772,6 +783,22 @@ export class Viewer {
 
   /** How long the last layer raycast took, milliseconds. Reported, not guessed. */
   get layerPickCostMs(): number { return this.layerPickMs; }
+
+  /**
+   * Subject ids for every layer currently on screen, for the report's index.
+   * Read from the pickable registry rather than kept alongside it, so the list
+   * and the scene are the same fact.
+   */
+  get drawnSubjects(): string[] {
+    const out = [...this.pickables.visibleSubjects];
+    // Two layers are shader state on the globe rather than objects of their
+    // own, so nothing in the registry can report whether they are on.
+    if (this.auroraVisible && !out.includes('layer.aurora')) out.push('layer.aurora');
+    if (this.sun.coronagraphShown && !out.includes('layer.coronagraph')) {
+      out.push('layer.coronagraph');
+    }
+    return out;
+  }
 
   private onClick = (e: MouseEvent): void => {
     const p = this.pointerPick(e);
