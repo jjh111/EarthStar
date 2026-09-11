@@ -295,7 +295,7 @@ const MODELS: Subject[] = [
     limits: 'Truncated at 100° from the sunward axis: the surface flares without bound and '
       + 'the real magnetotail runs for hundreds of Earth radii, so what is drawn is cut, not '
       + 'ended. It is also an average fit — the real boundary ripples, and surface waves '
-      + 'travel along it. And it is a boundary drawn *around* the field rather than one the '
+      + 'travel along it. And it is a boundary drawn around the field rather than one the '
       + 'field produces, which is why the Checks tab holds it against T89’s own standoff.',
     sources: [{ name: 'Shue et al. 1998', ref: 'doi:10.1029/98JA01103' }],
     related: ['layer.magnetopause', 'model.farris-russell', 'inst.mpause', 'inst.geosync',
@@ -316,7 +316,7 @@ const MODELS: Subject[] = [
     limits: 'Farris & Russell pin the nose; the rest of the drawn surface is the Shue shape '
       + 'borrowed and scaled, which is a rendering choice rather than a fitted result. More '
       + 'importantly, the shock is not really what deflects the wind — the deflection is the '
-      + 'IMF *draping* through the sheath between the two surfaces, and two wireframe domes '
+      + 'IMF draping through the sheath between the two surfaces, and two wireframe domes '
       + 'cannot say that.',
     sources: [{ name: 'Farris & Russell 1994', ref: 'doi:10.1029/94JA00170' }],
     related: ['layer.bow-shock', 'model.shue1998', 'layer.solar-wind'],
@@ -353,7 +353,7 @@ const MODELS: Subject[] = [
       + 'rather than the disturbance at any one ground station.',
     howMade: 'The University of Michigan BATS-R-US/RCM coupled model, run operationally by '
       + 'NOAA and consumed here as a product.',
-    limits: 'This is a *modelled* Dst, not Kyoto’s measured index — which has no route into '
+    limits: 'This is a modelled Dst, not Kyoto’s measured index — which has no route into '
       + 'a browser. Because the model propagates the wind to Earth it runs ahead of the '
       + 'clock, so the value shown is the newest one that has actually arrived and the panel '
       + 'says how far its forecast reaches beyond that.',
@@ -607,9 +607,9 @@ const LAYERS: Subject[] = [
     aliases: ['L1'],
     kind: 'layer', tier: 'E', label: 'L1 monitors',
     oneLine: 'The spacecraft the wind readings come from, at their real positions.',
-    meaning: 'Everything on the left-hand panel about the solar wind is measured *here*, a '
-      + 'million and a half kilometres sunward, roughly an hour upstream. The markers are '
-      + 'drawn because that hour is the warning, and because the spacecraft are not exactly '
+    meaning: 'Everything on the left-hand panel about the solar wind is measured out at '
+      + 'these markers, a million and a half kilometres sunward, roughly an hour upstream. '
+      + 'They are drawn because that hour is the warning, and because the spacecraft are not exactly '
       + 'on the Sun–Earth line — they orbit around L1, tens of Earth radii off-axis, so '
       + 'what they measure is not precisely what hits us.',
     howMade: 'Positions from NOAA’s published spacecraft ephemerides, in GSE, rotated into '
@@ -689,7 +689,7 @@ const MEASUREMENTS: Subject[] = [
     howMade: 'NOAA’s estimated Kp, updated every minute from a network of ground '
       + 'magnetometers, ahead of the definitive three-hourly index.',
     limits: 'A range over three hours, quantised to thirds, and a planetary average — it '
-      + 'says nothing about where the disturbance is. It is also the *only* thing driving '
+      + 'says nothing about where the disturbance is. It is also the only thing driving '
       + 'T89, so the drawn magnetosphere inherits its coarseness: seven bands, stepping.',
     sources: [SWPC],
     related: ['model.t89', 'layer.field-lines', 'inst.dst', 'model.ovation'],
