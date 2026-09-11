@@ -140,15 +140,76 @@ describe('seed layout', () => {
  * deform it in the specific ways the current systems deform the real one. If a
  * future change quietly drops the external term, every one of these fails.
  */
+/**
+ * Which external model gets used, and what the trace does at its edge.
+ *
+ * The ladder is the one place a measurement outage turns into a different
+ * claim about the sky, so it gets tested as a ladder rather than as three
+ * unrelated cases: T96 when the wind is complete, T89 on Kp alone when it is
+ * not, and nothing at all when neither reached us.
+ */
+describe('choosing an external model from what was measured', () => {
+  const noon = new Date('2026-03-20T12:00:00Z');
+  const wind = { pdynNPa: 2.2, dstNt: -35, byNt: 3, bzNt: -6 };
+
+  it('prefers T96 whenever the wind is complete', () => {
+    const f = externalField(noon, { kp: 3, wind })!;
+    expect(f.model.name).toBe('t96');
+    // Even with no Kp at all: four measured drivers beat one missing index.
+    expect(externalField(noon, { kp: null, wind })!.model.name).toBe('t96');
+  });
+
+  it('falls back to T89 when the wind is incomplete but Kp arrived', () => {
+    expect(externalField(noon, { kp: 3, wind: null })!.model.name).toBe('t89');
+    // A partial wind is not a wind. Three of four drivers would mean inventing
+    // the fourth, which is the thing the charter forbids.
+    const partial = { pdynNPa: 2.2, dstNt: Number.NaN, byNt: 3, bzNt: -6 };
+    expect(externalField(noon, { kp: 3, wind: partial })!.model.name).toBe('t89');
+  });
+
+  it('draws nothing external when neither reached us', () => {
+    expect(externalField(noon, { kp: null, wind: null })).toBeNull();
+  });
+
+  it('gives T96 a different shape from T89 at the same instant', () => {
+    // The point of the ladder. Same seed, same second, two models: if these
+    // agreed there would be no reason to have ported the second one.
+    const seed = geoToEcefKm(70, 180, 120);
+    const viaT96 = traceFullLine(seed, noon, { external: externalField(noon, { kp: 3, wind })! });
+    const viaT89 = traceFullLine(seed, noon, { external: externalField(noon, { kp: 3, wind: null })! });
+    expect(Math.abs(viaT96.apexRe - viaT89.apexRe)).toBeGreaterThan(0.5);
+  });
+
+  it('stops a T96 line at the magnetopause, and says that is what happened', () => {
+    // T96 answers everywhere, so nothing makes the trace stop except the
+    // boundary — and crossing it is a fact about the magnetosphere, not a
+    // limit of the fit. The two must not be reported as the same thing.
+    const ext = externalField(noon, { kp: null, wind })!;
+    const outside = new Vector3(EARTH_RADIUS_KM * 30, 0, 0);
+    expect(totalField(outside, noon, ext, new Vector3())).toBeNull();
+    const inside = new Vector3(EARTH_RADIUS_KM * 5, 0, 0);
+    expect(totalField(inside, noon, ext, new Vector3())).not.toBeNull();
+
+    const lines = traceAll(noon, { latitudes: [78, -78], meridianCount: 6, altitudeKm: 120 },
+      { external: ext });
+    const ends = new Set(lines.flatMap((l) => [l.startsAt, l.endsAt]));
+    expect(ends.has('magnetopause') || ends.has('truncated'),
+      `ends were ${[...ends].join(', ')}`).toBe(true);
+    // And T96 never reports "out of model": it has no stated radial limit, so
+    // claiming one on its behalf would be putting words in the paper.
+    expect(ends.has('out-of-model')).toBe(false);
+  });
+});
+
 describe('tracing IGRF + T89 rather than IGRF alone', () => {
   const noon = new Date('2026-03-20T12:00:00Z');
-  const ext = (kp: number) => externalField(noon, kp)!;
+  const ext = (kp: number) => externalField(noon, { kp, wind: null })!;
 
   it('supplies an external field only when Kp is known', () => {
-    expect(externalField(noon, 3)).not.toBeNull();
+    expect(externalField(noon, { kp: 3, wind: null })).not.toBeNull();
     // No Kp is not the same as quiet, and must not render as quiet.
-    expect(externalField(noon, null)).toBeNull();
-    expect(externalField(noon, Number.NaN)).toBeNull();
+    expect(externalField(noon, { kp: null, wind: null })).toBeNull();
+    expect(externalField(noon, { kp: Number.NaN, wind: null })).toBeNull();
   });
 
   it('stretches the nightside — the same seed reaches further with T89 in', () => {
@@ -263,8 +324,8 @@ describe('tracing IGRF + T89 rather than IGRF alone', () => {
       '2026-09-22T12:00:00Z', '2026-12-21T00:00:00Z',
     ]) {
       const date = new Date(iso);
-      const r = lastClosedSunwardRe(date, externalField(date, 3)!);
-      expect(r, `${iso} (tilt ${(externalField(date, 3)!.basis.tilt * 180 / Math.PI).toFixed(0)}°)`)
+      const r = lastClosedSunwardRe(date, externalField(date, { kp: 3, wind: null })!);
+      expect(r, `${iso} (tilt ${(externalField(date, { kp: 3, wind: null })!.basis.tilt * 180 / Math.PI).toFixed(0)}°)`)
         .not.toBeNull();
       expect(r!).toBeGreaterThan(7);
       expect(r!).toBeLessThan(13);

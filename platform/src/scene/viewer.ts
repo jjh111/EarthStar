@@ -26,6 +26,7 @@ import {
 } from './scales.js';
 import { gseBasis, moonGeo, planetState, solarNorth, sunGeo, toScene } from '../models/ephemeris.js';
 import { FieldLines, Magnetosphere } from './magnetosphere.js';
+import type { ExternalModel } from '../models/fieldlines.js';
 import { SolarWind } from './solar-wind.js';
 import { ActiveRegions } from './active-regions.js';
 import { CmeCones } from './cmes.js';
@@ -489,16 +490,18 @@ export class Viewer {
   /** Field-line counts, for the Situation Report and the perf readout. */
   get fieldLineStats(): {
     lines: number; points: number; far: boolean;
-    band: number | null; tiltDeg: number | null; truncated: number; traceMs: number;
+    external: ExternalModel | null; tiltDeg: number | null;
+    truncated: number; traceMs: number;
   } {
     const ext = this.fieldLines.externalUsed;
     return {
       lines: this.fieldLines.lineCount,
       points: this.fieldLines.pointCount,
       far: this.fieldLines.farSet,
-      // Null band means no Kp reached us, so the lines are IGRF alone. The
-      // report says which, because the two are different claims about the sky.
-      band: ext?.band ?? null,
+      // Null means no driver reached us, so the lines are IGRF alone. The
+      // report says which of the three, because they are different claims
+      // about the sky, not three ways of saying the same one.
+      external: ext?.model ?? null,
       tiltDeg: ext ? (ext.basis.tilt * 180) / Math.PI : null,
       truncated: this.fieldLines.truncatedCount,
       traceMs: this.fieldLines.traceMs,
@@ -587,6 +590,17 @@ export class Viewer {
     const speed = arriving?.speed ?? sw?.speed ?? null;
     const mp = magnetopause(bz, density, speed);
 
+    // T96's four drivers, from the same readings, so the boundary the scene
+    // draws and the field the lines are traced through answer to one wind.
+    // By has no propagated form upstream, so it comes from L1 either way;
+    // that is a lead-time mismatch of under an hour and the Sources tab
+    // says so.
+    const dst = this.now?.dst?.value_nt ?? null;
+    const by = sw?.by_gsm ?? null;
+    const wind = (bz !== null && by !== null && dst !== null && mp !== null)
+      ? { pdynNPa: mp.dynPressureNPa, dstNt: dst, byNt: by, bzNt: bz }
+      : null;
+
     // Field lines live in the Earth-fixed frame, so the inertial Sun direction
     // must be counter-rotated by GAST before they can use it.
     const gast = (gastDegrees(date) * Math.PI) / 180;
@@ -596,11 +610,12 @@ export class Viewer {
     );
 
     if (this.shieldVisible) {
-      // Kp is T89's only driver, so it decides the shape of the field lines,
-      // not just the ambience. No Kp means no external field: IGRF alone, and
-      // the Situation Report says so rather than the scene implying quiet.
+      // The drivers decide the shape of the field lines, not just the ambience:
+      // T96 when the wind is complete, T89 on Kp alone when it is not, and
+      // IGRF alone when neither reached us — in which case the Situation Report
+      // says so rather than the scene implying quiet.
       const kp = this.now?.kp?.estimated_kp ?? null;
-      this.fieldLines.ensureTraced(date, kp);
+      this.fieldLines.ensureTraced(date, { kp, wind });
       this.fieldLines.setScale(earthRadius);
       // Line density and opacity answer to the camera: the tangle that is the
       // subject at Deck is noise at System scale, so past ~100 Rₑ it gives way

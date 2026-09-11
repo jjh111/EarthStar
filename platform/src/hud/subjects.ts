@@ -199,12 +199,55 @@ const MODELS: Subject[] = [
       + 'own integer rounding.',
     limits: 'It contains no external currents whatsoever. On its own it would extend '
       + 'forever, with no compressed dayside, no tail and no ring current — everything that '
-      + 'makes a magnetosphere a magnetosphere comes from T89 beside it. The secular '
+      + 'makes a magnetosphere a magnetosphere comes from the external model beside it. '
+      + 'The secular '
       + 'variation is a linear extrapolation and expires in 2030.',
     sources: [{ name: 'IGRF-14 (IAGA, Nov 2024)',
       url: 'https://www.ngdc.noaa.gov/IAGA/vmod/coeffs/igrf14coeffs.txt' }],
-    related: ['model.t89', 'layer.field-lines', 'concept.gsm', 'inst.geosync'],
+    related: ['model.t96', 'model.t89', 'layer.field-lines', 'concept.gsm', 'inst.geosync'],
     toPromote: 'IGRF-15 is due in 2030 and drops in through scripts/gen-igrf.mjs.',
+  },
+  {
+    id: 'model.t96',
+    aliases: ['Tsyganenko 1996 (T96)', 'Tsyganenko 1996', 'T96'],
+    kind: 'model', tier: 'D', label: 'Tsyganenko T96',
+    oneLine: 'The external field driven by the measured wind — the model where a southward Bz changes the shape.',
+    meaning: 'T96 takes four measurements where T89 takes one: solar-wind dynamic pressure, '
+      + 'Dst, and the IMF’s By and Bz. That matters because the IMF is how the Sun actually '
+      + 'reaches the magnetosphere, and T89 has no term for it at all. Under T96 one '
+      + 'nanotesla of Bz moves the drawn field lines further than twelve minutes of the '
+      + 'Earth turning does, and flips one line of the eighty between closed and open. It '
+      + 'also carries a real magnetopause whose size follows the wind pressure, and Region 1 '
+      + 'and Region 2 Birkeland current systems as separate sources rather than one lumped '
+      + 'field-aligned term.',
+    howMade: 'A line-by-line port of Tsyganenko’s own Fortran — 34 routines, 1338 statements '
+      + '— with all 848 coefficients generated from the vendored source rather than retyped. '
+      + 'Checked against the Python geopack package over 2520 points spanning the inner '
+      + 'region, the Region 1 oval and both its boundary layers, the dayside, the tail, the '
+      + 'lobes, the magnetopause and outside it, across eight wind states and five dipole '
+      + 'tilts: worst deviation 4.9×10⁻⁵ nT. That residual is accounted for, not assumed '
+      + 'small — it is three constants geopack recomputes at full precision where the '
+      + 'released Fortran holds truncated values, plus the Bessel approximation the Fortran '
+      + 'was fitted with. Restoring all three brings the agreement to 7×10⁻⁷ nT.',
+    limits: 'It is a static fit with no memory, so a substorm is not in it: a magnetosphere '
+      + 'driven hard for six hours looks the same to T96 as one that has just been struck. '
+      + 'Its magnetopause answers to pressure alone — the author says so — while the Shue '
+      + '1998 surface drawn beside it also answers to Bz, which is why the two can disagree. '
+      + 'Every source amplitude depends linearly on √Pdyn, Dst and the IMF coupling term, so '
+      + 'outside the fitted ranges — Pdyn 0.5 to 10 nPa, Dst −100 to +20 nT, By and Bz '
+      + 'within ±10 nT — the extrapolation is arithmetic rather than physics. The Viewer '
+      + 'still draws it there, because a severe storm is exactly when someone looks, and '
+      + 'says which driver has left the range.',
+    sources: [
+      { name: 'Tsyganenko 1995, Modeling the Earth’s magnetospheric magnetic field confined '
+        + 'within a realistic magnetopause', ref: 'J. Geophys. Res. 100, 5599' },
+      { name: 'Tsyganenko and Stern 1996, Modeling the global magnetic field of the '
+        + 'large-scale Birkeland current systems', ref: 'J. Geophys. Res. 101, 27187' },
+    ],
+    related: ['model.t89', 'model.igrf14', 'layer.field-lines', 'concept.gsm',
+      'concept.reconnection', 'model.shue1998', 'inst.bz', 'inst.dst', 'layer.magnetopause'],
+    toPromote: 'TS05 adds storm-time ring-current dynamics and a memory of the preceding '
+      + 'hours, which is the one thing T96 structurally cannot have.',
   },
   {
     id: 'model.t89',
@@ -228,13 +271,13 @@ const MODELS: Subject[] = [
       + 'pressure either. And Kp enters as one of seven discrete fits, so the field steps '
       + 'between bands rather than gliding: Kp 3.0 and Kp 3.9 draw exactly the same shape. '
       + 'It is fitted inside 70 Rₑ and has no magnetopause in it, so the trace stops at the '
-      + 'edge of what it describes rather than following it into nonsense.',
+      + 'edge of what it describes rather than following it into nonsense. Those are the '
+      + 'reasons it is now the fallback: the Viewer traces through T96 whenever the wind is '
+      + 'complete, and falls back to this when only Kp has reached us.',
     sources: [{ name: 'Tsyganenko 1989, A magnetospheric magnetic field model with a warped '
       + 'tail current sheet', ref: 'Planet. Space Sci. 37(1) 5–20' }],
-    related: ['model.igrf14', 'layer.field-lines', 'concept.gsm', 'concept.reconnection',
-      'model.shue1998', 'inst.kp', 'inst.dst'],
-    toPromote: 'T96 adds IMF By/Bz and dynamic pressure, and the Viewer already fetches '
-      + 'every one of its inputs. TS05 adds storm-time ring-current dynamics after that.',
+    related: ['model.t96', 'model.igrf14', 'layer.field-lines', 'concept.gsm',
+      'concept.reconnection', 'model.shue1998', 'inst.kp', 'inst.dst'],
   },
   {
     id: 'model.shue1998',
@@ -384,27 +427,31 @@ const LAYERS: Subject[] = [
     id: 'layer.field-lines',
     aliases: ['field lines'],
     kind: 'layer', tier: 'D', label: 'Magnetic field lines',
-    oneLine: 'The Earth’s field, traced through IGRF-14 + T89c. Blue closes, violet stays open.',
+    oneLine: 'The Earth’s field, traced through IGRF-14 plus a Tsyganenko external model. Blue closes, violet stays open.',
     meaning: 'These are the paths a charged particle is bound to follow, and they are the '
       + 'shield: a blue line has both feet on Earth and traps what is on it, a violet line '
       + 'has one foot on Earth and leads out toward the solar wind. The boundary between the '
       + 'two is the edge of the polar cap, and it moves equatorward as a storm grows.',
     howMade: 'Runge–Kutta integration along the total field from seed points at 120 km '
-      + 'altitude, in both directions, until each end reaches the surface or leaves the '
-      + 'model. Retraced when the Kp band changes or the Earth has turned 3° under the '
+      + 'altitude, in both directions, until each end reaches the surface, crosses the '
+      + 'magnetopause or leaves the model. The external field is T96 when the wind is '
+      + 'complete and T89 on Kp alone when it is not; the panel says which. Retraced when '
+      + 'the drivers move enough to change the shape or the Earth has turned 3° under the '
       + 'Sun-fixed external field, spread across frames so no single one stalls.',
     limits: 'Open does not mean reconnected — these lines are open because the model does '
-      + 'not close them, and T89 has no IMF term, so a southward Bz changes nothing here. '
-      + 'Lines that leave the model are cut and labelled, not ended: the tail continues far '
-      + 'past 70 Rₑ. Brightness is uniform and carries no flux information. The eighty drawn '
-      + 'lines are a legible sample of a continuum, not a count of anything.',
-    sources: [{ name: 'IGRF-14 (IAGA)' }, { name: 'Tsyganenko 1989 (T89c)' }],
-    related: ['model.igrf14', 'model.t89', 'concept.reconnection', 'layer.magnetopause',
-      'concept.gsm'],
+      + 'not close them. Lines that leave the model are cut and labelled, not ended: the '
+      + 'tail continues far past where either model describes it. Brightness is uniform and '
+      + 'carries no flux information. The eighty drawn lines are a legible sample of a '
+      + 'continuum, not a count of anything. Under T89 a southward Bz changes nothing here '
+      + 'at all; under T96 it does, but neither model has any memory of the hours before.',
+    sources: [{ name: 'IGRF-14 (IAGA)' }, { name: 'Tsyganenko 1996 (T96)' },
+      { name: 'Tsyganenko 1989 (T89c)' }],
+    related: ['model.igrf14', 'model.t96', 'model.t89', 'concept.reconnection',
+      'layer.magnetopause', 'concept.gsm'],
     toPromote: 'Line brightness keyed to flux-tube volume, which the trace already computes '
       + 'and discards, would make the shield show where the field is strong rather than '
       + 'only where it goes.',
-    scene: ['field-lines-igrf14-t89', 'field-line-closed', 'field-line-open'],
+    scene: ['field-lines-igrf14-external', 'field-line-closed', 'field-line-open'],
   },
   {
     id: 'layer.magnetopause',
@@ -419,9 +466,13 @@ const LAYERS: Subject[] = [
       + 'to the Sun rather than to the Earth’s spin.',
     limits: 'Drawn sparsely on purpose: a dense surface reads as a glass dome, and a '
       + 'magnetopause is a pressure balance, not a wall. Truncated at 100° from the nose. '
-      + 'With no measured wind there is nothing to compute and nothing is drawn.',
+      + 'With no measured wind there is nothing to compute and nothing is drawn. This is '
+      + 'the Shue surface only: T96 carries a magnetopause of its own, driven by pressure '
+      + 'alone, and the field lines stop at that one rather than at this. When the two '
+      + 'part company the Checks tab says by how much.',
     sources: [{ name: 'Shue et al. 1998', ref: 'doi:10.1029/98JA01103' }],
-    related: ['model.shue1998', 'layer.bow-shock', 'inst.mpause', 'layer.field-lines'],
+    related: ['model.shue1998', 'layer.bow-shock', 'inst.mpause', 'layer.field-lines',
+      'model.t96'],
     scene: ['magnetopause-shue1998', 'magnetosphere'],
   },
   {

@@ -47,7 +47,8 @@ const env = {
 const scene = {
   mode: 'globe', view: 'deck', reducedMotion: false, shield: true,
   cmes: { shown: true, count: 2 },
-  fieldLines: { lines: 80, points: 9000, far: false, band: 5, tiltDeg: 12.7, truncated: 4 },
+  fieldLines: { lines: 80, points: 9000, far: false,
+    external: { name: 't89', band: 5 }, tiltDeg: 12.7, truncated: 4 },
   aurora: true, wind: true, earthSurface: 'imagery',
 } as never;
 

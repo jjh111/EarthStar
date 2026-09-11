@@ -6,23 +6,31 @@
  * that comes out — the tilt, the offset, the way southern-hemisphere lines
  * reach higher over the South Atlantic — is the model's, not ours.
  *
- * The field integrated is **IGRF-14 + Tsyganenko T89c**: the Earth's own field
- * plus the external currents. IGRF alone is a dipole in empty space, and every
- * deformation that makes a magnetosphere a magnetosphere — the compressed
- * dayside, the stretched tail, the inflated ring current — comes from the
- * external term. Without it the shape has to be imposed from outside, which is
- * what the geometric clamp used to do.
+ * The field integrated is **IGRF-14 plus an external model**: the Earth's own
+ * field plus the magnetospheric currents. IGRF alone is a dipole in empty
+ * space, and every deformation that makes a magnetosphere a magnetosphere —
+ * the compressed dayside, the stretched tail, the inflated ring current —
+ * comes from the external term. Without it the shape has to be imposed from
+ * outside, which is what the geometric clamp used to do.
+ *
+ * Which external model depends on what has been measured. **T96** when the
+ * solar wind is complete, because it takes all four drivers and a southward Bz
+ * then changes the drawn shape; **T89** when only Kp has reached us; neither,
+ * and IGRF alone, when even that has not. `externalField` is where that ladder
+ * lives, and the model actually used travels with the field so every surface
+ * can say which one it is looking at.
  *
  * Lines co-rotate with the globe once traced. That is exactly right for IGRF,
- * which is fixed to the Earth, and wrong for T89, which is fixed to the Sun —
- * so the trace is redone as the Earth turns under it, on the cadence
- * `ensureTraced` sets.
+ * which is fixed to the Earth, and wrong for the external field, which is
+ * fixed to the Sun — so the trace is redone as the Earth turns under it, on
+ * the cadence `ensureTraced` sets.
  */
 
 import { Vector3 } from 'three';
 import { igrfVector } from './igrf14.js';
 import { fromGsm, gsmBasis, toGsm, type GsmBasis } from './gsm.js';
 import { T89_VALID_RE, kpBandIndex, t89Vector } from './t89.js';
+import { t96InputComplete, t96InsideMagnetopause, t96Vector, type T96Input } from './t96.js';
 
 /**
  * IGRF's reference radius, 6371.2 km — the sphere the spherical-harmonic
@@ -32,16 +40,34 @@ import { T89_VALID_RE, kpBandIndex, t89Vector } from './t89.js';
 export const EARTH_RADIUS_KM = 6371.2;
 
 /**
+ * Which external model, and what it is driven by.
+ *
+ * A discriminated union rather than an optional field, so nothing can hold a
+ * T96 wind and a T89 band at once and leave the reader to guess which was
+ * drawn. Every surface that reports on the shield switches on `name`.
+ */
+export type ExternalModel =
+  | { name: 't89'; band: number }
+  | { name: 't96'; input: T96Input };
+
+/**
  * The external field to add, or null for IGRF alone.
  *
- * `basis` carries the GSM frame and the dipole tilt for the instant; `band` is
- * the T89 Kp band, 0–6. Both come from `gsmBasis()` and `kpBandIndex()`, and
- * both are held fixed for the duration of a trace — a field line is an
+ * `basis` carries the GSM frame and the dipole tilt for the instant. Both it
+ * and `model` are held fixed for the duration of a trace — a field line is an
  * instantaneous object, so the field must not move while one is being drawn.
  */
 export interface ExternalField {
   basis: GsmBasis;
-  band: number;
+  model: ExternalModel;
+}
+
+/** Everything measured that an external model could be driven by. */
+export interface ExternalDrivers {
+  /** Planetary K index, T89's only driver. */
+  kp: number | null;
+  /** Pressure, Dst and the IMF — T96 needs all four or none. */
+  wind: T96Input | null;
 }
 
 export interface TraceOptions {
@@ -64,16 +90,28 @@ export interface TraceOptions {
  * How far a line is followed before drawing gives up on it, in arc length.
  *
  * With the external field in, tail lines stop being loops. A line seeded at 55°
- * runs down-tail until it leaves T89's fit region at 70 Rₑ, and the real one
- * keeps going for hundreds. Some limit is unavoidable; the honest thing is to
+ * runs down-tail until it leaves the model, and the real one keeps going for
+ * hundreds of Earth radii. Some limit is unavoidable; the honest thing is to
  * make it a stated one and label the lines it cuts, rather than let the
  * geometry decide silently.
  *
- * 160 Rₑ is out and back at the model's own edge, so a line that hits this
- * limit has already been followed as far as T89 can be trusted in either
- * direction.
+ * 160 Rₑ is out and back at the drawn limit, so a line that hits this has
+ * already been followed as far as either model is drawn in both directions.
  */
 export const TAIL_ARC_LIMIT_KM = EARTH_RADIUS_KM * 160;
+
+/**
+ * How far out a line is drawn, in Earth radii.
+ *
+ * For T89 this is the model's own number: 70 Rₑ is the geocentric distance its
+ * header states the fit is valid to, so a line that reaches it has genuinely
+ * left what the model describes. For T96 the same distance is **ours** — T96
+ * states no radial limit, and its magnetopause is the boundary that means
+ * something — so a T96 line stopped here is marked `truncated`, not
+ * `out-of-model`. Calling it out-of-model would put a limit in Tsyganenko's
+ * mouth that his paper does not claim.
+ */
+const DRAW_LIMIT_RE = T89_VALID_RE;
 
 const DEFAULTS: Required<Omit<TraceOptions, 'external'>> = {
   innerRadiusKm: EARTH_RADIUS_KM,
@@ -93,7 +131,7 @@ const DEFAULTS: Required<Omit<TraceOptions, 'external'>> = {
  * vertices.
  */
 const EXTERNAL_DEFAULTS: Partial<Required<Omit<TraceOptions, 'external'>>> = {
-  outerRadiusKm: EARTH_RADIUS_KM * T89_VALID_RE,
+  outerRadiusKm: EARTH_RADIUS_KM * DRAW_LIMIT_RE,
   maxStepKm: EARTH_RADIUS_KM * 0.25,
   maxArcLengthKm: TAIL_ARC_LIMIT_KM,
 };
@@ -105,6 +143,12 @@ export type TraceEnd =
   | 'null-field'
   /** Left the region T89 was fitted over; the field beyond is not modelled. */
   | 'out-of-model'
+  /**
+   * Crossed T96's own magnetopause. Unlike `out-of-model` this is a statement
+   * about the magnetosphere rather than about the fit: the line has left the
+   * cavity, and what it joins out there is the solar wind's field, not ours.
+   */
+  | 'magnetopause'
   /** Hit `maxArcLengthKm` — still going, but no longer drawn. */
   | 'truncated';
 
@@ -134,32 +178,57 @@ const k1 = new Vector3(), k2 = new Vector3(), k3 = new Vector3(), k4 = new Vecto
 const tmp = new Vector3();
 const gsmPos = new Vector3(), gsmB = new Vector3(), extB = new Vector3();
 
+/** Why a field evaluation stopped, or `'ok'`. */
+type FieldStatus = 'ok' | 'out-of-model' | 'magnetopause';
+
 /**
- * Total field at `p` in nT, Earth-fixed. Null when the point is outside T89's
- * fit region: the caller must stop there rather than fall back to IGRF alone,
- * which would draw a tidy dipole in a region where the real field is nothing
- * of the kind.
+ * Total field at `p` in nT, Earth-fixed, written into `out`.
+ *
+ * Returns a status rather than a nullable vector because the two ways this can
+ * stop are different facts. Leaving T89's fit region is a limit of the model —
+ * the caller must stop rather than fall back to IGRF alone, which would draw a
+ * tidy dipole where the real field is nothing of the kind. Leaving T96's
+ * magnetopause is a fact about the magnetosphere, and the line that does it is
+ * open to the wind.
+ */
+function fieldAt(
+  p: Vector3, date: Date, external: ExternalField | null | undefined, out: Vector3,
+): FieldStatus {
+  igrfVector(p, date, out);
+  if (!external) return 'ok';
+
+  toGsm(gsmPos.copy(p).divideScalar(EARTH_RADIUS_KM), external.basis, gsmPos);
+  if (external.model.name === 't89') {
+    if (!t89Vector(gsmPos, external.model.band, external.basis.tilt, gsmB)) return 'out-of-model';
+  } else {
+    if (!t96InsideMagnetopause(gsmPos, external.model.input.pdynNPa)) return 'magnetopause';
+    t96Vector(gsmPos, external.model.input, external.basis.tilt, gsmB);
+  }
+  out.add(fromGsm(gsmB, external.basis, extB));
+  return 'ok';
+}
+
+/**
+ * Total field at `p` in nT, Earth-fixed. Null where the external model has
+ * nothing to say — outside T89's fit region, or outside T96's magnetopause.
  */
 export function totalField(
   p: Vector3, date: Date, external: ExternalField | null | undefined, out: Vector3,
 ): Vector3 | null {
-  igrfVector(p, date, out);
-  if (!external) return out;
-
-  toGsm(gsmPos.copy(p).divideScalar(EARTH_RADIUS_KM), external.basis, gsmPos);
-  if (!t89Vector(gsmPos, external.band, external.basis.tilt, gsmB)) return null;
-  return out.add(fromGsm(gsmB, external.basis, extB));
+  return fieldAt(p, date, external, out) === 'ok' ? out : null;
 }
 
 /**
- * Unit field direction at `p`. The two ways this can fail are different facts
- * about the world and the trace records them differently: a null field is a
- * real feature of the field, and leaving the model is a limit of ours.
+ * Unit field direction at `p`. The three ways this can fail are different facts
+ * about the world and the trace records them separately: a null field is a real
+ * feature of the field, leaving the fit is a limit of ours, and crossing the
+ * magnetopause is the line leaving the magnetosphere.
  */
 function bhat(
   p: Vector3, date: Date, external: ExternalField | null | undefined, out: Vector3,
-): 'ok' | 'out-of-model' | 'null-field' {
-  if (!totalField(p, date, external, out)) return 'out-of-model';
+): 'ok' | 'out-of-model' | 'magnetopause' | 'null-field' {
+  const status = fieldAt(p, date, external, out);
+  if (status !== 'ok') return status;
   const len = out.length();
   if (!(len > 1e-9)) return 'null-field';
   out.divideScalar(len);
@@ -188,7 +257,11 @@ export function traceFieldLine(
     apex = Math.max(apex, r / EARTH_RADIUS_KM);
 
     if (step > 0 && r <= o.innerRadiusKm) { endsAt = 'surface'; break; }
-    if (r >= o.outerRadiusKm) { endsAt = ext ? 'out-of-model' : 'outer'; break; }
+    if (r >= o.outerRadiusKm) {
+      // Which claim the stop is depends on whose limit it is. See DRAW_LIMIT_RE.
+      endsAt = !ext ? 'outer' : ext.model.name === 't89' ? 'out-of-model' : 'truncated';
+      break;
+    }
     if (arc >= o.maxArcLengthKm) { endsAt = 'truncated'; break; }
 
     // Step scales with radius: fine detail near the surface, long strides in
@@ -212,7 +285,8 @@ export function traceFieldLine(
 
   return {
     points, startsAt: 'surface', endsAt, apexRe: apex, closed: false,
-    truncated: endsAt === 'truncated' || endsAt === 'out-of-model',
+    truncated: endsAt === 'truncated' || endsAt === 'out-of-model'
+      || endsAt === 'magnetopause',
   };
 }
 
@@ -292,17 +366,27 @@ export function seedPoints(spec: SeedSpec = DEFAULT_SEEDS): Vector3[] {
 }
 
 /**
- * The external field for an instant, or null when Kp is unknown.
+ * The external field for an instant: the best-informed model the measurements
+ * support, or null when they support none.
  *
- * Null propagates all the way to the drawing: no Kp means no T89, which means
- * IGRF alone and a panel that says the external field is unavailable. It does
- * not mean "assume quiet" — see `kpBandIndex`.
+ * The ladder is T96, then T89, then nothing. T96 wins whenever the wind is
+ * complete because it is strictly better informed — four measured drivers
+ * against one index, an explicit magnetopause, and an IMF term — and the
+ * difference is visible, not academic: a southward Bz changes the drawn shape
+ * under T96 and changes nothing under T89.
+ *
+ * Null propagates all the way to the drawing: it means IGRF alone and a panel
+ * that says the external field is unavailable. It does not mean "assume
+ * quiet" — see `kpBandIndex`.
  */
-export function externalField(date: Date, kp: number | null): ExternalField | null {
-  if (kp === null) return null;
-  const band = kpBandIndex(kp);
+export function externalField(date: Date, drivers: ExternalDrivers): ExternalField | null {
+  if (t96InputComplete(drivers.wind)) {
+    return { basis: gsmBasis(date), model: { name: 't96', input: drivers.wind } };
+  }
+  if (drivers.kp === null) return null;
+  const band = kpBandIndex(drivers.kp);
   if (band === null) return null;
-  return { basis: gsmBasis(date), band };
+  return { basis: gsmBasis(date), model: { name: 't89', band } };
 }
 
 export function traceAll(date: Date, spec: SeedSpec = DEFAULT_SEEDS, options: TraceOptions = {}): FieldLine[] {

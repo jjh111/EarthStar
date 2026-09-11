@@ -53,3 +53,54 @@ package over 1540 points; see `scripts/gen-t89-reference.py`. It adds one limit
 the paper does not state — a 20 Rₑ sunward cut-off, because T89 has no
 magnetopause and its dayside field runs away outside one. `docs/sources.md` §5
 records the measurement behind it.
+
+## `t96.f`
+
+Tsyganenko's magnetospheric field model T96 — the `T96_01` release of 22 June 1996,
+carrying the two corrections T. Sotirelis reported in April 1997 (a stray closing
+parenthesis in `R2_BIRK`, and a 0/0 on the Z axis sidestepped in `XKSI`). Fixed-form
+Fortran 77, 2579 lines, 34 subroutines and functions, 47 `DATA` statements holding 848
+fitted coefficients.
+
+- **Source:** `github.com/sdelarquier/tsyganenko`, `tsyganenko/T96.f` — the same
+  redistribution the T89c file above came from, and unmodified for the same reason: it
+  keeps Tsyganenko's original subroutine names, argument lists and numeric literals.
+- **Retrieved:** 2026-09-11, unmodified. `sha256
+  dcfb44e8184b427d57ad3dfa4dccf2cbae1c35f4f5d0014aeab9226b5afc03f6`
+- **Author:** N. A. Tsyganenko, Raytheon STX / NASA GSFC. Copyright 1995, 1996.
+- **References:** *Modeling the Earth's magnetospheric magnetic field confined within a
+  realistic magnetopause*, J. Geophys. Res. **100**, 5599, 1995; Tsyganenko and Stern,
+  *Modeling the global magnetic field of the large-scale Birkeland current systems*,
+  J. Geophys. Res. **101**, 27187, 1996.
+
+Three copies were fetched and compared before this one was chosen — the same precaution as
+for T89c, and more necessary here, because 848 coefficients spread over 47 `DATA` statements
+is not something a reader would notice going wrong:
+
+- `mattkjames7/geopack`, `src/fortran/T96.f` — **arithmetic identical.** Every one of the
+  1338 statements matches after removing a `T96` prefix the repository adds to each
+  subroutine name and its `REAL*8` re-declaration of the interface variables. All 47 `DATA`
+  payloads match exactly. (Note that this repository's *T89c* file is corrupt; its T96 is
+  not, and the two were checked independently.)
+- `PRBEM/IRBEM`, `source/Tsyganenko96.f` — nine statements differ, every one a deliberate
+  IRBEM edit: the tilt passed through a `COMMON` block, `π` and `2π` computed as
+  `4·atan(1)` instead of the file's literals, `DFLOAT(K)` dropped, `0.` respelled `0`. No
+  arithmetic difference. Its `DATA` payloads match apart from one removed `π` literal.
+
+The comparison was made statement-by-statement with continuations joined and numeric
+literals canonicalised, because the file uses **tabs in the label field** in twenty places —
+a GNU extension Tsyganenko's own file relies on, which a naïve column-6 reader silently
+mangles. `scripts/gen-t96.mjs` handles it, and `test/t96.test.ts` asserts the parse finds
+exactly 34 routines and 848 numbers.
+
+`src/models/t96-coeffs.ts` is generated from this file by `scripts/gen-t96.mjs`, which reads
+every `DATA` statement, resolves array shapes from `DIMENSION` *and* `COMMON` declarations —
+T96 initialises COMMON arrays from `DATA` statements inside the routines that use them — and
+expands Fortran repeat counts (`2*-7.D0` is two values, not a product). `test/t96.test.ts`
+re-parses the vendored file and asserts the generated module still matches, both ways: no
+coefficient missing, and none exported without a `DATA` statement behind it.
+
+The port is `src/models/t96.ts`, verified against the Python `geopack` package over 2520
+points. Its worst disagreement — 4.9 × 10⁻⁵ nT — is accounted for rather than tolerated:
+three places where `geopack` modernised a literal the released Fortran holds truncated.
+`docs/sources.md` §5 has the table and the method.
