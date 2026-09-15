@@ -1,0 +1,64 @@
+:Product: Forecast Discussion
+:Issued: 2026 Sep 15 1230 UTC
+# Prepared by the U.S. Dept. of Commerce, NOAA, Space Weather Prediction Center
+#
+Solar Activity
+
+.24 hr Summary...
+Solar activity continued at very low levels with occasional B-class
+flaring. There are four numbered sunspot regions on the visible disk.
+All but Region 4531 (S08W02, Bxo/beta), which was numbered this period,
+are stable unipolar groups.
+
+No Earth-directed CMEs were observed in available coronagraph imagery.
+
+.Forecast...
+Solar activity is expected to remain at very low levels, with a
+decreasing chance for isolated C-class flares and a slight chance for
+M-class flares through 17 Sep.
+
+Energetic Particle
+
+.24 hr Summary...
+The greater than 2 MeV electron flux was at high to moderate levels,
+with a peak flux of 4,650 pfu observed at 14/1315 UTC. The greater than
+10 MeV proton flux has declined but remains slightly elevated following
+a peak of 4 pfu observed at 14/1520 UTC.
+
+.Forecast...
+The greater than 2 MeV electron flux is expected to continue at high
+levels through 17 Sep. The greater than 10 MeV proton flux is
+anticipated to undergo a slow decline toward background levels through
+17 Sep.
+
+Solar Wind
+
+.24 hr Summary...
+Solar wind parameters were slightly enhanced throughout the period,
+consistent with transient passage and the likely onset of a negative
+polarity coronal hole high-speed stream (-CH HSS). Total field strength
+(Bt) gradually rose to a peak of 14 nT after 14/1800 UTC before reaching
+as high as 16 nT late in the period. The North-South (Bz) component was
+variable in the first half of the period and reached a maximum southward
+deflection of -9 nT before turning and remaining northward after 14/2230
+UTC. Solar wind speeds held relatively slow between 350 and 380 km/s
+before climbing sharply after 15/1114 UTC to over 600 km/s. This wind
+speed increase was a notable sharp rise in temperature. The phi angle
+shifted into a predominantly negative (towards the Sun) early in the
+period.
+
+.Forecast...
+Negative polarity CH HSS effects are anticipated to persist through 17
+Sep. Additional enhancements are likely on 16 and 17 Sep due to flanking
+influences from CMEs that departed the Sun on 13 and 14 Sep.
+
+Geospace
+
+.24 hr Summary...
+The geomagnetic field was at quiet to active levels in response to
+transient influences.
+
+.Forecast...
+Geomagnetic activity is expected to reach active to G1 (Minor) storm
+levels on 15 and 16 Sep, with G1 conditions remaining possible on 17 Sep
+due to combined CH and CME effects.

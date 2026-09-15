@@ -1,0 +1,295 @@
+{
+  "mirrored_at": "2026-09-15T20:45:34.355Z",
+  "note": "Byte-for-byte copies of NOAA SWPC payloads, long arrays cut to their newest rows. Every record keeps upstream's own timestamps. Consulted by the Viewer only when NOAA itself is unreachable.",
+  "max_rows": 720,
+  "total": 28,
+  "failed": 0,
+  "unchecked": [],
+  "files": [
+    {
+      "url": "/json/enlil_time_series.json",
+      "path": "swpc/json/enlil_time_series.json",
+      "status": 200,
+      "trimmed": true,
+      "selected_by": "timestamp",
+      "bytes": 160232,
+      "upstream_bytes": 1577980,
+      "data_time": "2026-09-19T19:01Z",
+      "ok": true
+    },
+    {
+      "url": "/json/geospace/geospace_dst_1_hour.json",
+      "path": "swpc/json/geospace/geospace_dst_1_hour.json",
+      "status": 200,
+      "trimmed": false,
+      "bytes": 4783,
+      "upstream_bytes": 5302,
+      "data_time": "2026-09-15T21:14Z",
+      "ok": true
+    },
+    {
+      "url": "/json/geospace/geospace_dst_7_day.json",
+      "path": "swpc/json/geospace/geospace_dst_7_day.json",
+      "status": 200,
+      "trimmed": true,
+      "selected_by": "timestamp",
+      "bytes": 36666,
+      "upstream_bytes": 643424,
+      "data_time": "2026-09-15T21:14Z",
+      "ok": true
+    },
+    {
+      "url": "/json/goes/primary/integral-electrons-6-hour.json",
+      "path": "swpc/json/goes/primary/integral-electrons-6-hour.json",
+      "status": 200,
+      "trimmed": false,
+      "bytes": 6772,
+      "upstream_bytes": 7339,
+      "data_time": "2026-09-15T20:35Z",
+      "ok": true
+    },
+    {
+      "url": "/json/goes/primary/integral-protons-6-hour.json",
+      "path": "swpc/json/goes/primary/integral-protons-6-hour.json",
+      "status": 200,
+      "trimmed": false,
+      "bytes": 55339,
+      "upstream_bytes": 59882,
+      "data_time": "2026-09-15T20:35Z",
+      "ok": true
+    },
+    {
+      "url": "/json/goes/primary/magnetometers-6-hour.json",
+      "path": "swpc/json/goes/primary/magnetometers-6-hour.json",
+      "status": 200,
+      "trimmed": false,
+      "bytes": 60264,
+      "upstream_bytes": 65289,
+      "data_time": "2026-09-15T20:42Z",
+      "ok": true
+    },
+    {
+      "url": "/json/goes/primary/xray-flares-7-day.json",
+      "path": "swpc/json/goes/primary/xray-flares-7-day.json",
+      "status": 200,
+      "trimmed": false,
+      "bytes": 12539,
+      "upstream_bytes": 13389,
+      "data_time": "2026-09-15T15:23Z",
+      "ok": true
+    },
+    {
+      "url": "/json/goes/primary/xray-flares-latest.json",
+      "path": "swpc/json/goes/primary/xray-flares-latest.json",
+      "status": 200,
+      "trimmed": false,
+      "bytes": 393,
+      "upstream_bytes": 421,
+      "data_time": "2026-09-15T20:42Z",
+      "ok": true
+    },
+    {
+      "url": "/json/goes/primary/xrays-1-day.json",
+      "path": "swpc/json/goes/primary/xrays-1-day.json",
+      "status": 200,
+      "trimmed": true,
+      "selected_by": "timestamp",
+      "bytes": 152150,
+      "upstream_bytes": 651170,
+      "data_time": "2026-09-15T20:42Z",
+      "ok": true
+    },
+    {
+      "url": "/json/goes/primary/xrays-6-hour.json",
+      "path": "swpc/json/goes/primary/xrays-6-hour.json",
+      "status": 200,
+      "trimmed": false,
+      "bytes": 151725,
+      "upstream_bytes": 163652,
+      "data_time": "2026-09-15T20:42Z",
+      "ok": true
+    },
+    {
+      "url": "/json/ovation_aurora_latest.json",
+      "path": "swpc/json/ovation_aurora_latest.json",
+      "status": 200,
+      "trimmed": false,
+      "bytes": 735805,
+      "upstream_bytes": 931293,
+      "data_time": "2026-09-15T21:31Z",
+      "ok": true
+    },
+    {
+      "url": "/json/planetary_k_index_1m.json",
+      "path": "swpc/json/planetary_k_index_1m.json",
+      "status": 200,
+      "trimmed": false,
+      "bytes": 27271,
+      "upstream_bytes": 27847,
+      "data_time": "2026-09-15T20:38Z",
+      "ok": true
+    },
+    {
+      "url": "/json/rtsw/rtsw_ephemerides_1h.json",
+      "path": "swpc/json/rtsw/rtsw_ephemerides_1h.json",
+      "status": 200,
+      "trimmed": true,
+      "selected_by": "timestamp",
+      "bytes": 246351,
+      "upstream_bytes": 784999,
+      "data_time": "2026-09-15T20:00Z",
+      "ok": true
+    },
+    {
+      "url": "/json/rtsw/rtsw_mag_1m.json",
+      "path": "swpc/json/rtsw/rtsw_mag_1m.json",
+      "status": 200,
+      "trimmed": true,
+      "selected_by": "timestamp",
+      "bytes": 274451,
+      "upstream_bytes": 1669966,
+      "data_time": "2026-09-15T20:41Z",
+      "ok": true
+    },
+    {
+      "url": "/json/rtsw/rtsw_wind_1m.json",
+      "path": "swpc/json/rtsw/rtsw_wind_1m.json",
+      "status": 200,
+      "trimmed": true,
+      "selected_by": "timestamp",
+      "bytes": 489240,
+      "upstream_bytes": 2935762,
+      "data_time": "2026-09-15T20:41Z",
+      "ok": true
+    },
+    {
+      "url": "/json/solar-cycle/observed-solar-cycle-indices.json",
+      "path": "swpc/json/solar-cycle/observed-solar-cycle-indices.json",
+      "status": 200,
+      "trimmed": false,
+      "archive": true,
+      "bytes": 439620,
+      "upstream_bytes": 512287,
+      "data_time": null,
+      "ok": true
+    },
+    {
+      "url": "/json/solar_probabilities.json",
+      "path": "swpc/json/solar_probabilities.json",
+      "status": 200,
+      "trimmed": false,
+      "bytes": 9403,
+      "upstream_bytes": 9403,
+      "data_time": "2026-09-15T00:00Z",
+      "ok": true
+    },
+    {
+      "url": "/json/solar_regions.json",
+      "path": "swpc/json/solar_regions.json",
+      "status": 200,
+      "trimmed": false,
+      "bytes": 139342,
+      "upstream_bytes": 139342,
+      "data_time": "2026-09-15T05:34Z",
+      "ok": true
+    },
+    {
+      "url": "/products/alerts.json",
+      "path": "swpc/products/alerts.json",
+      "status": 200,
+      "trimmed": false,
+      "bytes": 50231,
+      "upstream_bytes": 50301,
+      "data_time": "2026-09-15T18:56Z",
+      "ok": true
+    },
+    {
+      "url": "/products/geospace/propagated-solar-wind-1-hour.json",
+      "path": "swpc/products/geospace/propagated-solar-wind-1-hour.json",
+      "status": 200,
+      "trimmed": false,
+      "bytes": 5990,
+      "upstream_bytes": 6837,
+      "data_time": "2026-09-15T21:24Z",
+      "ok": true
+    },
+    {
+      "url": "/products/noaa-planetary-k-index-forecast.json",
+      "path": "swpc/products/noaa-planetary-k-index-forecast.json",
+      "status": 200,
+      "trimmed": false,
+      "bytes": 6827,
+      "upstream_bytes": 6905,
+      "data_time": "2026-09-18T00:00Z",
+      "ok": true
+    },
+    {
+      "url": "/products/noaa-planetary-k-index.json",
+      "path": "swpc/products/noaa-planetary-k-index.json",
+      "status": 200,
+      "trimmed": false,
+      "bytes": 4735,
+      "upstream_bytes": 4801,
+      "data_time": "2026-09-15T15:00Z",
+      "ok": true
+    },
+    {
+      "url": "/products/noaa-scales.json",
+      "path": "swpc/products/noaa-scales.json",
+      "status": 200,
+      "trimmed": false,
+      "bytes": 970,
+      "upstream_bytes": 1099,
+      "data_time": null,
+      "ok": true
+    },
+    {
+      "url": "/products/summary/10cm-flux.json",
+      "path": "swpc/products/summary/10cm-flux.json",
+      "status": 200,
+      "trimmed": false,
+      "bytes": 47,
+      "upstream_bytes": 47,
+      "data_time": "2026-09-15T20:00Z",
+      "ok": true
+    },
+    {
+      "url": "/products/summary/solar-wind-mag-field.json",
+      "path": "swpc/products/summary/solar-wind-mag-field.json",
+      "status": 200,
+      "trimmed": false,
+      "bytes": 57,
+      "upstream_bytes": 62,
+      "data_time": "2026-09-15T20:38Z",
+      "ok": true
+    },
+    {
+      "url": "/products/summary/solar-wind-speed.json",
+      "path": "swpc/products/summary/solar-wind-speed.json",
+      "status": 200,
+      "trimmed": false,
+      "bytes": 56,
+      "upstream_bytes": 59,
+      "data_time": "2026-09-15T20:36Z",
+      "ok": true
+    },
+    {
+      "url": "/text/3-day-forecast.txt",
+      "path": "swpc/text/3-day-forecast.txt",
+      "status": 200,
+      "bytes": 1909,
+      "upstream_bytes": 1909,
+      "data_time": null,
+      "ok": true
+    },
+    {
+      "url": "/text/discussion.txt",
+      "path": "swpc/text/discussion.txt",
+      "status": 200,
+      "bytes": 2528,
+      "upstream_bytes": 2528,
+      "data_time": null,
+      "ok": true
+    }
+  ]
+}
