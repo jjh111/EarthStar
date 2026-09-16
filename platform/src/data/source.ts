@@ -8,6 +8,9 @@
 import type { AuroraNow, Envelope, ModelRef, Now, SolarWindSeries, Tier } from '../contract/types.js';
 import type { ActiveRegion, Series } from './swpc.js';
 import type { SpacecraftPos } from './ephemerides.js';
+import type { NwsAlert } from './earth-alerts.js';
+import type { PlaceWeather } from './earth-weather.js';
+import type { QuakeFeature } from './earth-quakes.js';
 
 /**
  * Per-sub-object provenance for a `tier: 'mixed'` envelope.
@@ -59,4 +62,17 @@ export interface Source {
   fetchRegions(signal?: AbortSignal): Promise<Envelope<ActiveRegion[]>>;
   /** Hourly, and 70 KB gzipped — fetched on the slow lane, not with /now. */
   fetchEphemerides(signal?: AbortSignal): Promise<Envelope<SpacecraftPos[]>>;
+  /** Past 24 h of earthquakes, earthquake-type only. */
+  fetchQuakesDay(signal?: AbortSignal): Promise<Envelope<QuakeFeature[]>>;
+  /** Past 7 days of earthquakes, earthquake-type only. */
+  fetchQuakesWeek(signal?: AbortSignal): Promise<Envelope<QuakeFeature[]>>;
+  /** Current weather + 3-day hourly for one point. Modelled, ~15 min fresh. */
+  fetchPlaceWeather(
+    place: string,
+    lat: number,
+    lon: number,
+    signal?: AbortSignal,
+  ): Promise<Envelope<PlaceWeather>>;
+  /** Active NWS watches/warnings/advisories, US only. */
+  fetchNwsAlerts(signal?: AbortSignal): Promise<Envelope<NwsAlert[]>>;
 }

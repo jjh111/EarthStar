@@ -43,9 +43,10 @@
  */
 
 import {
-  Color, DoubleSide, Group, Mesh, NormalBlending, PlaneGeometry,
+  AdditiveBlending, Color, DoubleSide, Group, Mesh, NormalBlending, PlaneGeometry,
   ShaderMaterial, SphereGeometry, SRGBColorSpace, Texture, Vector2, Vector3,
 } from 'three';
+import type { Blending } from 'three';
 import type { DiskCalibration } from './disk-calibration.js';
 import type { PlaneKind, SunPlaneCalibration } from './sun-plane.js';
 import { AU_KM, BODY_RADIUS_KM, distanceToScene, type ScaleMode } from './scales.js';
@@ -170,11 +171,15 @@ const cgFrag = /* glsl */ `
     float mask = smoothstep(uInner, uInnerSoft, r)
                * (1.0 - smoothstep(uEdge * 0.90, uEdge, r));
 
-    // Bright structure is opaque; the darkest sky lets a little of the scene
-    // through, so stars and the wind read faintly behind the empty parts of
-    // the frame and the plane sits in space rather than on top of it.
+    // Coronagraph: bright structure is opaque, the darkest sky lets a little
+    // of the scene through, so stars read faintly behind the empty frame and
+    // the plane sits in space rather than on top of it.
+    // Additive disk card: alpha must not modulate by luminance — dark pixels
+    // already add nothing, and scaling by brightness would erase the faint
+    // fringes that are the card's whole reason for existing.
     float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
-    float alpha = mask * mix(uSkyOpacity, 1.0, clamp(lum * 1.5, 0.0, 1.0));
+    float lumMix = mix(uSkyOpacity, 1.0, clamp(lum * 1.5, 0.0, 1.0));
+    float alpha = uFloorMix > 0.0 || uSkyOpacity < 0.99 ? mask * lumMix : mask;
 
     gl_FragColor = vec4(c * uIntensity, alpha);
     #include <colorspace_fragment>
@@ -187,7 +192,11 @@ const cgFrag = /* glsl */ `
  * additive treatment) left nothing but the streamers. A coronagraph's
  * false-colour sky gets a touch of quieting; a disk card's sky is already black.
  */
-const PEDESTAL_LIFT: Record<PlaneKind, number> = { coronagraph: 0.2, disk: 0 };
+// The additive disk card lifts a small fraction of any baked-in floor: under
+// addition even a 2% pedestal repeats across every overlaid frame and would
+// grey the deep space behind the Sun. The fringes sit far above this and are
+// untouched.
+const PEDESTAL_LIFT: Record<PlaneKind, number> = { coronagraph: 0.2, disk: 0.02 };
 
 /**
  * Opacity of the darkest sky in the frame; bright structure is always opaque.
@@ -195,7 +204,15 @@ const PEDESTAL_LIFT: Record<PlaneKind, number> = { coronagraph: 0.2, disk: 0 };
  * The disk card's black surround is mostly let through, so the off-limb light
  * it exists to carry stands off the sphere without a dark halo around it.
  */
-const SKY_OPACITY: Record<PlaneKind, number> = { coronagraph: 0.8, disk: 0.3 };
+// Alpha semantics differ by blend mode, and the two cards split on it.
+// The coronagraph blends normally, so its dark-sky opacity exists to let the
+// scene read faintly through the empty parts of the published frame. The disk
+// card blends additively, where alpha modulates *brightness*: a black pixel
+// adds nothing at any alpha, so the luminance trick is not merely unnecessary
+// but destructive — it multiplies the faint off-limb corona toward zero and
+// erases exactly the fringes the card exists to show. Its alpha is the mask
+// alone, and the image values speak at their own brightness.
+const SKY_OPACITY: Record<PlaneKind, number> = { coronagraph: 0.8, disk: 1 };
 
 /**
  * The Corona view's framing floor, in solar radii, for the bare sphere — set
@@ -220,7 +237,7 @@ class ImagePlane {
   private mode: ScaleMode = 'globe';
   private sunRadius = 1;
 
-  constructor(renderOrder: number) {
+  constructor(renderOrder: number, blending: Blending = NormalBlending, depthTest = true) {
     this.mat = new ShaderMaterial({
       uniforms: {
         uImage: { value: null },
@@ -240,14 +257,16 @@ class ImagePlane {
       },
       vertexShader: cgVert,
       fragmentShader: cgFrag,
-      // Blended normally, with the circular field of view as its alpha: a
-      // photograph hung in space, shown as the instrument rendered it. It was
-      // additive once, with the palette's pedestal subtracted — which kept the
-      // bright streamers and lost the exposure around them. Unwritten to depth
-      // so the wind and the field lines still draw through it; DoubleSide
-      // because the plane is seen from whichever side the camera is on.
-      transparent: true, blending: NormalBlending,
-      depthWrite: false, side: DoubleSide,
+      // Blending is per-plane and chosen by the caller: a coronagraph keeps
+      // NormalBlending because its false-colour sky is part of the published
+      // exposure, while a disk card's surround is genuinely black — measured
+      // zero — so AdditiveBlending is honest there: black adds nothing, and
+      // the off-limb corona glows over the starfield instead of sitting in a
+      // faint dark rectangle. Unwritten to depth so the wind and the field
+      // lines still draw through it; DoubleSide because the plane is seen
+      // from whichever side the camera is on.
+      transparent: true, blending,
+      depthWrite: false, depthTest, side: DoubleSide,
     });
     // Local coordinates run -1..1; the vertex shader places them on the image
     // plane, so the geometry itself needs no orientation.
@@ -278,9 +297,16 @@ class ImagePlane {
     u['uImage']!.value = tex;
     (u['uCentre']!.value as Vector2).set(cal.centre.u, cal.centre.v);
     u['uRsun']!.value = cal.rsun;
-    u['uInner']!.value = cal.innerRsun;
+    // Disk card: the feather starts a hair inside the limb (see below).
+    u['uInner']!.value = cal.kind === 'disk' ? cal.innerRsun - 0.005 : cal.innerRsun;
     // A limb has to meet the sphere; an occulter edge does not meet anything.
-    u['uInnerSoft']!.value = cal.innerRsun * (cal.kind === 'disk' ? 1.015 : 1.15);
+    // Disk card: reach full strength 6% out instead of 1.5%. The sphere's own
+    // limb shading fades its image to near-black across its outer edge, and a
+    // tight feather left a dark annulus where both were mid-transition — the
+    // black ring. Starting the card slightly inside the limb and ramping wider
+    // lets its pixels sum (additively) with the darkening sphere, closing the
+    // break. The coronagraph keeps its soft occulter edge; nothing to match.
+    u['uInnerSoft']!.value = cal.innerRsun * (cal.kind === 'disk' ? 1.06 : 1.15);
     (u['uFloor']!.value as Vector3).set(cal.background.r, cal.background.g, cal.background.b);
     u['uFloorMix']!.value = PEDESTAL_LIFT[cal.kind];
     u['uSkyOpacity']!.value = SKY_OPACITY[cal.kind];
@@ -365,8 +391,8 @@ export class Sun {
    * corona plane carries a coronagraph, which starts further out again. They
    * nest rather than overlap, and either can be shown alone.
    */
-  private diskPlane = new ImagePlane(2);
-  private coronaPlane = new ImagePlane(3);
+  private diskPlane = new ImagePlane(2, AdditiveBlending, true);
+  private coronaPlane = new ImagePlane(3, NormalBlending);
 
   /**
    * Whether a coronagraph frame is on the card right now. The report's index
@@ -392,7 +418,19 @@ export class Sun {
       vertexShader: discVert,
       fragmentShader: discFrag,
     });
+    // The disc does not write depth. Its own image planes test against the
+    // scene with the depth test ON, and the fringes they exist to show sit
+    // inside the disc's depth footprint — so if the sphere wrote depth, the
+    // planes' inner fringes would be hidden (the bug that hid them), and if
+    // the planes skipped the depth test outright they drew over *Earth* when
+    // it passed in front (the bug this replaced). With the sphere silent in
+    // the depth buffer: the planes draw over the Sun's own limb (correct),
+    // and Earth, which writes depth, still occludes everything behind it
+    // (correct). Transparent layers that tested against the sphere's depth —
+    // the wind particles mainly — now draw over the disk; they already avoid
+    // it geometrically via the Shue push-out, so nothing visible changes.
     this.disc = new Mesh(new SphereGeometry(radius, 64, 48), this.discMat);
+    this.discMat.depthWrite = false;
     this.disc.name = 'sun-disc';
     this.group.add(this.disc);
 
@@ -417,6 +455,17 @@ export class Sun {
 
   /**
    * The off-limb half of a disk frame, on the card. The sphere has the rest.
+   *
+   * The card draws with the depth test off. It is a flat plane through the
+   * Sun's centre, and the sphere's near hemisphere bulges in front of it: at
+   * Deck's camera distance the bulge occludes an annulus reaching ~1.15 R☉,
+   * right where the faintest off-limb fringes live — and the sphere's own
+   * limb shading makes that occluder near-black, so the fringes vanished
+   * into what read as "black space". The occlusion carried no information:
+   * the card's circular mask already discards everything inside 1 R☉, which
+   * in screen space is the sphere's silhouette, so it cannot overdraw the
+   * disk. The coronagraph keeps its depth test — its occulter is meant to
+   * stand off from the sphere, and the gap between them is real.
    */
   setDiskPlane(image: HTMLImageElement | null, cal: SunPlaneCalibration | null): void {
     this.diskPlane.set(image, cal);

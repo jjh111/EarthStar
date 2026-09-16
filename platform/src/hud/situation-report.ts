@@ -103,6 +103,11 @@ export interface SceneNarration {
   };
   aurora: boolean;
   wind?: boolean;
+  /**
+   * The realtime-Earth seismic layer. Count is the number of markers drawn;
+   * largest carries the biggest event of the day so the report can rank it.
+   */
+  quakes?: { shown: boolean; count: number; largest: { mag: number; place: string } | null };
   /** Which Earth surface is on the sphere — measured imagery or the vector base. */
   earthSurface?: 'vector' | 'imagery' | 'loading';
   /**
@@ -484,6 +489,29 @@ export function buildReportLines(
           `Marble 2004, Black Marble 2016) did not load, so no imagery is implied.`,
     'body.earth', 'layer.terminator',
   );
+  /* --- Earthquakes: the solid Earth is not quiet either ----------------- */
+  if (scene.quakes) {
+    const q = scene.quakes;
+    if (!q.shown || q.count === 0) {
+      say('scene',
+        q.shown
+          ? 'Earthquakes: the USGS feed answered with nothing usable in the past 24 hours, so no markers are drawn. Nothing is being substituted.'
+          : 'Earthquake markers are hidden.',
+        'layer.quakes',
+      );
+    } else {
+      const big = q.largest;
+      say('scene',
+        `Earthquakes: ${q.count} event${q.count === 1 ? '' : 's'} recorded worldwide in the ` +
+        `past 24 hours, drawn at their epicentres from the USGS feed [E], sized and coloured ` +
+        `by magnitude` +
+        (big
+          ? ` — the largest, magnitude ${big.mag.toFixed(1)}, ${big.place || 'at a location USGS did not name'}.`
+          : '.'),
+        'layer.quakes',
+      );
+    }
+  }
   /* --- Aurora --------------------------------------------------------- */
   if (!scene.aurora) {
     say('geomagnetic', 'The aurora overlay is hidden.', 'layer.aurora');

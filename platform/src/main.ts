@@ -11,6 +11,7 @@ import './styles.css';
 import { Viewer } from './scene/viewer.js';
 import { Hud } from './hud/hud.js';
 import { NowStore } from './data/store.js';
+import { EarthStore } from './data/earth-store.js';
 import { DirectSource } from './data/direct-source.js';
 import { MotionPreference } from './a11y/motion.js';
 import { announce, installKeyboard } from './a11y/keyboard.js';
@@ -35,6 +36,12 @@ const canvas = document.getElementById('scene') as HTMLCanvasElement;
 const viewer = await new Promise<Viewer>((ok) =>
   requestAnimationFrame(() => ok(new Viewer(canvas))));
 const store = new NowStore(new DirectSource(), 60_000);
+/**
+ * The realtime-Earth lanes. Places are empty for now — the pins are a
+ * curated list that lands with the Places layer; the quakes and alerts
+ * lanes need no curation and start immediately.
+ */
+const earthStore = new EarthStore([]);
 const motion = new MotionPreference();
 
 /* ---------------- solar imagery ---------------- */
@@ -297,6 +304,11 @@ function syncNarration(): void {
     aurora: viewer.auroraOn, wind: viewer.windOn,
     earthSurface: viewer.earthSurfaceState,
     cmes: { shown: viewer.cmesOn, count: viewer.cmeCount },
+    quakes: {
+      shown: viewer.quakesOn && viewer.quakeCount > 0,
+      count: viewer.quakeCount,
+      largest: viewer.largestQuake,
+    },
     drawn: viewer.drawnSubjects,
   });
   hud.render(store.get());
@@ -429,6 +441,11 @@ function maybeStartImagery(): void {
   if (store.get().lanes.snapshot) return;
   sunImageryStarted = true;
   void selectLoop(LOOPS[0]!.id);
+  // The coronagraph comes on with the disk. LASCO C2 is where a CME is first
+  // visible, it is the frame the Situation Report describes cones against, and
+  // a reader who never opens the Sun tab still sees it hanging in the scene —
+  // the one part of the Sun panel that costs nothing to show by default.
+  void selectCorona('lasco-c2');
 }
 
 store.subscribe((state) => {
@@ -440,6 +457,16 @@ store.subscribe((state) => {
   maybeStartImagery();
   syncNarration();
 });
+
+/* ---------------- realtime Earth ---------------- */
+
+let quakesOn = true;
+earthStore.subscribe((state) => {
+  // The day feed drives the globe; the week envelope is fetched alongside it
+  // and is there for the time-machine work when it lands.
+  viewer.setQuakes(quakesOn ? (state.quakesDay?.data ?? []) : []);
+});
+earthStore.start();
 
 /* ---------------- Earth base imagery ---------------- */
 
@@ -460,11 +487,19 @@ function loadEarthImagery(): void {
   const dpr = Math.min(devicePixelRatio || 1, 3);
   const deviceWidth = (canvas.clientWidth || window.innerWidth) * dpr;
   const suffix = deviceWidth >= 2048 ? '4096' : '2048';
-  const load = (file: string, ok: (img: HTMLImageElement) => void): void => {
+  const load = (
+    file: string,
+    ok: (img: HTMLImageElement) => void,
+    fail?: () => void,
+  ): void => {
     const img = new Image();
     img.decoding = 'async';
     img.onload = () => ok(img);
-    img.onerror = () => { viewer.setEarthSurfaceState('vector'); syncNarration(); };
+    img.onerror = () => {
+      if (file.startsWith('day')) viewer.setEarthSurfaceState('vector');
+      fail?.();
+      syncNarration();
+    };
     img.src = `/viewer/earth-${file}.webp`;
   };
   load(`day-${suffix}`, (img) => {
@@ -475,6 +510,11 @@ function loadEarthImagery(): void {
   load('night-2048', (img) => {
     viewer.setEarthNightImage(img);
     hud.setEarthLights(true);
+    syncNarration();
+  }, () => {
+    // A silent failure here would leave the night side near-black with no
+    // signal — indistinguishable from a rendering bug. Say it failed.
+    hud.setEarthLights(false);
     syncNarration();
   });
 }

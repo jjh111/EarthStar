@@ -72,28 +72,28 @@ export function stateSentence(state: StoreState): string {
     : null;
 
   const bz = sw?.bz_gsm ?? null;
-  const bzWord = bz === null ? 'in an unknown direction'
+  const bzWord = bz === null ? ''
     : bz < -5 ? 'strongly southward' : bz < 0 ? 'southward' : 'northward';
   const bzConsequence = bz === null ? ''
     : bz < 0
-      ? ' &mdash; the orientation that opens Earth&rsquo;s field and lets energy in'
-      : ' &mdash; the orientation that keeps Earth&rsquo;s field closed';
+      ? ' &mdash; field opens, energy enters'
+      : '';
 
   out.push(
-    `${GLYPH['wind']} The solar wind is blowing ` +
-    `${speedSeries ? inlineSpark(speedSeries, { label: 'wind speed over the last 24 hours' }) : ''} ` +
-    `${num(sw?.speed ?? null, 0, 'km/s', pending)}, carrying a field that points ${pending ? '' : bzWord} ` +
-    `${bzSeries ? inlineSpark(bzSeries, { rule: 0, extremes: true, label: 'Bz over the last 24 hours, rule at zero' }) : ''} ` +
+    `${GLYPH['wind']} wind ` +
+    `${speedSeries ? inlineSpark(speedSeries, { label: 'wind speed, 24 h' }) : ''} ` +
+    `${num(sw?.speed ?? null, 0, 'km/s', pending)}` +
+    `${pending ? '' : bzWord} ` +
+    `${bzSeries ? inlineSpark(bzSeries, { rule: 0, extremes: true, label: 'Bz, 24 h' }) : ''} ` +
     `${num(bz, 1, 'nT', pending)}${pending ? '' : bzConsequence}.`,
   );
 
   /* --- the shield it meets --- */
   const mp = d?.magnetopause?.standoff_re ?? null;
   const mpWord = mp === null ? ''
-    : mp < 8 ? ', pushed well in' : mp > 11.5 ? ', standing off comfortably' : '';
+    : mp < 8 ? ', compressed' : mp > 11.5 ? ', expanded' : '';
   out.push(
-    `${GLYPH['shield']} It meets the magnetosphere ${num(mp, 1, 'R⊕', pending)} out on the ` +
-    `sunward side${pending ? '' : mpWord}.`,
+    `${GLYPH['shield']} shield ${num(mp, 1, 'R⊕', pending)}${pending ? '' : mpWord}.`,
   );
 
   /* --- geomagnetic response at the ground --- */
@@ -101,8 +101,8 @@ export function stateSentence(state: StoreState): string {
   const kpWord = kp === null ? (pending ? '' : 'of unknown disturbance')
     : kp >= 5 ? 'storming' : kp >= 4 ? 'unsettled' : 'quiet';
   out.push(
-    `${GLYPH['field']} The ground beneath is ${kpWord} ` +
-    `${state.kpSeries ? inlineSpark(state.kpSeries, { band: [0, 4], extremes: true, label: 'Kp over the last 6 hours, quiet band shaded' }) : ''} ` +
+    `${GLYPH['field']} ground ${kpWord} ` +
+    `${state.kpSeries ? inlineSpark(state.kpSeries, { band: [0, 4], extremes: true, label: 'Kp, 6 h' }) : ''} ` +
     `${num(kp, 2, 'Kp', pending)}.`,
   );
 
@@ -111,12 +111,12 @@ export function stateSentence(state: StoreState): string {
   if (pt) {
     const s10 = pt.proton_10mev;
     out.push(
-      `${GLYPH['particle']} Radiation is at ` +
+      `${GLYPH['particle']} radiation ` +
       `<b class="sentence-num">${pending ? '…' : `S${pt.s_scale ?? 0}`}</b>` +
       `${state.protonSeries ? ` ${inlineSpark(state.protonSeries, { log: true, extremes: true, label: 'proton flux above 10 MeV, last 6 hours, logarithmic' })}` : ''} ` +
       `${num(s10, 2, 'pfu', pending)}` +
       (pending ? '' : (pt.s_scale !== null && pt.s_scale >= 1
-        ? ' &mdash; a storm is under way' : ' &mdash; nothing to worry about')) + '.',
+        ? ' &mdash; storm' : '')) + '.',
     );
   }
 
@@ -124,11 +124,10 @@ export function stateSentence(state: StoreState): string {
   const xr = d?.xray ?? null;
   const au = state.aurora?.data ?? null;
   out.push(
-    `${GLYPH['flare']} The Sun is putting out ` +
-    `${state.xraySeries ? inlineSpark(state.xraySeries, { log: true, extremes: true, label: 'X-ray flux over the last 6 hours, logarithmic' }) : ''} ` +
-    `<b class="sentence-num">${pending ? '…' : xr?.class ?? 'no data'}</b> X-rays, and ` +
-    `${GLYPH['aurora']} the aurora is forecast to reach ` +
-    `${num(au?.max_probability ?? null, 0, '%', pending)} at its brightest.`,
+    `${GLYPH['flare']} X-ray ` +
+    `${state.xraySeries ? inlineSpark(state.xraySeries, { log: true, extremes: true, label: 'X-ray, 6 h, log' }) : ''} ` +
+    `<b class="sentence-num">${pending ? '…' : xr?.class ?? 'no data'}</b>` +
+    ` ${GLYPH['aurora']} aurora ${num(au?.max_probability ?? null, 0, '%', pending)}.`,
   );
 
   return out.join(' ');

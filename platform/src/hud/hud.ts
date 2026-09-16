@@ -622,6 +622,7 @@ export class Hud {
   private earthCoast = false;
 
   setEarthLights(v: boolean): void { this.earthLights = v; }
+  get lightsLoaded(): boolean { return this.earthLights; }
   setEarthCoast(v: boolean): void { this.earthCoast = v; }
 
   private setToggleState(id: string, state: DataState): void {

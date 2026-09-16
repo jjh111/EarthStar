@@ -28,9 +28,11 @@ import { gseBasis, moonGeo, planetState, solarNorth, sunGeo, toScene } from '../
 import { FieldLines, Magnetosphere } from './magnetosphere.js';
 import type { ExternalModel } from '../models/fieldlines.js';
 import { SolarWind } from './solar-wind.js';
+import { Quakes } from './quakes.js';
 import { ActiveRegions } from './active-regions.js';
 import { CmeCones } from './cmes.js';
 import type { SpacecraftPos } from '../data/ephemerides.js';
+import type { QuakeFeature } from '../data/earth-quakes.js';
 import { SpacecraftMarkers } from './spacecraft.js';
 import { calibrateDisk } from './disk-calibration.js';
 import {
@@ -211,6 +213,7 @@ export class Viewer {
   private fieldLines = new FieldLines();
   private magnetosphere = new Magnetosphere();
   private solarWind: SolarWind;
+  private quakes = new Quakes();
   private activeRegions = new ActiveRegions();
   private cmeCones = new CmeCones();
   private cmes: Cme[] = [];
@@ -320,6 +323,12 @@ export class Viewer {
     this.solarWind = new SolarWind(window.devicePixelRatio > 1.5 ? 4200 : 2600);
     this.earth.group.add(this.solarWind.points);
     this.pickables.register(this.solarWind.points, 'layer.solar-wind');
+    // Quakes ride the Earth-fixed spin group, so the markers track the surface
+    // as the globe turns. Each marker is its own mesh carrying the event in
+    // userData, so the picker can name the exact quake and a card can describe
+    // it — the same pattern the active-regions layer uses.
+    this.earth.spin.add(this.quakes.group);
+    this.pickables.register(this.quakes.group, 'layer.quakes');
     this.scene.add(new AmbientLight(0x24304a, 0.55));
 
     this.planets = makePlanets();
@@ -383,6 +392,32 @@ export class Viewer {
   get regionCount(): number { return this.activeRegions.count; }
 
   setCmes(cmes: Cme[]): void { this.cmes = cmes; }
+
+  /** Feed the earthquake layer. Empty or null hides it — never a half-empty set. */
+  setQuakes(features: QuakeFeature[] | null): void {
+    this.quakes.setFeatures(features ?? []);
+  }
+
+  setQuakesVisible(on: boolean): void {
+    this.quakes.setVisible(on);
+  }
+
+  get quakesOn(): boolean { return this.quakes.visible; }
+
+  get quakeCount(): number {
+    return this.quakes.count;
+  }
+
+  /** The biggest event of the day, for the report's ranking sentence. */
+  get largestQuake(): { mag: number; place: string } | null {
+    let best: { mag: number; place: string } | null = null;
+    for (const m of this.quakes.group.children as unknown as Array<{ userData: { quake?: { mag: number | null; place: string } } }>) {
+      const q = m.userData['quake'];
+      if (!q || q.mag === null || !Number.isFinite(q.mag)) continue;
+      if (!best || q.mag > best.mag) best = { mag: q.mag, place: q.place };
+    }
+    return best;
+  }
 
   /**
    * Put a solar frame on the Sun. The calibration is measured from the image
@@ -646,6 +681,11 @@ export class Viewer {
         elapsed, sunDir, speed, density, mp?.r0Re ?? null, mp?.alpha ?? null,
       );
     }
+
+    // The quake markers are built in Earth radii and must follow the globe's
+    // rendered size like every other Earth-fixed layer, or they draw at unit
+    // scale and vanish inside (or float far outside) the sphere.
+    this.quakes.setScale(earthRadius);
 
     // Moon at its true geocentric direction; separation compressed in Globe mode.
     const mg = toScene(moonGeo(date));
