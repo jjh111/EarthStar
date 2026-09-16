@@ -297,9 +297,16 @@ class ImagePlane {
     u['uImage']!.value = tex;
     (u['uCentre']!.value as Vector2).set(cal.centre.u, cal.centre.v);
     u['uRsun']!.value = cal.rsun;
-    u['uInner']!.value = cal.innerRsun;
+    // Disk card: the feather starts a hair inside the limb (see below).
+    u['uInner']!.value = cal.kind === 'disk' ? cal.innerRsun - 0.005 : cal.innerRsun;
     // A limb has to meet the sphere; an occulter edge does not meet anything.
-    u['uInnerSoft']!.value = cal.innerRsun * (cal.kind === 'disk' ? 1.015 : 1.15);
+    // Disk card: reach full strength 6% out instead of 1.5%. The sphere's own
+    // limb shading fades its image to near-black across its outer edge, and a
+    // tight feather left a dark annulus where both were mid-transition — the
+    // black ring. Starting the card slightly inside the limb and ramping wider
+    // lets its pixels sum (additively) with the darkening sphere, closing the
+    // break. The coronagraph keeps its soft occulter edge; nothing to match.
+    u['uInnerSoft']!.value = cal.innerRsun * (cal.kind === 'disk' ? 1.06 : 1.15);
     (u['uFloor']!.value as Vector3).set(cal.background.r, cal.background.g, cal.background.b);
     u['uFloorMix']!.value = PEDESTAL_LIFT[cal.kind];
     u['uSkyOpacity']!.value = SKY_OPACITY[cal.kind];
