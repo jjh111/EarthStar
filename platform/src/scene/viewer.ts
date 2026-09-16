@@ -419,6 +419,15 @@ export class Viewer {
     return best;
   }
 
+  /** Master on/off for both solar image planes (SUVI card + coronagraph). */
+  setSunPlanesVisible(on: boolean): void {
+    this.sun.setPlanesVisible(on);
+  }
+
+  get sunPlanesOn(): boolean {
+    return this.sun.planesOnState;
+  }
+
   /**
    * Put a solar frame on the Sun. The calibration is measured from the image
    * itself, once per frame; a frame that cannot be measured is not shown,

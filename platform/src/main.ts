@@ -256,6 +256,11 @@ const hud = new Hud({
   onSelectLoop: (id) => void selectLoop(id),
   onSelectCorona: (id) => void selectCorona(id),
   onLoadCycle: () => void loadCycle(),
+  onSunPlanes: (on) => {
+    viewer.setSunPlanesVisible(on);
+    announce(on ? 'Solar imagery planes shown.' : 'Solar imagery planes hidden.');
+    syncNarration();
+  },
   onLoadForecast: () => void loadForecast(),
   onToggleSunPlay: () => void toggleSunPlay(),
   onScrubSun: (i) => { hud.setSunPlaying(false); hud.setSunFrame(i); },

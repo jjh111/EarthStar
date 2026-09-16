@@ -39,6 +39,7 @@ export interface HudCallbacks {
   onCoronaFrame?(image: HTMLImageElement): void;
   onSelectCorona?(id: string | null): void;
   onLoadCycle(): void;
+  onSunPlanes?(on: boolean): void;
 }
 
 /** Now, then expected, then possible, then over. */
@@ -303,6 +304,7 @@ export class Hud {
       const corona = el.closest('[data-corona]') as HTMLElement | null;
       // An empty value is the "Off" button: a real choice, not a missing one.
       if (corona) { this.cb.onSelectCorona?.(corona.dataset['corona'] || null); return; }
+      if (el.closest('[data-planes]')) { this.setSunPlanes(!this.sunPlanesOn); return; }
       if (el.closest('#sun-play')) { this.cb.onToggleSunPlay(); return; }
     });
     this.bodyEl.addEventListener('input', (e) => {
@@ -619,10 +621,16 @@ export class Hud {
 
   /** What the scene's Earth surface carries, for the provenance rows. */
   private earthLights = false;
+  private sunPlanesOn = true;
   private earthCoast = false;
 
   setEarthLights(v: boolean): void { this.earthLights = v; }
   get lightsLoaded(): boolean { return this.earthLights; }
+  setSunPlanes(on: boolean): void {
+    this.sunPlanesOn = on;
+    this.cb.onSunPlanes?.(on);
+  }
+  get planesOn(): boolean { return this.sunPlanesOn; }
   setEarthCoast(v: boolean): void { this.earthCoast = v; }
 
   private setToggleState(id: string, state: DataState): void {

@@ -697,6 +697,7 @@ function solarCyclePanel(
 export function renderSun(
   sun: SunState, specs: Array<{ id: string; label: string; kind: LoopKind }>,
   cycle: SolarCycle | null = null, cycleLoading = false, cycleError: string | null = null,
+  planesOn = true,
 ): string {
   /**
    * Two control sets, because the two instruments answer different questions
@@ -711,6 +712,10 @@ export function renderSun(
   const coronas = specs.filter((x) => x.kind === 'coronagraph');
 
   const picker = `
+    <div class="sun-set">
+      <span class="sun-set-label">Imagery planes</span>
+      <div class="sun-picker">${btn('planes', planesOn ? 'On' : 'Off', planesOn, 'data-planes')}</div>
+    </div>
     <div class="sun-set">
       <span class="sun-set-label">Disk · sphere and card</span>
       <div class="sun-picker">${disks.map((x) =>

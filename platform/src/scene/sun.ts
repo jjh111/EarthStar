@@ -397,12 +397,35 @@ export class Sun {
    */
   private diskPlane = new ImagePlane(2, AdditiveBlending, true);
   private coronaPlane = new ImagePlane(3, NormalBlending);
+  /**
+   * Master switch for the image planes (SUVI card + coronagraph). The planes
+   * keep their frame state, so toggling back on restores exactly what was
+   * showing; the sphere is unaffected either way.
+   */
+  private planesOn = true;
 
   /**
    * Whether a coronagraph frame is on the card right now. The report's index
    * claims to list everything on screen, so it needs to be able to ask.
    */
   get coronagraphShown(): boolean { return this.coronaPlane.visible; }
+
+  /** Master on/off for both image planes; the sphere is unaffected. */
+  setPlanesVisible(on: boolean): void {
+    this.planesOn = on;
+    this.applyPlanesOn();
+  }
+
+  get planesOnState(): boolean { return this.planesOn; }
+
+  private applyPlanesOn(): void {
+    // ImagePlane.set() sets mesh.visible from its own frame state; the master
+    // switch is re-applied after every such set so the two never fight.
+    if (!this.planesOn) {
+      this.diskPlane.mesh.visible = false;
+      this.coronaPlane.mesh.visible = false;
+    }
+  }
 
   constructor(radius = 1) {
     this.discMat = new ShaderMaterial({
@@ -473,6 +496,7 @@ export class Sun {
    */
   setDiskPlane(image: HTMLImageElement | null, cal: SunPlaneCalibration | null): void {
     this.diskPlane.set(image, cal);
+    this.applyPlanesOn();
   }
 
   /**
@@ -483,6 +507,7 @@ export class Sun {
    */
   setCoronaPlane(image: HTMLImageElement | null, cal: SunPlaneCalibration | null): void {
     this.coronaPlane.set(image, cal);
+    this.applyPlanesOn();
   }
 
 
