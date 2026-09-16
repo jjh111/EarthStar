@@ -18,6 +18,19 @@ import {
   GEOSYNC_URL, GEOSYNC_RE, dipoleFieldAtRe, geosyncSeries, parseGeosync,
 } from './geosync.js';
 import type { NowEnvelope, PartMeta, Snapshot, Source } from './source.js';
+import {
+  fetchNwsAlerts,
+  type NwsAlert,
+} from './earth-alerts.js';
+import {
+  fetchPlaceWeather,
+  type PlaceWeather,
+} from './earth-weather.js';
+import {
+  fetchQuakesDay,
+  fetchQuakesWeek,
+  type QuakeFeature,
+} from './earth-quakes.js';
 import { magnetopause } from '../models/shue1998.js';
 import {
   SWPC_URL, parseAlerts, parseKpNow, parseScalesNow, parseSolarWindNow,
@@ -339,5 +352,26 @@ export class DirectSource implements Source {
       units: { bz_gsm: 'nT', bt: 'nT', speed: 'km/s', density: 'cm^-3', temperature: 'K' },
       data,
     };
+  }
+
+  async fetchQuakesDay(signal?: AbortSignal): Promise<Envelope<QuakeFeature[]>> {
+    return fetchQuakesDay(signal);
+  }
+
+  async fetchQuakesWeek(signal?: AbortSignal): Promise<Envelope<QuakeFeature[]>> {
+    return fetchQuakesWeek(signal);
+  }
+
+  async fetchPlaceWeather(
+    place: string,
+    lat: number,
+    lon: number,
+    signal?: AbortSignal,
+  ): Promise<Envelope<PlaceWeather>> {
+    return fetchPlaceWeather(place, lat, lon, signal);
+  }
+
+  async fetchNwsAlerts(signal?: AbortSignal): Promise<Envelope<NwsAlert[]>> {
+    return fetchNwsAlerts(signal);
   }
 }

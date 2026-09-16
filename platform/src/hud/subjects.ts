@@ -669,6 +669,35 @@ const LAYERS: Subject[] = [
     related: ['concept.tiers'],
     scene: ['starfield'],
   },
+  {
+    id: 'layer.quakes',
+    aliases: ['earthquakes', 'seismic'],
+    kind: 'layer', tier: 'E', label: 'Earthquakes',
+    oneLine: 'The last day of measured earthquakes, marked where they struck.',
+    meaning: 'The solid Earth is not quiet, and this layer is the evidence: every event '
+      + 'the global seismic network recorded in the past twenty-four hours, at the place '
+      + 'it actually happened. Beside the space-weather instruments it is a reminder that '
+      + 'the Star scale includes the ground underfoot — and that the same feed that sizes '
+      + 'each marker also publishes the mechanism, the depth and the felt report, one '
+      + 'click away on the event page.',
+    howMade: 'USGS Earthquake Hazards Programme GeoJSON feed, one point per event at its '
+      + 'published epicentre, refreshed on the Earth store’s own lane every two minutes. '
+      + 'Quarry blasts and mining explosions are filtered out client-side; what is drawn '
+      + 'is the tectonic signal only.',
+    limits: 'An epicentre is a projection of a three-dimensional rupture onto the surface, '
+      + 'and the depth is often poorly constrained — read the marker as “where”, not '
+      + '“how deep” or “how big the shaking was”. The feed is global but complete '
+      + 'only above roughly magnitude 4.5; below that, coverage depends on regional networks. '
+      + 'Marker size is currently uniform — magnitude-driven sizing is built into the '
+      + 'parser and not yet drawn.',
+    sources: [{ name: 'USGS Earthquake Hazards Program',
+      url: 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson' }],
+    related: ['body.earth', 'layer.terminator', 'concept.tiers'],
+    toPromote: 'Magnitude-driven marker size and colour are already parsed and only need '
+      + 'drawing; per-event cards with depth, felt reports and the USGS mechanism solution '
+      + 'are the next increment after that.',
+    scene: ['quakes-points'],
+  },
 ];
 
 /* ------------------------------------------------------------------ *

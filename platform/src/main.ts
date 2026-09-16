@@ -11,6 +11,7 @@ import './styles.css';
 import { Viewer } from './scene/viewer.js';
 import { Hud } from './hud/hud.js';
 import { NowStore } from './data/store.js';
+import { EarthStore } from './data/earth-store.js';
 import { DirectSource } from './data/direct-source.js';
 import { MotionPreference } from './a11y/motion.js';
 import { announce, installKeyboard } from './a11y/keyboard.js';
@@ -35,6 +36,12 @@ const canvas = document.getElementById('scene') as HTMLCanvasElement;
 const viewer = await new Promise<Viewer>((ok) =>
   requestAnimationFrame(() => ok(new Viewer(canvas))));
 const store = new NowStore(new DirectSource(), 60_000);
+/**
+ * The realtime-Earth lanes. Places are empty for now — the pins are a
+ * curated list that lands with the Places layer; the quakes and alerts
+ * lanes need no curation and start immediately.
+ */
+const earthStore = new EarthStore([]);
 const motion = new MotionPreference();
 
 /* ---------------- solar imagery ---------------- */
@@ -440,6 +447,16 @@ store.subscribe((state) => {
   maybeStartImagery();
   syncNarration();
 });
+
+/* ---------------- realtime Earth ---------------- */
+
+let quakesOn = true;
+earthStore.subscribe((state) => {
+  // The day feed drives the globe; the week envelope is fetched alongside it
+  // and is there for the time-machine work when it lands.
+  viewer.setQuakes(quakesOn ? (state.quakesDay?.data ?? []) : []);
+});
+earthStore.start();
 
 /* ---------------- Earth base imagery ---------------- */
 
