@@ -97,15 +97,16 @@ const discFrag = /* glsl */ `
 
     vec3 img = texture2D(uDisk, uv).rgb;
 
-    // The far side has not been observed. Fade across the limb rather than
-    // cutting hard, because the projection degenerates there — a sliver of
-    // sphere maps to a whole pixel — and a hard edge would read as a feature.
-    // The floor holds 0.72 of image at the limb itself: fading to full
-    // unobserved there made a near-black ring the card's additive pass could
-    // not fill (the sum dipped — the black transition ring), and the limb of
-    // the REAL Sun is limb-darkened, not black. The far side still settles to
-    // unobserved past the limb, where nothing is observed at all.
-    float lit = mix(0.72, 1.0, smoothstep(-0.02, 0.20, facing));
+    // The far side has not been observed, and no image is shown there — the
+    // unobserved color IS the no-data statement. The transition is pinned to
+    // the limb itself (facing 0 to 0.02, about a degree of arc): wide enough
+    // that the projection's degenerate sliver does not render as a hard
+    // feature, narrow enough that no far-hemisphere pixel receives image.
+    // Earlier revisions stretched this fade (one held 0.72 of image at the
+    // limb), which textured the unobserved side with near-limb data — a
+    // fabrication, and it read as one. The card's additive pass supplies the
+    // off-limb light; the sphere states plainly where observation ends.
+    float lit = smoothstep(0.0, 0.02, facing);
     gl_FragColor = vec4(mix(uUnobserved, img, lit), 1.0);
     #include <colorspace_fragment>
   }
