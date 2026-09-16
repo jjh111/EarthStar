@@ -456,8 +456,12 @@ export class Sun {
     // (correct). Transparent layers that tested against the sphere's depth —
     // the wind particles mainly — now draw over the disk; they already avoid
     // it geometrically via the Shue push-out, so nothing visible changes.
+    // The disc WRITES depth. The image planes test against it: the fringes
+    // (r 1–1.41 on the plane) lie outside the sphere's silhouette, where the
+    // sphere has no depth, so they draw; points projecting inside the
+    // silhouette are correctly occluded — Earth in front hides the planes,
+    // and the planes never wash the disk face.
     this.disc = new Mesh(new SphereGeometry(radius, 64, 48), this.discMat);
-    this.discMat.depthWrite = false;
     this.disc.name = 'sun-disc';
     this.group.add(this.disc);
 
