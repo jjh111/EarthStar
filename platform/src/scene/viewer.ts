@@ -324,11 +324,11 @@ export class Viewer {
     this.earth.group.add(this.solarWind.points);
     this.pickables.register(this.solarWind.points, 'layer.solar-wind');
     // Quakes ride the Earth-fixed spin group, so the markers track the surface
-    // as the globe turns. Registered but not pickable for now — per-event
-    // cards are the next increment, and until the layer has a click answer
-    // it should not take clicks away from the bodies.
+    // as the globe turns. Each marker is its own mesh carrying the event in
+    // userData, so the picker can name the exact quake and a card can describe
+    // it — the same pattern the active-regions layer uses.
     this.earth.spin.add(this.quakes.group);
-    this.pickables.register(this.quakes.group, 'layer.quakes', false);
+    this.pickables.register(this.quakes.group, 'layer.quakes');
     this.scene.add(new AmbientLight(0x24304a, 0.55));
 
     this.planets = makePlanets();
@@ -406,6 +406,17 @@ export class Viewer {
 
   get quakeCount(): number {
     return this.quakes.count;
+  }
+
+  /** The biggest event of the day, for the report's ranking sentence. */
+  get largestQuake(): { mag: number; place: string } | null {
+    let best: { mag: number; place: string } | null = null;
+    for (const m of this.quakes.group.children as unknown as Array<{ userData: { quake?: { mag: number | null; place: string } } }>) {
+      const q = m.userData['quake'];
+      if (!q || q.mag === null || !Number.isFinite(q.mag)) continue;
+      if (!best || q.mag > best.mag) best = { mag: q.mag, place: q.place };
+    }
+    return best;
   }
 
   /**

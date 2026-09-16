@@ -688,15 +688,14 @@ const LAYERS: Subject[] = [
       + 'and the depth is often poorly constrained — read the marker as “where”, not '
       + '“how deep” or “how big the shaking was”. The feed is global but complete '
       + 'only above roughly magnitude 4.5; below that, coverage depends on regional networks. '
-      + 'Marker size is currently uniform — magnitude-driven sizing is built into the '
-      + 'parser and not yet drawn.',
+      + 'Marker size and colour track magnitude on a clamped linear scale — a legend, not '
+      + 'a calculation of the energy released.',
     sources: [{ name: 'USGS Earthquake Hazards Program',
       url: 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson' }],
     related: ['body.earth', 'layer.terminator', 'concept.tiers'],
-    toPromote: 'Magnitude-driven marker size and colour are already parsed and only need '
-      + 'drawing; per-event cards with depth, felt reports and the USGS mechanism solution '
-      + 'are the next increment after that.',
-    scene: ['quakes-points'],
+    toPromote: 'Per-event cards with depth, felt reports and the USGS mechanism solution '
+      + 'are the next increment; a week-deep selector using the 7-day feed follows that.',
+    scene: ['quakes-layer', 'quake-'],
   },
 ];
 

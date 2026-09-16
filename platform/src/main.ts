@@ -304,6 +304,11 @@ function syncNarration(): void {
     aurora: viewer.auroraOn, wind: viewer.windOn,
     earthSurface: viewer.earthSurfaceState,
     cmes: { shown: viewer.cmesOn, count: viewer.cmeCount },
+    quakes: {
+      shown: viewer.quakesOn && viewer.quakeCount > 0,
+      count: viewer.quakeCount,
+      largest: viewer.largestQuake,
+    },
     drawn: viewer.drawnSubjects,
   });
   hud.render(store.get());
