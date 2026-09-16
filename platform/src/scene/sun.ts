@@ -100,7 +100,12 @@ const discFrag = /* glsl */ `
     // The far side has not been observed. Fade across the limb rather than
     // cutting hard, because the projection degenerates there — a sliver of
     // sphere maps to a whole pixel — and a hard edge would read as a feature.
-    float lit = smoothstep(-0.02, 0.20, facing);
+    // The floor holds 0.72 of image at the limb itself: fading to full
+    // unobserved there made a near-black ring the card's additive pass could
+    // not fill (the sum dipped — the black transition ring), and the limb of
+    // the REAL Sun is limb-darkened, not black. The far side still settles to
+    // unobserved past the limb, where nothing is observed at all.
+    float lit = mix(0.72, 1.0, smoothstep(-0.02, 0.20, facing));
     gl_FragColor = vec4(mix(uUnobserved, img, lit), 1.0);
     #include <colorspace_fragment>
   }
@@ -297,16 +302,14 @@ class ImagePlane {
     u['uImage']!.value = tex;
     (u['uCentre']!.value as Vector2).set(cal.centre.u, cal.centre.v);
     u['uRsun']!.value = cal.rsun;
-    // Disk card: the feather starts a hair inside the limb (see below).
-    u['uInner']!.value = cal.kind === 'disk' ? cal.innerRsun - 0.005 : cal.innerRsun;
+    // Disk card: hard inner cut exactly at the limb — the sphere carries the
+    // disk face, and the card must not feather over it (no inward feather,
+    // per review; under additive blending overlap would double-expose).
+    u['uInner']!.value = cal.innerRsun;
     // A limb has to meet the sphere; an occulter edge does not meet anything.
-    // Disk card: reach full strength 6% out instead of 1.5%. The sphere's own
-    // limb shading fades its image to near-black across its outer edge, and a
-    // tight feather left a dark annulus where both were mid-transition — the
-    // black ring. Starting the card slightly inside the limb and ramping wider
-    // lets its pixels sum (additively) with the darkening sphere, closing the
-    // break. The coronagraph keeps its soft occulter edge; nothing to match.
-    u['uInnerSoft']!.value = cal.innerRsun * (cal.kind === 'disk' ? 1.06 : 1.15);
+    // Inner edge is hard for the disk card (mask reaches 1 immediately at the
+    // limb); the coronagraph keeps its soft occulter ramp.
+    u['uInnerSoft']!.value = cal.innerRsun * (cal.kind === 'disk' ? 1.0 : 1.15);
     (u['uFloor']!.value as Vector3).set(cal.background.r, cal.background.g, cal.background.b);
     u['uFloorMix']!.value = PEDESTAL_LIFT[cal.kind];
     u['uSkyOpacity']!.value = SKY_OPACITY[cal.kind];
