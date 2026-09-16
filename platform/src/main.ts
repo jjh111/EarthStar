@@ -487,11 +487,19 @@ function loadEarthImagery(): void {
   const dpr = Math.min(devicePixelRatio || 1, 3);
   const deviceWidth = (canvas.clientWidth || window.innerWidth) * dpr;
   const suffix = deviceWidth >= 2048 ? '4096' : '2048';
-  const load = (file: string, ok: (img: HTMLImageElement) => void): void => {
+  const load = (
+    file: string,
+    ok: (img: HTMLImageElement) => void,
+    fail?: () => void,
+  ): void => {
     const img = new Image();
     img.decoding = 'async';
     img.onload = () => ok(img);
-    img.onerror = () => { viewer.setEarthSurfaceState('vector'); syncNarration(); };
+    img.onerror = () => {
+      if (file.startsWith('day')) viewer.setEarthSurfaceState('vector');
+      fail?.();
+      syncNarration();
+    };
     img.src = `/viewer/earth-${file}.webp`;
   };
   load(`day-${suffix}`, (img) => {
@@ -502,6 +510,11 @@ function loadEarthImagery(): void {
   load('night-2048', (img) => {
     viewer.setEarthNightImage(img);
     hud.setEarthLights(true);
+    syncNarration();
+  }, () => {
+    // A silent failure here would leave the night side near-black with no
+    // signal — indistinguishable from a rendering bug. Say it failed.
+    hud.setEarthLights(false);
     syncNarration();
   });
 }
