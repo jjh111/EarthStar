@@ -43,9 +43,10 @@
  */
 
 import {
-  Color, DoubleSide, Group, Mesh, NormalBlending, PlaneGeometry,
+  AdditiveBlending, Color, DoubleSide, Group, Mesh, NormalBlending, PlaneGeometry,
   ShaderMaterial, SphereGeometry, SRGBColorSpace, Texture, Vector2, Vector3,
 } from 'three';
+import type { Blending } from 'three';
 import type { DiskCalibration } from './disk-calibration.js';
 import type { PlaneKind, SunPlaneCalibration } from './sun-plane.js';
 import { AU_KM, BODY_RADIUS_KM, distanceToScene, type ScaleMode } from './scales.js';
@@ -195,7 +196,11 @@ const PEDESTAL_LIFT: Record<PlaneKind, number> = { coronagraph: 0.2, disk: 0 };
  * The disk card's black surround is mostly let through, so the off-limb light
  * it exists to carry stands off the sphere without a dark halo around it.
  */
-const SKY_OPACITY: Record<PlaneKind, number> = { coronagraph: 0.8, disk: 0.3 };
+// Under additive blending the darkest sky's alpha modulates brightness rather than
+// occlusion, so the disk card's near-black surround simply contributes almost
+// nothing — which is what it should do. The coronagraph keeps normal blending and
+// its published sky.
+const SKY_OPACITY: Record<PlaneKind, number> = { coronagraph: 0.8, disk: 0.05 };
 
 /**
  * The Corona view's framing floor, in solar radii, for the bare sphere — set
@@ -220,7 +225,7 @@ class ImagePlane {
   private mode: ScaleMode = 'globe';
   private sunRadius = 1;
 
-  constructor(renderOrder: number) {
+  constructor(renderOrder: number, blending: Blending = NormalBlending) {
     this.mat = new ShaderMaterial({
       uniforms: {
         uImage: { value: null },
@@ -240,13 +245,15 @@ class ImagePlane {
       },
       vertexShader: cgVert,
       fragmentShader: cgFrag,
-      // Blended normally, with the circular field of view as its alpha: a
-      // photograph hung in space, shown as the instrument rendered it. It was
-      // additive once, with the palette's pedestal subtracted — which kept the
-      // bright streamers and lost the exposure around them. Unwritten to depth
-      // so the wind and the field lines still draw through it; DoubleSide
-      // because the plane is seen from whichever side the camera is on.
-      transparent: true, blending: NormalBlending,
+      // Blending is per-plane and chosen by the caller: a coronagraph keeps
+      // NormalBlending because its false-colour sky is part of the published
+      // exposure, while a disk card's surround is genuinely black — measured
+      // zero — so AdditiveBlending is honest there: black adds nothing, and
+      // the off-limb corona glows over the starfield instead of sitting in a
+      // faint dark rectangle. Unwritten to depth so the wind and the field
+      // lines still draw through it; DoubleSide because the plane is seen
+      // from whichever side the camera is on.
+      transparent: true, blending,
       depthWrite: false, side: DoubleSide,
     });
     // Local coordinates run -1..1; the vertex shader places them on the image
@@ -365,8 +372,8 @@ export class Sun {
    * corona plane carries a coronagraph, which starts further out again. They
    * nest rather than overlap, and either can be shown alone.
    */
-  private diskPlane = new ImagePlane(2);
-  private coronaPlane = new ImagePlane(3);
+  private diskPlane = new ImagePlane(2, AdditiveBlending);
+  private coronaPlane = new ImagePlane(3, NormalBlending);
 
   /**
    * Whether a coronagraph frame is on the card right now. The report's index
