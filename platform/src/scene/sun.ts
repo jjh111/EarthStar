@@ -171,11 +171,15 @@ const cgFrag = /* glsl */ `
     float mask = smoothstep(uInner, uInnerSoft, r)
                * (1.0 - smoothstep(uEdge * 0.90, uEdge, r));
 
-    // Bright structure is opaque; the darkest sky lets a little of the scene
-    // through, so stars and the wind read faintly behind the empty parts of
-    // the frame and the plane sits in space rather than on top of it.
+    // Coronagraph: bright structure is opaque, the darkest sky lets a little
+    // of the scene through, so stars read faintly behind the empty frame and
+    // the plane sits in space rather than on top of it.
+    // Additive disk card: alpha must not modulate by luminance — dark pixels
+    // already add nothing, and scaling by brightness would erase the faint
+    // fringes that are the card's whole reason for existing.
     float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
-    float alpha = mask * mix(uSkyOpacity, 1.0, clamp(lum * 1.5, 0.0, 1.0));
+    float lumMix = mix(uSkyOpacity, 1.0, clamp(lum * 1.5, 0.0, 1.0));
+    float alpha = uFloorMix > 0.0 || uSkyOpacity < 0.99 ? mask * lumMix : mask;
 
     gl_FragColor = vec4(c * uIntensity, alpha);
     #include <colorspace_fragment>
@@ -188,7 +192,11 @@ const cgFrag = /* glsl */ `
  * additive treatment) left nothing but the streamers. A coronagraph's
  * false-colour sky gets a touch of quieting; a disk card's sky is already black.
  */
-const PEDESTAL_LIFT: Record<PlaneKind, number> = { coronagraph: 0.2, disk: 0 };
+// The additive disk card lifts a small fraction of any baked-in floor: under
+// addition even a 2% pedestal repeats across every overlaid frame and would
+// grey the deep space behind the Sun. The fringes sit far above this and are
+// untouched.
+const PEDESTAL_LIFT: Record<PlaneKind, number> = { coronagraph: 0.2, disk: 0.02 };
 
 /**
  * Opacity of the darkest sky in the frame; bright structure is always opaque.
@@ -196,11 +204,15 @@ const PEDESTAL_LIFT: Record<PlaneKind, number> = { coronagraph: 0.2, disk: 0 };
  * The disk card's black surround is mostly let through, so the off-limb light
  * it exists to carry stands off the sphere without a dark halo around it.
  */
-// Under additive blending the darkest sky's alpha modulates brightness rather than
-// occlusion, so the disk card's near-black surround simply contributes almost
-// nothing — which is what it should do. The coronagraph keeps normal blending and
-// its published sky.
-const SKY_OPACITY: Record<PlaneKind, number> = { coronagraph: 0.8, disk: 0.05 };
+// Alpha semantics differ by blend mode, and the two cards split on it.
+// The coronagraph blends normally, so its dark-sky opacity exists to let the
+// scene read faintly through the empty parts of the published frame. The disk
+// card blends additively, where alpha modulates *brightness*: a black pixel
+// adds nothing at any alpha, so the luminance trick is not merely unnecessary
+// but destructive — it multiplies the faint off-limb corona toward zero and
+// erases exactly the fringes the card exists to show. Its alpha is the mask
+// alone, and the image values speak at their own brightness.
+const SKY_OPACITY: Record<PlaneKind, number> = { coronagraph: 0.8, disk: 1 };
 
 /**
  * The Corona view's framing floor, in solar radii, for the bare sphere — set
