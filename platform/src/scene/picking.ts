@@ -127,6 +127,9 @@ const worldScale = new Vector3();
 
 /** Pointer slop for lines and points, in CSS pixels. */
 const LINE_TOLERANCE_PX = 6;
+/** Pointer slop for small surface markers, in CSS pixels. A sub-pixel marker
+ * still deserves a click — the same courtesy `pickAt` extends to bodies. */
+const MARKER_TOLERANCE_PX = 12;
 
 export function pickLayerAt(
   pointer: { x: number; y: number },
@@ -165,8 +168,21 @@ export function pickLayerAt(
    * units arrives orders of magnitude too small and nothing is ever hit. It
    * cost an afternoon to find, because the symptom is silence.
    */
+  /**
+   * Hits are collected across all roots, and a priority rule beats nearest:
+   * a marker parented to a body's surface (earthquake events on the globe) is
+   * the most specific thing under the pointer, and the model wireframes drawn
+   * around that body — the Shue magnetopause, the bow shock — wrap it in
+   * space, so their shell intersects the ray first and would otherwise
+   * swallow every click at the surface. Context surfaces should not out-shout
+   * the events drawn on the planet inside them. Everything else keeps the
+   * nearest-hit rule.
+   */
+  const PRIORITY = new Set(['layer.quakes']);
+
   let best: LayerPick | null = null;
   let bestDist = Infinity;
+  let priority: LayerPick | null = null;
   for (const root of roots) {
     root.getWorldScale(worldScale);
     const s = (Math.abs(worldScale.x) + Math.abs(worldScale.y) + Math.abs(worldScale.z)) / 3;
@@ -174,14 +190,52 @@ export function pickLayerAt(
     raycaster.params.Line.threshold = local;
     raycaster.params.Points.threshold = local;
 
+    let rootBest: { subject: string; point: import('three').Vector3; dist: number } | null = null;
     for (const h of raycaster.intersectObject(root, true)) {
-      if (h.distance >= bestDist) break;
       const subject = pickables.subjectFor(h.object);
       if (!subject) continue;
-      bestDist = h.distance;
-      best = { subject, screen: { ...pointer }, point: h.point.clone() };
+      rootBest = { subject, point: h.point.clone(), dist: h.distance };
       break;
     }
+    if (rootBest) {
+      if (rootBest.dist < bestDist) {
+        bestDist = rootBest.dist;
+        best = { subject: rootBest.subject, screen: { ...pointer }, point: rootBest.point };
+      }
+      if (PRIORITY.has(rootBest.subject) && !priority) {
+        priority = { subject: rootBest.subject, screen: { ...pointer }, point: rootBest.point };
+      }
+    }
   }
-  return best;
+
+  // Priority roots get a screen-space fallback, because a surface marker is
+  // frequently sub-pixel: a magnitude-3 earthquake sphere is ~0.5 px at Globe
+  // scale, and exact geometry raycasting cannot hit what the ray squeezes
+  // past. Bodies solved this with `pickAt`'s pixel tolerance; layers whose
+  // whole point is small markers on a body get the same courtesy — the
+  // nearest child within tolerance wins, and `point` is the marker's own
+  // position, which is what a card wants anyway.
+  if (!priority) {
+    for (const root of roots) {
+      const subject = pickables.subjectFor(root);
+      if (!subject || !PRIORITY.has(subject)) continue;
+      let bestPx = Infinity;
+      let bestChild: { position: import('three').Vector3 } | null = null;
+      for (const child of root.children) {
+        const wp = child.getWorldPosition(new Vector3());
+        const ndc = wp.clone().project(camera);
+        if (ndc.z < -1 || ndc.z > 1) continue;
+        const sx = (ndc.x * 0.5 + 0.5) * size.width;
+        const sy = (-ndc.y * 0.5 + 0.5) * size.height;
+        const d = Math.hypot(sx - pointer.x, sy - pointer.y);
+        if (d < bestPx) { bestPx = d; bestChild = { position: wp }; }
+      }
+      if (bestChild && bestPx <= MARKER_TOLERANCE_PX) {
+        priority = { subject, screen: { ...pointer }, point: bestChild.position };
+        break;
+      }
+    }
+  }
+
+  return priority ?? best;
 }

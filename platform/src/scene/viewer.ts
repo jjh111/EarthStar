@@ -778,6 +778,29 @@ export class Viewer {
     this.updateTimes.length = 0;
   }
 
+  /**
+   * Does this layer hit lie on the body's near surface?
+   *
+   * Earthquake markers are parented to the globe: a click on one is "on
+   * Earth", and the body-proximity picker would otherwise capture it before
+   * the layer ray ever ran. When the layer hit sits within the body's radius
+   * of the body's centre — plus a small tolerance for the marker's own height
+   * above the surface — the layer is the more specific answer and wins.
+   * Everything else keeps the old rule: the body wins, because a planet
+   * behind a field line is still the planet.
+   */
+  private layerOnBody(layer: LayerPick | null, body: Pick | null): boolean {
+    if (!layer || !body) return false;
+    const centre = body.position;
+    const bodyRadius =
+      body.kind === 'sun' ? radiusToScene('Sun', this.mode)
+      : body.kind === 'moon' ? radiusToScene('Moon', this.mode)
+      : body.kind === 'planet' ? radiusToScene(body.id as PlanetName, this.mode)
+      : 0;
+    if (bodyRadius <= 0) return false;
+    return layer.point.distanceTo(centre) <= bodyRadius * 1.05;
+  }
+
   private pointerPick(e: PointerEvent | MouseEvent): Pick | null {
     const r = this.canvas.getBoundingClientRect();
     return pickAt(
@@ -809,16 +832,18 @@ export class Viewer {
     this.setHover(body);
     // Raycasting ten thousand line vertices on every pointermove is the
     // obvious way to lose the frame budget, so it runs at most once per
-    // `LAYER_PICK_MS` and is skipped entirely while a body is under the
-    // pointer, which is the common case near the globe.
-    if (body) { this.setLayerHover(null); return; }
+    // `LAYER_PICK_MS`. A body under the pointer does not end the search:
+    // layers parented to that body's surface (earthquake markers on the
+    // globe) are ON the body, not behind it, and are the more specific
+    // answer. `layerOnBody` keeps the body winning for everything else —
+    // a planet behind a field line is still the planet.
     const now = performance.now();
     if (now - this.lastLayerPick < LAYER_PICK_MS) return;
     this.lastLayerPick = now;
     const t0 = performance.now();
     const layer = this.pointerPickLayer(e);
     this.layerPickMs = performance.now() - t0;
-    this.setLayerHover(layer);
+    this.setLayerHover(this.layerOnBody(layer, body) ? layer : (body ? null : layer));
   };
 
   private onPointerLeave = (): void => { this.setHover(null); this.setLayerHover(null); };
@@ -873,10 +898,10 @@ export class Viewer {
     if (!isClick(down, { x: e.clientX, y: e.clientY })) return;
 
     const p = this.pointerPick(e);
-    if (p) { this.onSelect?.(p); return; }
     // Only now pay for the ray. A click is rare; a pointermove is not.
     const layer = this.pointerPickLayer(e);
-    this.onLayerSelect?.(layer);
+    if (p && !this.layerOnBody(layer, p)) { this.onSelect?.(p); return; }
+    this.onLayerSelect?.(this.layerOnBody(layer, p) ? layer : (p ? null : layer));
   };
 
   private resize = (): void => {
