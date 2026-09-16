@@ -384,7 +384,7 @@ export class Sun {
    * corona plane carries a coronagraph, which starts further out again. They
    * nest rather than overlap, and either can be shown alone.
    */
-  private diskPlane = new ImagePlane(2, AdditiveBlending, false);
+  private diskPlane = new ImagePlane(2, AdditiveBlending, true);
   private coronaPlane = new ImagePlane(3, NormalBlending);
 
   /**
@@ -411,7 +411,19 @@ export class Sun {
       vertexShader: discVert,
       fragmentShader: discFrag,
     });
+    // The disc does not write depth. Its own image planes test against the
+    // scene with the depth test ON, and the fringes they exist to show sit
+    // inside the disc's depth footprint — so if the sphere wrote depth, the
+    // planes' inner fringes would be hidden (the bug that hid them), and if
+    // the planes skipped the depth test outright they drew over *Earth* when
+    // it passed in front (the bug this replaced). With the sphere silent in
+    // the depth buffer: the planes draw over the Sun's own limb (correct),
+    // and Earth, which writes depth, still occludes everything behind it
+    // (correct). Transparent layers that tested against the sphere's depth —
+    // the wind particles mainly — now draw over the disk; they already avoid
+    // it geometrically via the Shue push-out, so nothing visible changes.
     this.disc = new Mesh(new SphereGeometry(radius, 64, 48), this.discMat);
+    this.discMat.depthWrite = false;
     this.disc.name = 'sun-disc';
     this.group.add(this.disc);
 
