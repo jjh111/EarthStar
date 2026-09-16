@@ -682,6 +682,11 @@ export class Viewer {
       );
     }
 
+    // The quake markers are built in Earth radii and must follow the globe's
+    // rendered size like every other Earth-fixed layer, or they draw at unit
+    // scale and vanish inside (or float far outside) the sphere.
+    this.quakes.setScale(earthRadius);
+
     // Moon at its true geocentric direction; separation compressed in Globe mode.
     const mg = toScene(moonGeo(date));
     const moonAu = mg.length();

@@ -441,6 +441,11 @@ function maybeStartImagery(): void {
   if (store.get().lanes.snapshot) return;
   sunImageryStarted = true;
   void selectLoop(LOOPS[0]!.id);
+  // The coronagraph comes on with the disk. LASCO C2 is where a CME is first
+  // visible, it is the frame the Situation Report describes cones against, and
+  // a reader who never opens the Sun tab still sees it hanging in the scene —
+  // the one part of the Sun panel that costs nothing to show by default.
+  void selectCorona('lasco-c2');
 }
 
 store.subscribe((state) => {

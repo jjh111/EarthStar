@@ -96,6 +96,11 @@ export class Quakes {
     this.group.visible = v && this.markers.length > 0;
   }
 
+  /** Radius of the Earth in scene units — markers are built in Earth radii. */
+  setScale(earthRadiusScene: number): void {
+    this.group.scale.setScalar(earthRadiusScene);
+  }
+
   get visible(): boolean {
     return this.group.visible;
   }
