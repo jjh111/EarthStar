@@ -237,7 +237,7 @@ class ImagePlane {
   private mode: ScaleMode = 'globe';
   private sunRadius = 1;
 
-  constructor(renderOrder: number, blending: Blending = NormalBlending) {
+  constructor(renderOrder: number, blending: Blending = NormalBlending, depthTest = true) {
     this.mat = new ShaderMaterial({
       uniforms: {
         uImage: { value: null },
@@ -266,7 +266,7 @@ class ImagePlane {
       // lines still draw through it; DoubleSide because the plane is seen
       // from whichever side the camera is on.
       transparent: true, blending,
-      depthWrite: false, side: DoubleSide,
+      depthWrite: false, depthTest, side: DoubleSide,
     });
     // Local coordinates run -1..1; the vertex shader places them on the image
     // plane, so the geometry itself needs no orientation.
@@ -384,7 +384,7 @@ export class Sun {
    * corona plane carries a coronagraph, which starts further out again. They
    * nest rather than overlap, and either can be shown alone.
    */
-  private diskPlane = new ImagePlane(2, AdditiveBlending);
+  private diskPlane = new ImagePlane(2, AdditiveBlending, false);
   private coronaPlane = new ImagePlane(3, NormalBlending);
 
   /**
@@ -436,6 +436,17 @@ export class Sun {
 
   /**
    * The off-limb half of a disk frame, on the card. The sphere has the rest.
+   *
+   * The card draws with the depth test off. It is a flat plane through the
+   * Sun's centre, and the sphere's near hemisphere bulges in front of it: at
+   * Deck's camera distance the bulge occludes an annulus reaching ~1.15 R☉,
+   * right where the faintest off-limb fringes live — and the sphere's own
+   * limb shading makes that occluder near-black, so the fringes vanished
+   * into what read as "black space". The occlusion carried no information:
+   * the card's circular mask already discards everything inside 1 R☉, which
+   * in screen space is the sphere's silhouette, so it cannot overdraw the
+   * disk. The coronagraph keeps its depth test — its occulter is meant to
+   * stand off from the sphere, and the gap between them is real.
    */
   setDiskPlane(image: HTMLImageElement | null, cal: SunPlaneCalibration | null): void {
     this.diskPlane.set(image, cal);
