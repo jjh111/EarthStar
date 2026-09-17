@@ -8,10 +8,12 @@ import { initSky } from './sky.js';
 import { initThread } from './thread.js';
 import { initTheme } from './theme.js';
 import { initAutomata } from './automata.js';
+import { initSeedCopy } from './seed-copy.js';
 
 // Theme and time-of-day first — they change what the page looks like
 initTheme();
 initTimeOfDay();
+initSeedCopy();
 
 // Archive and ideas immediately: deep links (#doc/…, #idea/…) must resolve on load
 initArchive();
