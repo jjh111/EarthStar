@@ -315,6 +315,26 @@ h1 {
 .sky-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 22px; margin-top: 18px; }
 .sky-note { font-size: 0.8em; color: var(--ink-2); max-width: 60ch; }
 
+/* The Viewer screenshot beside the live data: a door with a view through it */
+.sky-lower {
+  display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: var(--gutter); align-items: center; margin-top: 18px;
+}
+@media (max-width: 900px) { .sky-lower { grid-template-columns: 1fr; } }
+.sky-shot {
+  display: block; position: relative; overflow: hidden; border-radius: var(--radius);
+  border: 1px solid var(--line); background: #0e2117;
+}
+.sky-shot img { display: block; width: 100%; height: auto; transition: transform 0.4s ease; }
+.sky-shot:hover img, .sky-shot:focus-visible img { transform: scale(1.02); }
+.sky-shot-cap {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; font-size: 0.78em; letter-spacing: 0.04em; color: #f3ead2;
+  background: linear-gradient(to top, rgba(8, 20, 12, 0.75), transparent);
+}
+.sky-shot-cap .badge { color: #f3ead2; }
+
 /* Register badges: ink text, gold hairline — the provenance grammar is a flourish that carries meaning */
 .badge {
   display: inline-block; font-family: var(--mono); font-size: 0.66em; line-height: 1;
@@ -599,6 +619,12 @@ footer > p { margin-top: 4px; }
   .seed { padding: 14px 16px 12px; }
   .equation-prime { font-size: 0.9em; }
   .sky-inner, .ideas-inner, .archive-inner, .begin-inner { padding-top: 30px; padding-bottom: 30px; }
+  /* The Viewer door: on a phone the logo and the full-width nowrap button
+     collide (150px logo + ~230px button > 360px viewport, overflowing right).
+     Shrink both, drop the subtitle, let the pair share the row. */
+  .logo-hero { max-width: 96px; top: 12px; left: 12px; }
+  .hero-link { right: 12px; top: 12px; left: auto; max-width: calc(100vw - 120px); padding: 7px 11px; font-size: 0.72rem; }
+  .hero-link em { display: none; }
 }
 
 /* ── Preferences ── */
