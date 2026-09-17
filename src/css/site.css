@@ -326,9 +326,14 @@ h1 {
 .sky-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 22px; margin-top: 18px; }
 .sky-note { font-size: 0.8em; color: var(--ink-2); max-width: 60ch; }
 
-/* The Viewer screenshot beside the live data: a door with a view through it */
+/* The Viewer screenshot beside the live data: a door with a view through it.
+   The frame is deliberately small — half the width the 1.6fr column used to get
+   (≈335px at the 1200px column, 2.25 : 1 against the foot beside it). The shot
+   is a signpost to the Viewer, not the subject of the section; at full column
+   width it read as the section's illustration and pushed the live readings out
+   of the fold. Keep `sizes` in index.html in step with the 335px figure. */
 .sky-lower {
-  display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2.25fr);
   gap: var(--gutter); align-items: center; margin-top: 18px;
 }
 @media (max-width: 900px) { .sky-lower { grid-template-columns: 1fr; } }

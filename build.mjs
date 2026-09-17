@@ -167,6 +167,17 @@ if (process.argv.includes('--images')) {
     `<circle cx="32" cy="32" r="3.4" fill="#0e2117"/>` +
     `</svg>`);
 
+  // The index page's Viewer screenshot card. Source is the Viewer's own og card
+  // (`viewer/og.jpg`) so the two can never disagree, and it IS generated here
+  // because index.html references these files: a reference with no producer is
+  // how the card shipped as a broken image on 2026-09-17. 400w + 800w, because
+  // the frame renders ~335px wide (see .sky-lower in src/css/site.css).
+  for (const w of [400, 800]) {
+    await sharp(p('viewer/og.jpg')).resize({ width: w }).jpeg({ quality: 84, mozjpeg: true })
+      .toFile(`${IMG}/viewer-og-${w}.jpg`);
+    console.log(`viewer-og-${w} jpg`);
+  }
+
   console.log('images done');
 }
 

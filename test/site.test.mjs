@@ -26,7 +26,24 @@ async function newPage(opts = {}) {
 
 {
   const { ctx, page } = await newPage();
+  // Same-origin 404s are failures, not weather. Upstream feeds are allowed to
+  // fail (see newPage); our own assets are not — the Viewer card shipped as a
+  // broken image because index.html referenced files no build step produced,
+  // and a case-insensitive dev disk cannot see the case mistake that Linux
+  // GitHub Pages does. Both checks below are what would have caught it.
+  const missing = [];
+  page.on('response', r => {
+    const u = new URL(r.url());
+    if (u.origin === new URL(BASE).origin && r.status() >= 400) missing.push(`${r.status()} ${u.pathname}`);
+  });
   await page.goto(BASE + '/', { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); // lazily-loaded images only fetch near the viewport
+  await page.waitForTimeout(500);
+  const broken = await page.evaluate(() => Array.from(document.images)
+    .filter(i => i.complete && i.naturalWidth === 0)
+    .map(i => i.currentSrc || i.src));
+  check('no missing same-origin assets', missing.length === 0, missing.join(', '));
+  check('no broken images', broken.length === 0, broken.join(', '));
   check('title', (await page.title()).includes('Earth Star'));
   check('grid pre-rendered', await page.locator('.archive-card').count() >= 3);
 
