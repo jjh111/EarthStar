@@ -1,0 +1,43 @@
+:Product: Forecast Discussion
+:Issued: 2026 Sep 19 1230 UTC
+# Prepared by the U.S. Dept. of Commerce, NOAA, Space Weather Prediction Center
+#
+Solar Activity
+
+.24 hr Summary...
+Solar activity was very low and the solar disk was without spots. No
+Earth-directed CMEs were observed in available coronagraph imagery.
+
+.Forecast...
+Solar activity is expected to be at very low levels over 19-21 Sep.
+
+Energetic Particle
+
+.24 hr Summary...
+The greater than 2 MeV electron flux was at normal to moderate levels.
+The greater than 10 MeV proton flux was at background levels.
+
+.Forecast...
+The greater than 2 MeV electron flux is expected to reach high levels on
+19-21 Sep. The greater than 10 MeV proton flux is expected to persist at
+background levels through 21 Sep.
+
+Solar Wind
+
+.24 hr Summary...
+Solar wind parameters persisted at background levels this period. Total
+magnetic field strength averaged near 6 nT, and the north-south (Bz)
+component ranged between +/- 5 nT. Solar wind speeds averaged ~430 km/s.
+The phi angle was predominantly negative.
+
+.Forecast...
+Ambient solar wind conditions are expected to prevail over 19-21 Sep.
+
+Geospace
+
+.24 hr Summary...
+The geomagnetic field was quiet with an isolated period of unsettled
+conditions.
+
+.Forecast...
+Mostly quiet conditions are expected to prevail over 19-21 Sep.
