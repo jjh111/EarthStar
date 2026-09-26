@@ -1,0 +1,59 @@
+:Product: Forecast Discussion
+:Issued: 2026 Sep 26 1230 UTC
+# Prepared by the U.S. Dept. of Commerce, NOAA, Space Weather Prediction Center
+#
+Solar Activity
+
+.24 hr Summary...
+Solar activity was low, with only C-class flares observed, both from
+Region 4534 (N10W90, Cro/beta). Of the eight numbered regions on disk,
+Region 4542 (S19W07, Bxi/beta) was the only group to exhibit growth this
+period. Region 4539 (S10, L=13) decayed to plage, and all remaining
+regions were either stable or in decay. No Earth-directed CMEs were
+observed.
+
+.Forecast...
+Solar activity is likely to reach low levels on 26-27 Sep, while very
+low levels are anticipated for 28 Sep, with a slight chance for an
+isolated M-flare (R1-R2/Minor-Moderate) through 28 Sep.
+
+Energetic Particle
+
+.24 hr Summary...
+The greater than 2 MeV electron flux was at normal to moderate levels.
+
+The greater than 10 MeV proton flux was steady at background levels.
+
+.Forecast...
+The greater than 2 MeV electron flux is expected to be at normal to
+moderate levels on 26 Sep, before increasing to high levels on 27-28
+Sep. The greater than 10 MeV proton flux is expected to persist at
+background levels through 28 Sep.
+
+Solar Wind
+
+.24 hr Summary...
+Solar wind parameters reflected continued positive polarity CH HSS
+influences. Total magnetic field strength reached a peak of 9 nT and
+then gradually decreased to end the period at 4 nT. The Bz (north-south)
+component varied between +7/-8 nT. Solar wind speeds varied between 450
+km/s and 557 km/s in the first half of the reporting period before
+maintaining an average of 475 km/s in the later half. The phi angle was
+predominantly positive (away from the Sun).
+
+.Forecast...
+A mildly enhanced solar wind environment is expected to continue on
+26-27 Sep as CH HSS influences gradually subside. Background solar wind
+conditions are expected to return on 28 Sep.
+
+Geospace
+
+.24 hr Summary...
+The geomagnetic field was at active levels through much of the period
+due to positive polarity CH HSS influences.
+
+.Forecast...
+The geomagnetic field is expected to reach active levels on 26 Sep,
+followed by quiet to unsettled levels on 27 Sep, as positive polarity CH
+HSS influences gradually diminish. Mostly quiet conditions are expected
+to prevail on 28 Sep.
