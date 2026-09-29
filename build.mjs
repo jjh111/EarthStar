@@ -152,11 +152,17 @@ if (process.argv.includes('--images')) {
   await banner.clone().avif({ quality: 60, effort: 6 }).toFile(`${IMG}/banner-1200.avif`);
   await banner.clone().webp({ quality: 80 }).toFile(`${IMG}/banner-1200.webp`);
 
-  // OG card: banner centered on the site's night ground (dark green), 1200×630
-  const bannerBuf = await sharp(p('Assets/EarthstarBanner.PNG')).resize({ width: 1140 }).png().toBuffer();
-  const bh = (await sharp(bannerBuf).metadata()).height;
+  // OG card: the header painting (hero layers, object-fit: cover) with the
+  // logo top-left at 300px — mirrors .hero-image-frame + .logo-hero. 1200x630.
+  const paintStack = [];
+  for (const f of ['0-BG.png', '1-earth.png', '2-sun.png', '3-islandship.png', '4-glimmer.png']) {
+    paintStack.push({
+      input: await sharp(p('Assets/' + f)).resize({ width: 1200, height: 630, fit: 'cover', position: 'centre' }).png().toBuffer()
+    });
+  }
+  const logoBuf = await sharp(p('Assets/EarthStar Logo JH 2025 w.png')).resize({ width: 300 }).png().toBuffer();
   await sharp({ create: { width: 1200, height: 630, channels: 3, background: '#0e2117' } })
-    .composite([{ input: bannerBuf, left: 30, top: Math.round((630 - bh) / 2) }])
+    .composite([...paintStack, { input: logoBuf, left: 36, top: 36 }])
     .jpeg({ quality: 86 }).toFile(`${IMG}/og.jpg`);
 
   // Favicon: gold four-point star on the site's night ground

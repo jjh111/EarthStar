@@ -392,6 +392,46 @@ controlsToggle.addEventListener('click', () => {
   controlsToggle.setAttribute('aria-expanded', String(open));
 });
 
+/* ---------------- the instrument rail ---------------- */
+
+/**
+ * The tiles' show/hide. Open by default on a desktop, where the rail is the
+ * glance; closed by default on a phone, where the scene band is the view and
+ * the tiles are the clutter — the reader's own choice is remembered after
+ * that, per device.
+ */
+const RAIL_KEY = 'viewer.rail';
+const railEl = document.getElementById('rail') as HTMLElement;
+const railToggle = btn('rail-toggle');
+
+function setRail(open: boolean, announceIt = true): void {
+  railEl.classList.toggle('is-collapsed', !open);
+  railToggle.setAttribute('aria-expanded', String(open));
+  railToggle.setAttribute('aria-label', open ? 'Hide instrument tiles' : 'Show instrument tiles');
+  const chevron = railToggle.querySelector('.rail-chevron');
+  if (chevron) chevron.textContent = open ? '‹' : '›';
+  try { localStorage.setItem(RAIL_KEY, open ? 'open' : 'closed'); } catch {
+    // Private browsing: the choice applies for the session only.
+  }
+  if (announceIt) announce(open ? 'Instrument tiles shown.' : 'Instrument tiles hidden.');
+}
+
+function railOpenNow(): boolean {
+  return !railEl.classList.contains('is-collapsed');
+}
+
+(function initRail(): void {
+  let saved: string | null = null;
+  try { saved = localStorage.getItem(RAIL_KEY); } catch { /* fall through */ }
+  const open = saved !== null
+    ? saved === 'open'
+    // Desktops open, phones closed — the two defaults the two layouts want.
+    : window.matchMedia('(min-width: 861px)').matches;
+  setRail(open, false);
+})();
+
+railToggle.addEventListener('click', () => setRail(!railOpenNow()));
+
 btnScaleGlobe.addEventListener('click', () => setScale('globe'));
 btnScaleTrue.addEventListener('click', () => setScale('true'));
 btnShield.addEventListener('click', () => setShield(!viewer.shieldOn));
@@ -431,6 +471,7 @@ installKeyboard({
   toggleAurora: () => setAurora(!viewer.auroraOn),
   toggleWind: () => setWind(!viewer.windOn),
   toggleCmes: () => setCmes(!viewer.cmesOn),
+  toggleRail: () => setRail(!railOpenNow()),
   refresh: () => { announce('Refreshing.'); void store.refresh(); },
   focusReport: () => hud.selectTab('report'),
 });

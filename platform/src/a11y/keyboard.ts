@@ -12,6 +12,8 @@ export interface KeyActions {
   toggleAurora(): void;
   toggleWind(): void;
   toggleCmes(): void;
+  /** Show or hide the instrument rail. */
+  toggleRail(): void;
   refresh(): void;
   focusReport(): void;
 }
@@ -21,6 +23,7 @@ const HELP: [string, string][] = [
   ['s', 'Toggle Globe / True scale'],
   ['m', 'Toggle reduced motion'], ['f', 'Toggle the magnetic shield'],
   ['a', 'Toggle the aurora overlay'], ['w', 'Toggle the solar wind stream'], ['c', 'Toggle CME cones'],
+  ['t', 'Show or hide the instrument tiles'],
   ['r', 'Refresh data now'], ['?', 'This help'],
 ];
 
@@ -40,6 +43,7 @@ export function installKeyboard(actions: KeyActions): () => void {
       case 'a': case 'A': actions.toggleAurora(); break;
       case 'w': case 'W': actions.toggleWind(); break;
       case 'c': case 'C': actions.toggleCmes(); break;
+      case 't': case 'T': actions.toggleRail(); break;
       case 'r': case 'R': actions.refresh(); break;
       case '?': announce(HELP.map(([k, d]) => `${k}: ${d}`).join('. ')); break;
       default: return;
