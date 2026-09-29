@@ -89,7 +89,23 @@
     </header>
 
     <main class="stage">
-      <div id="instruments" class="instruments"></div>
+      <!-- The instrument tiles live in a rail at the left edge of the scene,
+           not stacked across its top: thirteen readings are a column of
+           marginal notes beside the planet, and a grid across the sky was
+           both the clutter and — on a phone — most of a screen. The rail
+           collapses to its chevron and remembers the choice. -->
+      <div class="rail" id="rail">
+        <div class="rail-head">
+          <span class="rail-legend">Instruments</span>
+          <button class="rail-toggle" id="rail-toggle" type="button"
+            aria-expanded="true" aria-controls="instruments"
+            aria-label="Hide instrument tiles"
+            title="Show or hide the instrument tiles (t)">
+            <span class="rail-chevron" aria-hidden="true">‹</span>
+          </button>
+        </div>
+        <div id="instruments" class="instruments"></div>
+      </div>
       <div id="ticker" class="ticker"></div>
       <div id="tip" class="tip" role="status" hidden></div>
     </main>

@@ -48,6 +48,10 @@
      keep pace or the same words wrap into more lines than they used to. */
   --margin-w: clamp(320px, 27vw, 440px);
   --header-h: 52px;
+  /* The instrument rail: one column of compact tiles at the left edge of the
+     scene, collapsible to a chevron strip. */
+  --rail-w: 116px;
+  --rail-collapsed-w: 28px;
 }
 
 /* Type runs 10% larger than the browser default. Everything below is in rem,
@@ -240,21 +244,67 @@ header.top {
 /* ---------- stage: instruments over the scene ---------- */
 .stage {
   grid-column: 1; grid-row: 2;
-  display: flex; flex-direction: column; justify-content: space-between;
+  /* Positioned so the rail anchors to the stage, not to the shell — without
+     this the rail floated up over the header row. */
+  position: relative;
+  display: flex; flex-direction: column; justify-content: flex-end;
   padding: 0.55rem; overflow: hidden; min-height: 0;
   pointer-events: none;
 }
 .stage > * { pointer-events: auto; }
 
+/* ---------- the instrument rail ----------
+   The tiles are a left column of compact marginal notes, not a grid over the
+   sky. One column, one scroll region of its own, and a chevron that shrinks
+   the whole thing to a strip — the readings are the glance, not the frame. */
+.rail {
+  position: absolute; top: 0.55rem; left: 0.55rem; bottom: 0.55rem;
+  width: var(--rail-w);
+  display: flex; flex-direction: column; gap: 0.28rem;
+  z-index: 4;
+}
+.rail-head {
+  display: flex; align-items: center; gap: 0.3rem; flex: none;
+}
+.rail-legend {
+  font-family: var(--sans); font-size: 0.53rem; letter-spacing: 0.13em;
+  text-transform: uppercase; color: var(--ink-faint); white-space: nowrap;
+}
+.rail-toggle {
+  margin-left: auto;
+  font-family: var(--sans); font-size: 0.72rem; line-height: 1;
+  background: var(--bg-panel); color: var(--ink-dim);
+  border: 1px solid var(--line); border-radius: 4px;
+  width: 1.55rem; height: 1.55rem; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
+}
+.rail-toggle:hover { color: var(--ink); border-color: var(--line-strong); }
+.rail-chevron { display: block; line-height: 1; font-size: 0.95rem; }
+
+/* Collapsed: the chevron keeps the rail reachable and the tiles leave the
+   tab order entirely — a hidden instrument should not cost a Tab stop. */
+.rail.is-collapsed { width: var(--rail-collapsed-w); }
+.rail.is-collapsed .rail-legend,
+.rail.is-collapsed .instruments { display: none; }
+
 .instruments {
   display: grid; gap: 3px;
-  grid-template-columns: repeat(auto-fit, minmax(104px, 128px));
+  /* minmax(0, 1fr): a `1fr` track has an automatic minimum of min-content, so
+     one long meta line could push the whole column wider than the rail. */
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
+  overflow-y: auto; overscroll-behavior: contain;
+  min-height: 0; flex: 1;
+  scrollbar-width: thin; scrollbar-color: rgba(140,180,210,0.3) transparent;
 }
+.instruments::-webkit-scrollbar { width: 5px; }
+.instruments::-webkit-scrollbar-thumb { background: rgba(140,180,210,0.28); border-radius: 3px; }
 
 .tile {
   background: var(--bg-panel); border: 1px solid var(--line);
-  border-radius: 4px; padding: 0.34rem 0.44rem;
+  border-radius: 4px; padding: 0.22rem 0.34rem;
   backdrop-filter: var(--glass);
   -webkit-backdrop-filter: var(--glass);
   text-align: left; font: inherit; color: inherit; cursor: pointer;
@@ -264,29 +314,35 @@ header.top {
 .tile:hover { border-color: var(--line-strong); background: rgba(14, 21, 34, 0.9); }
 .tile[aria-current='true'] { border-color: var(--accent); }
 .tile-spark {
-  display: block; height: 17px; margin: 0.12rem 0 0.08rem;
+  display: block; height: 10px; margin: 0.05rem 0 0.04rem;
   /* An empty slot still holds its line, so tiles without a series — the NOAA
      scales, the aurora forecast — stay the same height as the ones with one
-     instead of shuffling the grid every refresh. */
+     instead of shuffling the rail every refresh. */
 }
-.tile-spark svg { display: block; width: 100%; height: 19px; }
+.tile-spark svg { display: block; width: 100%; height: 10px; }
 
+/* display: block, explicitly: `overflow` does not blockify an inline, so the
+   label kept sitting in line boxes sized by the button's own 18px font — nine
+   pixels of phantom height per tile. It also needs to be a block container
+   for the ellipsis to clip anything. */
 .tile-label {
-  margin: 0; font-size: 0.62rem; letter-spacing: 0.09em; text-transform: uppercase;
+  display: block;
+  margin: 0; font-size: 0.5rem; letter-spacing: 0.08em; text-transform: uppercase;
+  line-height: 1.15;
   color: var(--ink-faint); font-weight: 500; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis;
 }
 .tile-value {
-  margin: 0.08rem 0 0; font-family: var(--mono); font-size: 1.3rem; font-weight: 700; line-height: 1.02;
+  margin: 0.05rem 0 0; font-family: var(--mono); font-size: 1.02rem; font-weight: 700; line-height: 1;
   letter-spacing: -0.01em;
   display: flex; align-items: baseline; gap: 0.22rem; color: var(--ink);
 }
-.tile-unit { font-size: 0.62rem; font-weight: 400; letter-spacing: 0.02em; color: var(--ink-faint); }
+.tile-unit { font-size: 0.55rem; font-weight: 400; letter-spacing: 0.02em; color: var(--ink-faint); }
 /* The badge keeps its width; the text beside it is what gives way. `ellipsis`
    on a flex container does nothing — it has to be on the item that holds the
    text, which is why this clipped mid-word rather than trailing off. */
 .tile-meta {
-  margin: 0.12rem 0 0; font-size: 0.64rem; color: var(--ink-dim);
+  margin: 0.05rem 0 0; font-size: 0.52rem; line-height: 1.15; color: var(--ink-dim);
   display: flex; align-items: center; gap: 0.25rem;
   white-space: nowrap; overflow: hidden; min-width: 0;
 }
@@ -334,9 +390,9 @@ header.top {
 .badge-d { color: var(--badge-d); }
 .badge-m { color: var(--badge-m); }
 
-.scales-row { display: flex; gap: 0.2rem; margin: 0.08rem 0 0; }
+.scales-row { display: flex; gap: 0.2rem; margin: 0.06rem 0 0; }
 .scale-chip {
-  font-family: var(--mono); font-size: 0.78rem; padding: 0.04rem 0.3rem;
+  font-family: var(--mono); font-size: 0.68rem; padding: 0.02rem 0.26rem;
   border-radius: 3px; border: 1px solid var(--line-strong); color: var(--ink-dim);
 }
 .scale-1, .scale-2 { color: var(--warn); border-color: rgba(240,180,41,0.55); }
@@ -347,7 +403,8 @@ header.top {
    the first — and each carries the word NOAA's product type actually means, so
    "happening now" and "possible later" are not the same shade of grey.
    Sized and framed like the instrument tiles above, because it is the same
-   kind of thing: a current reading with a time on it. */
+   kind of thing: a current reading with a time on it. The ticker clears the
+   rail's column beside it, and follows the rail in when it collapses. */
 .ticker {
   display: flex; align-items: flex-start; gap: 0.5rem;
   background: var(--bg-panel); border: 1px solid var(--line);
@@ -355,7 +412,9 @@ header.top {
   font-size: 0.8rem; color: var(--ink-dim); line-height: 1.45;
   flex: none; max-height: 5.4em; overflow: hidden;
   backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
+  margin-left: calc(var(--rail-w) + 0.35rem);
 }
+.rail.is-collapsed ~ .ticker { margin-left: calc(var(--rail-collapsed-w) + 0.35rem); }
 .ticker-items { display: flex; flex-wrap: wrap; gap: 0.2rem 0.9rem; min-width: 0; }
 .ticker-item {
   display: inline-flex; align-items: baseline; gap: 0.4rem; white-space: nowrap;
@@ -555,7 +614,11 @@ header.top {
 .controls-toggle { display: none; }
 
 @media (max-width: 860px) {
-  :root { --margin-w: 0px; }
+  :root {
+    --margin-w: 0px;
+    --rail-w: 108px;
+    --rail-collapsed-w: 28px;
+  }
 
   /* Undo the desktop lock so the document scrolls as a document. `visible`
      rather than `auto`: setting a scroll on both html and body makes a nested
@@ -575,6 +638,10 @@ header.top {
     padding-top: 42vh;
   }
 
+  /* One row whenever the row fits — and it fits, once the notice stops
+     claiming `width: 100%`. The wrap stays for the Controls disclosure, which
+     *explicitly* takes a second row when opened; nothing wraps by accident, so
+     the header is one row tall except on the reader's own action. */
   header.top {
     position: fixed; top: 0; left: 0; right: 0; z-index: 30;
     flex-wrap: wrap; padding: 0.35rem 0.5rem; gap: 0.4rem 0.5rem;
@@ -584,12 +651,25 @@ header.top {
   /* Only the time on a phone: the date is in the briefing and the panel, and
      here it was pushing the controls button onto a row of its own. */
   .clock { font-size: 0.56rem; }
-  .headline-alert { order: 3; width: 100%; flex: none; font-size: 0.7rem; }
+  .headline-alert {
+    order: 0; width: auto; min-width: 0; font-size: 0.7rem;
+    /* Basis 0, not auto: flex-wrap decides each line before shrink runs, so a
+       basis of the notice's full text forced it onto its own row — the
+       double-tall header. With the basis at 0 the row always forms, and the
+       notice grows into whatever the brand and the toggle leave it. */
+    flex: 1 1 0;
+  }
+  .headline-alert .alert-text {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+  }
+  /* The time goes here on a phone: it cost the notice's words almost the
+     whole row, and the same time is in the ticker below the scene. */
+  .headline-alert .alert-time { display: none; }
 
   /* Five rows of buttons is most of a phone screen. They fold behind a
      disclosure with a real affordance, rather than being scrolled out of
      sight or dropped. */
-  .controls-toggle { display: inline-flex; margin-left: auto; }
+  .controls-toggle { display: inline-flex; margin-left: auto; flex: none; }
   .controls {
     order: 4; display: none; width: 100%;
     justify-content: flex-start; gap: 0.4rem 0.6rem;
@@ -598,11 +678,22 @@ header.top {
   .ctl-set { flex-wrap: wrap; }
   .ctl { padding: 0.4rem 0.6rem; }
 
+  /* The rail leaves the scroll entirely: it overlays the left of the scene
+     band, so the page below it starts with the notices and the report instead
+     of thirteen stacked tiles. Collapsed by default on a phone — the tiles
+     are a glance, and the band is the view. */
+  .rail {
+    position: fixed; top: var(--header-real-h, var(--header-h)); left: 0.35rem;
+    bottom: auto;
+    height: calc(42vh - var(--header-real-h, var(--header-h)) - 0.75rem);
+    z-index: 6;
+  }
+
   .stage {
     display: block; padding: 0.5rem; overflow: visible;
     background: linear-gradient(180deg, transparent, var(--bg) 42px);
   }
-  .instruments { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+  .ticker { margin-left: 0; }
   /* A notice headline is longer than a phone is wide, so the item wraps
      rather than being cut off at the edge — the same rule the whole ticker
      already follows about never hiding its own content. */

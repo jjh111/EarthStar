@@ -493,7 +493,7 @@ export class Hud {
       if (key !== this.sparkKeys.get(inst.id)) {
         this.sparkKeys.set(inst.id, key);
         sparkEl.innerHTML = sp
-          ? inlineSpark(sp.series, { ...sp.opts, width: 108, height: 17, label: `${inst.label} trend` })
+          ? inlineSpark(sp.series, { ...sp.opts, width: 100, height: 10, label: `${inst.label} trend` })
           : '';
       }
     }
