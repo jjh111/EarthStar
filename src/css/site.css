@@ -142,7 +142,7 @@ button { font: inherit; color: inherit; }
 }
 
 /* Small uppercase labels, shared */
-.subtitle, .sky-label, .wf-links a, .chip, .seed-phrase summary, .archive-card::before,
+.subtitle, .sky-label, .wf-links a, .chip, .archive-card::before,
 .archive-footer-dir, .thread-label, .coherence-meter-label {
   font-family: var(--sans); text-transform: uppercase; letter-spacing: 0.2em;
 }
@@ -283,7 +283,8 @@ h1 {
 .gp-turn { transform-origin: 48px 60px; }
 .gp-claw { transform-origin: 66px 56px; }
 .gp-patrol { transform-origin: 48px 158px; }
-.gp-dash { transform-origin: 48px 50px; }
+.gp-dash, .gp-people { transform-origin: 48px 50px; }
+.gp-being .gp-heart { transform-origin: 48px 50px; }
 .gp-heart { transform-origin: 48px 49px; }
 .gp-spark { transform-origin: 77px 21px; }
 .gp-thread { stroke-dasharray: 5 4; }
@@ -298,6 +299,7 @@ h1 {
 .gomen-pic.is-awake .gp-heart { animation: gp-pulse 0.9s ease-in-out 3; }
 .gomen-pic.is-awake .gp-patrol { animation: gp-patrol 2.4s ease-in-out 1; }
 .gomen-pic.is-awake .gp-dash { animation: gp-spin 6s linear infinite; }
+.gomen-pic.is-awake .gp-people { animation: gp-spin 9s linear infinite; }
 .gomen-pic.is-awake .gp-spark { animation: gp-pulse 0.8s ease-in-out 3; }
 @media (hover: hover) and (pointer: fine) {
   .gomen-pic:hover .gp-turn { animation: gp-turn 1.2s ease-in-out infinite; }
@@ -307,6 +309,8 @@ h1 {
   .gomen-pic:hover .gp-thread { animation: gp-weave 0.9s linear infinite; }
   .gomen-pic:hover .gp-patrol { animation: gp-patrol 3s ease-in-out infinite alternate; }
   .gomen-pic:hover .gp-dash { animation: gp-spin 6s linear infinite; }
+  .gomen-pic:hover .gp-people { animation: gp-spin 12s linear infinite; }
+  .gomen-pic:hover .gp-being .gp-heart, .gomen-pic:hover .gp-heart { animation: gp-pulse 1.2s ease-in-out infinite; }
 }
 @keyframes gp-turn { 0%, 100% { transform: rotate(0); } 30% { transform: rotate(-8deg); } 70% { transform: rotate(8deg); } }
 @keyframes gp-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.18); opacity: 0.7; } }
@@ -340,15 +344,9 @@ h1 {
 .equation-prime, .equation-main { font-family: var(--mono); color: var(--gold-2); letter-spacing: 0.04em; }
 .equation-prime { font-size: 1.22em; font-weight: 700; margin-bottom: 6px; }
 .equation-main { font-size: 1em; font-weight: 600; }
-.seed-phrase { margin-top: 12px; }
-.seed-phrase summary {
-  cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 8px;
-  font-size: 0.78em; color: var(--ink-2);
-}
-.seed-phrase summary::-webkit-details-marker { display: none; }
-.seed-phrase summary::before { content: '›'; color: var(--gold); transition: transform 0.2s; }
-.seed-phrase[open] summary::before { transform: rotate(90deg); }
-.seed-phrase p { margin-top: 10px; font-family: var(--mono); font-size: 0.92em; line-height: 1.9; color: var(--ink-2); }
+.seed-phrase { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.seed-phrase-label { display: block; font-size: 0.78em; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-2); }
+.seed-phrase p { margin-top: 8px; font-family: var(--mono); font-size: 0.95em; line-height: 1.85; color: var(--ink); }
 .equation-live { color: var(--gold-2); }
 
 /* ── Wayfinder ── */
