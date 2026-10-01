@@ -1,15 +1,33 @@
-// Layered hero parallax.
-// Desktop: cursor-driven drift (as before).
-// Touch / mobile: scroll-driven depth + device tilt where available,
-// so the hero is alive on every device — previously mouse-only.
+// Layered hero parallax. The painting is the page's fixed background: the
+// content scrolls up over it, and as it does the layers sink at their own
+// depths while a veil of ground colour rises over them (--sink, 0 → 1 over
+// the first screen), handing the background over to the automata.
+// Desktop: cursor drift while the cover is in view. Touch: scroll depth and
+// device tilt where available.
 
 const DEPTHS = [1, 5, 20, 50, 8];
 const SCALES = [1, 1, 1, 1.05, 1];
 
+function trackSink() {
+  const root = document.documentElement;
+  let ticking = false;
+  const set = () => {
+    ticking = false;
+    const p = Math.min(1, Math.max(0, window.scrollY / (window.innerHeight || 1)));
+    root.style.setProperty('--sink', p.toFixed(3));
+  };
+  window.addEventListener('scroll', () => {
+    if (!ticking) { ticking = true; requestAnimationFrame(set); }
+  }, { passive: true });
+  set();
+}
+
 export function initParallax() {
+  // The veil is a fade, not motion: it runs under reduced motion too
+  trackSink();
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
-  const hero = document.querySelector('.hero');
+  const hero = document.querySelector('.cover') || document.querySelector('.hero');
   const frame = document.querySelector('.hero-image-frame');
   const images = document.querySelectorAll('.hero-images img');
   if (!hero || images.length === 0) return;
@@ -63,7 +81,7 @@ export function initParallax() {
     scrollTicking = true;
     requestAnimationFrame(() => {
       scrollTicking = false;
-      const frameH = (frame || hero).offsetHeight || 1;
+      const frameH = window.innerHeight || (frame || hero).offsetHeight || 1;
       scrollProgress = Math.min(1, Math.max(0, window.scrollY / frameH));
       schedule();
     });

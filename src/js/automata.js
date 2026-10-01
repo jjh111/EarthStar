@@ -1,31 +1,27 @@
-// The ground beneath the page: a Rule 30 cascade slowly accreting up the
-// viewport, cells inked in the theme's gold at reading-safe opacity — the
-// one automaton that is always running. Static under reduced motion,
-// paused in hidden tabs, re-seeded when the theme changes.
+// The ground beneath the page: an elementary automaton slowly accreting up the
+// viewport, cells inked in the theme's gold — the one automaton that is always
+// running. It grows whatever the visitor last planted in the seedbed (rule and
+// seed), else Rule 30 from one random cell. Static under reduced motion,
+// paused in hidden tabs, re-seeded when the theme or the planting changes.
+
+import { step as ruleStep, sown } from './rule.js';
 
 const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const CELL = 4;           // px per cell (3px cell + 1px breath)
-const RULE = 30;
-const STEP_FRAMES = 5;    // one generation every N frames — slow accretion
-const HOLD_FRAMES = 240;  // rest at the top before reseeding
+const STEP_FRAMES = 2;    // one generation every N frames
+const HOLD_FRAMES = 420;  // rest, fully grown, before reseeding
 const TOP_FADE = 0.55;    // cells thin out toward the top of the viewport
 
-function rulebit(l, c, r) {
-  return (RULE >> ((l << 2) | (c << 1) | r)) & 1;
-}
-
-function step(row, cols) {
-  const next = new Uint8Array(cols);
-  for (let c = 0; c < cols; c++) {
-    next[c] = rulebit(row[(c - 1 + cols) % cols], row[c], row[(c + 1) % cols]);
-  }
-  return next;
-}
+const step = (row) => ruleStep(row, sown.rule);
 
 function seedRow(cols) {
   const row = new Uint8Array(cols);
-  row[Math.floor(Math.random() * cols)] = 1;
+  if (sown.seed && sown.seed.length) {
+    for (const f of sown.seed) row[Math.min(cols - 1, Math.floor(f * cols))] = 1;
+  } else {
+    row[Math.floor(Math.random() * cols)] = 1;
+  }
   return row;
 }
 
@@ -60,12 +56,16 @@ export function initAutomata() {
     const a = alphaFor(i);
     ctx.fillStyle = `rgba(${cellR},${cellG},${cellB},${a.toFixed(3)})`;
     const y = h - (i + 1) * CELL;
+    // Each new generation replaces the old one in its band: the ground is
+    // never empty, and a new seed arrives as a wave sweeping up the page
+    ctx.clearRect(0, y, w, CELL);
     for (let c = 0; c < cols; c++) {
       if (data[c]) ctx.fillRect(c * CELL, y, CELL - 1, CELL - 1);
     }
   }
 
   function size() {
+    if (window.innerWidth === w && Math.abs(window.innerHeight - h) < 120 && row) return false;
     w = window.innerWidth;
     h = window.innerHeight;
     const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
@@ -75,6 +75,7 @@ export function initAutomata() {
     cols = Math.ceil(w / CELL);
     rows = Math.ceil(h / CELL) + 1;
     reseed();
+    return true;
   }
 
   function reseed() {
@@ -82,7 +83,6 @@ export function initAutomata() {
     rowIndex = 0;
     hold = 0;
     frame = 0;
-    ctx.clearRect(0, 0, w, h);
   }
 
   // Full cascade in one pass — for reduced motion and after resizes
@@ -91,7 +91,7 @@ export function initAutomata() {
     let r = row;
     for (let i = 0; i < rows; i++) {
       paintRow(r, i);
-      r = step(r, cols);
+      r = step(r);
     }
   }
 
@@ -103,7 +103,7 @@ export function initAutomata() {
       if (hold === 0) reseed(); // a new seed, the field grows again
     } else if (frame % STEP_FRAMES === 0) {
       paintRow(row, rowIndex);
-      row = step(row, cols);
+      row = step(row);
       rowIndex++;
       if (rowIndex >= rows) hold = HOLD_FRAMES;
     }
@@ -125,17 +125,19 @@ export function initAutomata() {
     }
   }
 
+  // Arrive to a ground already grown; it rests, then regrows from its seed
   readTheme();
   size();
-  if (REDUCED_MOTION) renderFull();
-  else start();
+  renderFull();
+  if (!REDUCED_MOTION) { hold = HOLD_FRAMES; start(); }
 
   let resizeTimer = null;
   window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
-      size();
-      if (REDUCED_MOTION) renderFull();
+      // A phone's URL bar resizes the viewport on every scroll; only a real
+      // change of shape re-seeds the ground
+      if (size()) { renderFull(); if (!REDUCED_MOTION) hold = HOLD_FRAMES; }
     }, 200);
   });
 
@@ -146,6 +148,13 @@ export function initAutomata() {
 
   document.addEventListener('earthstar:theme', () => {
     readTheme();
+    reseed();
+    renderFull();
+    if (!REDUCED_MOTION) hold = HOLD_FRAMES;
+  });
+
+  // The seedbed was planted: the ground starts over from the visitor's seed
+  document.addEventListener('earthstar:sown', () => {
     reseed();
     if (REDUCED_MOTION) renderFull();
   });

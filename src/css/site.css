@@ -25,7 +25,8 @@
   --scrim: rgba(20, 46, 29, 0.55);
   --live: #1f6b3a;          /* the one green-on-tan accent: a live reading */
   --automata-rgb: 180, 138, 14;   /* the Rule 30 ground, read by automata.js */
-  --automata-alpha: 0.13;
+  --automata-alpha: 0.26;
+  --sheet: color-mix(in srgb, var(--bg) 93%, transparent);
 
   --col: 1200px;
   --gutter: 16px;
@@ -52,7 +53,7 @@
     --scrim: rgba(8, 20, 12, 0.6);
     --live: #ffe9a8;
     --automata-rgb: 233, 185, 44;
-    --automata-alpha: 0.15;
+    --automata-alpha: 0.3;
   }
 }
 :root[data-theme="dark"] {
@@ -70,7 +71,7 @@
   --scrim: rgba(8, 20, 12, 0.6);
   --live: #ffe9a8;
   --automata-rgb: 233, 185, 44;
-  --automata-alpha: 0.15;
+  --automata-alpha: 0.3;
 }
 
 /* ── Base ── */
@@ -78,7 +79,11 @@
 /* The root paints the ground so the automata canvas (z-index -1) can sit
    above it and beneath every word */
 html { background: var(--bg); }
-#bgAutomaton { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: -1; pointer-events: none; }
+#bgAutomaton {
+  position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: -1; pointer-events: none;
+  /* faint over the painting, full strength once the painting has sunk */
+  opacity: calc(0.4 + var(--sink, 0) * 0.6);
+}
 body {
   font-family: var(--sans);
   background: transparent;
@@ -117,7 +122,7 @@ button { font: inherit; color: inherit; }
 .sky, .ideas, .archive { border-bottom: 1px solid var(--line); }
 
 /* Anchor jumps clear the sticky wayfinder instead of hiding under it */
-#sky, #ideas, #archive-section, #begin { scroll-margin-top: 64px; }
+#seed, #scales, #sky, #ideas, #archive-section, #begin { scroll-margin-top: 64px; }
 
 .section-label {
   display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px;
@@ -157,20 +162,44 @@ button { font: inherit; color: inherit; }
 .link-btn-jewel { border: 0; padding: 6px 0; font-size: 0.72em; color: var(--ink-3); letter-spacing: 0.18em; }
 .link-btn-jewel:hover { color: var(--ink); }
 
-/* ── Hero ── */
-.hero { position: relative; width: 100%; background: var(--bg); }
-.hero-image-frame { position: relative; width: 100%; height: 88vh; overflow: hidden; background: #0e2117; }
-.hero-images { position: absolute; inset: 0; }
+/* ── The painting: the page's fixed ground ──
+   Five layers held behind everything. Content scrolls over it; a veil of the
+   ground colour rises with --sink (0 at the top, 1 one screen down) so that
+   by the time you are reading, the automata own the background. */
+.hero { position: fixed; inset: 0; z-index: -2; height: 100vh; height: 100lvh; pointer-events: none; }
+.hero-image-frame { position: absolute; inset: 0; overflow: hidden; background: #0e2117; }
+.hero-images { position: absolute; inset: -4% 0; }
 .hero-images img {
   position: absolute; top: 0; left: 0; width: 100%; height: 100%;
   object-fit: cover; transform: translate3d(0, 0, 0); will-change: transform; backface-visibility: hidden;
   transition: filter 3s ease;
 }
-/* The artwork settles into the page's ground */
-.hero-image-frame::after {
-  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 200px; z-index: 2; pointer-events: none;
-  background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--bg) 55%, transparent) 55%, var(--bg));
+.hero-veil { position: absolute; inset: 0; z-index: 7; background: var(--bg); opacity: calc(var(--sink, 0) * 0.9); }
+
+/* ── The cover: one screen of painting, a title, an invitation ── */
+.cover {
+  position: relative; min-height: 100vh; min-height: 100svh;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  padding: 0 var(--pad-x) clamp(36px, 8vh, 80px);
+  color: #f3ead2;
 }
+.cover::before {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 55%; pointer-events: none;
+  background: linear-gradient(to top, rgba(8, 20, 12, 0.72), rgba(8, 20, 12, 0.35) 45%, transparent);
+}
+.cover-title { position: relative; max-width: var(--col); width: 100%; margin: 0 auto; }
+.cover h1 { color: #f6eed8; }
+.cover .subtitle { color: #e9cf86; }
+.cover .tagline { color: rgba(243, 234, 210, 0.82); }
+.cover-cue {
+  display: inline-flex; align-items: center; gap: 10px; margin-top: 4px;
+  font-family: var(--sans); font-size: 0.74em; font-weight: 600; letter-spacing: 0.24em; text-transform: uppercase;
+  color: #f3ead2; text-decoration: none; padding: 10px 0; border-bottom: 1px solid rgba(233, 185, 44, 0.6);
+}
+.cover-cue span { color: #e9b92c; display: inline-block; animation: cue 2.4s ease-in-out infinite; }
+.cover-cue:hover { border-bottom-color: #e9b92c; }
+@keyframes cue { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(4px); } }
+
 .logo-hero { position: absolute; top: 20px; left: 20px; z-index: 10; max-width: 150px; height: auto; opacity: 0.92; }
 
 /* The door to The Viewer sits on the painting, so it keeps the painting's light */
@@ -187,14 +216,117 @@ button { font: inherit; color: inherit; }
 .hero-link:hover, .hero-link:focus-visible { background: rgba(8, 20, 12, 0.8); border-color: #e9b92c; }
 .hero-link-arrow { display: inline-block; }
 
-.hero-content { position: relative; z-index: 5; max-width: var(--col); margin: 0 auto; padding: 28px var(--pad-x) 36px; }
 h1 {
-  font-size: clamp(2.375rem, 0.5rem + 4.6vw, 4rem);
+  font-size: clamp(2.6rem, 0.5rem + 6vw, 5.2rem);
   font-weight: 400; letter-spacing: 0.12em; text-transform: uppercase;
-  line-height: 1.05; margin-bottom: 6px;
+  line-height: 1.02; margin-bottom: 8px;
 }
 .subtitle { font-size: 0.74em; font-weight: 600; letter-spacing: 0.4em; color: var(--ink-2); margin-bottom: 4px; }
-.tagline { font-family: var(--serif); font-style: italic; font-size: 1.25em; color: var(--ink-3); margin-bottom: 1.2em; }
+.tagline { font-family: var(--serif); font-style: italic; font-size: 1.3em; color: var(--ink-3); margin-bottom: 1em; }
+
+/* ── The funnel: stages on sheets, windows between them ──
+   The first three stages are separate sheets with a window of ground between
+   each, where the automata show through. The depth below is one sheet. */
+.stage, .depth { background: var(--sheet); }
+.stage { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.depth { border-top: 1px solid var(--line); }
+.window { height: clamp(96px, 28vh, 300px); }
+.stage-inner { max-width: var(--col); margin: 0 auto; padding: 40px var(--pad-x) 44px; }
+.stage-no {
+  font-family: var(--serif); font-size: 2.1em; font-weight: 500; letter-spacing: 0; text-transform: none;
+  color: var(--gold-2); line-height: 0.6; margin-right: 2px;
+}
+.stage-lede { max-width: 68ch; font-size: 1.02em; color: var(--ink-2); margin: -4px 0 24px; }
+.stage-lede strong { color: var(--ink); font-weight: 600; }
+
+/* I · the seed: the card and the bed side by side */
+.seed-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 900px) { .seed-grid { grid-template-columns: 1fr; } }
+.seed-grid .seed { max-width: none; }
+
+.seedbed { margin: 0; }
+.seedbed-frame {
+  position: relative; aspect-ratio: 16 / 10; cursor: crosshair;
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden;
+}
+#seedbed { display: block; width: 100%; height: 100%; }
+.seedbed-hint {
+  position: absolute; right: 10px; bottom: 8px; pointer-events: none;
+  font-family: var(--mono); font-size: 0.68em; letter-spacing: 0.14em; color: var(--ink-3);
+  background: var(--bg-2); padding: 2px 6px;
+}
+.seedbed-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+.seedbed-sep { width: 1px; height: 22px; background: var(--line); margin: 0 4px; }
+.seedbed-note { font-family: var(--serif); font-style: italic; font-size: 1.08em; color: var(--ink); margin-top: 10px; min-height: 1.6em; }
+.seedbed-why { font-size: 0.82em; color: var(--ink-2); margin-top: 6px; max-width: 62ch; }
+
+/* II · five scales, and the Gomens that tend them */
+.scale-row { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--gutter); }
+@media (max-width: 1000px) { .scale-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } .scale:last-child { grid-column: 1 / -1; } }
+.scale {
+  display: flex; flex-direction: column; gap: 6px; padding: 14px 16px 16px;
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius);
+}
+.scale-name { font-size: 0.66em; font-weight: 600; letter-spacing: 0.26em; text-transform: uppercase; color: var(--ink-2); }
+.gomen-pic {
+  position: relative; display: block; width: 100%; max-width: 150px; aspect-ratio: 1; margin: 2px auto 4px;
+  background: none; border: 0; padding: 0; color: var(--ink); cursor: pointer;
+}
+.gomen-pic:focus-visible { outline-offset: 2px; }
+.gomen-svg { display: block; width: 100%; height: 100%; }
+.gomen-name { font-family: var(--serif); font-size: 1.18em; font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: 8px; }
+.gomen-line { font-size: 0.86em; line-height: 1.6; color: var(--ink-2); }
+.scale-live { margin-top: auto; padding-top: 4px; font-size: 0.8em; color: var(--ink); text-decoration-color: var(--gold); text-underline-offset: 3px; }
+.gomen-say {
+  position: absolute; left: 50%; top: -16px; transform: translate(-50%, 4px); white-space: nowrap; pointer-events: none;
+  font-family: var(--serif); font-style: italic; font-size: 0.86rem; color: var(--ink);
+  background: var(--bg); border: 1px solid var(--gold); border-radius: var(--radius); padding: 1px 8px;
+  opacity: 0; transition: opacity 0.25s, transform 0.25s;
+}
+.gomen-pic.is-awake .gomen-say { opacity: 1; transform: translate(-50%, 0); }
+
+/* pictogram parts: ink lines, gold for what is caught, woven, or alive */
+.gomen-svg .gp-faint { opacity: 0.45; }
+.gomen-svg .gp-gold { stroke: var(--gold); }
+.gomen-svg path.gp-gold[d$="z"], .gomen-svg path.gp-gold[d$="Z"], .gomen-svg .gp-heart { fill: var(--gold); }
+.gomen-svg .gp-nodes { fill: var(--bg-2); }
+.gomen-svg .gp-beep { font-family: var(--mono); font-size: 8px; fill: var(--gold); stroke: none; opacity: 0; transition: opacity 0.2s; }
+.gomen-svg .gp-q { font-family: var(--serif); font-style: italic; font-size: 34px; fill: currentColor; stroke: none; }
+.gomen-svg g, .gomen-svg path, .gomen-svg circle { transform-box: view-box; }
+.gp-turn { transform-origin: 48px 60px; }
+.gp-claw { transform-origin: 66px 54px; }
+.gp-patrol { transform-origin: 48px 150px; }
+.gp-dash, .gp-heart { transform-origin: 48px 48px; }
+.gp-spark { transform-origin: 76px 22px; }
+.gp-thread { stroke-dasharray: 5 4; }
+
+/* waking: hover on a fine pointer, or a tap (.is-awake) anywhere */
+.gomen-pic.is-awake .gp-turn { animation: gp-turn 1.2s ease-in-out 2; }
+.gomen-pic.is-awake .gp-caught { animation: gp-pulse 0.6s ease-in-out 4; }
+.gomen-pic.is-awake .gp-scuttle { animation: gp-scuttle 0.5s steps(2) 4; }
+.gomen-pic.is-awake .gp-claw { animation: gp-snap 0.35s ease-in-out 5; }
+.gomen-pic.is-awake .gp-beep { opacity: 1; }
+.gomen-pic.is-awake .gp-thread { animation: gp-weave 0.9s linear infinite; }
+.gomen-pic.is-awake .gp-heart { animation: gp-pulse 0.9s ease-in-out 3; }
+.gomen-pic.is-awake .gp-patrol { animation: gp-patrol 2.4s ease-in-out 1; }
+.gomen-pic.is-awake .gp-dash { animation: gp-spin 6s linear infinite; }
+.gomen-pic.is-awake .gp-spark { animation: gp-pulse 0.8s ease-in-out 3; }
+@media (hover: hover) and (pointer: fine) {
+  .gomen-pic:hover .gp-turn { animation: gp-turn 1.2s ease-in-out infinite; }
+  .gomen-pic:hover .gp-scuttle { animation: gp-scuttle 0.5s steps(2) infinite; }
+  .gomen-pic:hover .gp-claw { animation: gp-snap 0.35s ease-in-out infinite; }
+  .gomen-pic:hover .gp-beep { opacity: 1; }
+  .gomen-pic:hover .gp-thread { animation: gp-weave 0.9s linear infinite; }
+  .gomen-pic:hover .gp-patrol { animation: gp-patrol 3s ease-in-out infinite alternate; }
+  .gomen-pic:hover .gp-dash { animation: gp-spin 6s linear infinite; }
+}
+@keyframes gp-turn { 0%, 100% { transform: rotate(0); } 30% { transform: rotate(-8deg); } 70% { transform: rotate(8deg); } }
+@keyframes gp-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.18); opacity: 0.7; } }
+@keyframes gp-scuttle { from { transform: translateX(-3px); } to { transform: translateX(3px); } }
+@keyframes gp-snap { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-14deg); } }
+@keyframes gp-weave { to { stroke-dashoffset: -18; } }
+@keyframes gp-patrol { 0% { transform: rotate(-9deg); } 100% { transform: rotate(9deg); } }
+@keyframes gp-spin { to { transform: rotate(360deg); } }
 
 /* The seed: a flat card; the equations are the flourish, so they are gold */
 .seed {
@@ -514,6 +646,7 @@ h1 {
 
 /* ── Footer / garden ── */
 footer {
+  margin-top: clamp(96px, 28vh, 300px); background: var(--sheet);
   padding: 56px 5% 72px; text-align: center; color: var(--ink-2);
   font-size: 0.875em; letter-spacing: 0.04em; border-top: 1px solid var(--line);
 }
@@ -594,7 +727,7 @@ footer > p { margin-top: 4px; }
 .gomen-crab-sparkle { position: absolute; bottom: 20px; left: 60%; font-size: 0.7em; animation: transientFloat 1.5s ease-out forwards; }
 
 /* The golden thread */
-.thread { position: fixed; left: 14px; top: 12vh; height: 76vh; width: 22px; z-index: 40; pointer-events: none; }
+.thread { opacity: clamp(0, calc((var(--sink, 0) - 0.55) * 3), 1); position: fixed; left: 14px; top: 12vh; height: 76vh; width: 22px; z-index: 40; pointer-events: none; }
 .thread-line { position: absolute; left: 10px; top: 0; bottom: 0; width: 1px; background: var(--line); }
 .thread-fill { width: 100%; height: 0%; background: var(--gold); box-shadow: 0 0 6px var(--gold-glow); }
 .is-animated .thread-fill { transition: height 0.25s ease-out; }
@@ -630,8 +763,7 @@ footer > p { margin-top: 4px; }
 @media (max-width: 1100px) { :root { --pad-x: 28px; } }
 @media (max-width: 768px) {
   :root { --pad-x: 16px; }
-  .hero-image-frame { height: 100vh; }
-  .hero-content { padding-top: 20px; padding-bottom: 24px; }
+  .stage-inner { padding-top: 30px; padding-bottom: 30px; }
   .seed { padding: 14px 16px 12px; }
   .equation-prime { font-size: 0.9em; }
   .sky-inner, .ideas-inner, .archive-inner, .begin-inner { padding-top: 30px; padding-bottom: 30px; }
@@ -649,10 +781,11 @@ footer > p { margin-top: 4px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .emoji-persistent, .emoji-transient, .butterfly-living, .constellation-line, .gomen-crab-body,
-  .emoji-footer.new, .emoji-footer.tree, .sky-value { animation: none !important; }
+  .emoji-footer.new, .emoji-footer.tree, .sky-value, .cover-cue span,
+  .gomen-svg *, .gomen-pic * { animation: none !important; }
   .constellation-line { stroke-dashoffset: 0; }
   .hero-images img, .hero-image-frame::before, .thread-fill, .thread-knot, .idea, .chip, .archive-card,
-  .emoji-footer, .coherence-meter-fill { transition: none !important; }
+  .emoji-footer, .coherence-meter-fill, .gomen-say { transition: none !important; }
   .emoji-footer:hover { transform: none; }
 }
 

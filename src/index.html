@@ -32,9 +32,10 @@
   <script defer src="assets/js/main.js"></script>
 </head>
 <body id="top">
-  <canvas id="bgAutomaton" aria-hidden="true"></canvas>
-  <a class="skip-link" href="#main">Skip to content</a>
-  <header class="hero">
+  <!-- The painting is the page's ground: fixed, behind everything. A veil of
+       ground colour rises over it as you scroll (--sink), and the automaton
+       canvas above it takes over. Content scrolls over both. -->
+  <div class="hero" aria-hidden="true">
     <div class="hero-image-frame">
       <div class="hero-images">
         <picture>
@@ -65,16 +66,56 @@
           <img src="assets/img/4-glimmer-1440.webp" width="3000" height="2143" decoding="async" alt="">
         </picture>
       </div>
-      <a class="hero-link" href="/viewer/" target="_blank" rel="noopener">
-        <span class="visually-hidden">Open The Viewer, the live space-weather platform, in a new tab</span>
-        <span aria-hidden="true">The Viewer <em>live space weather</em> <span class="hero-link-arrow">↗</span></span>
-      </a>
-      <img src="assets/img/logo-480.webp" width="480" height="196" decoding="async" alt="Earth Star logo" class="logo-hero" fetchpriority="high">
+      <div class="hero-veil"></div>
     </div>
-    <div class="hero-content">
+  </div>
+  <canvas id="bgAutomaton" aria-hidden="true"></canvas>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="cover">
+    <img src="assets/img/logo-480.webp" width="480" height="196" decoding="async" alt="Earth Star logo" class="logo-hero" fetchpriority="high">
+    <a class="hero-link" href="/viewer/" target="_blank" rel="noopener">
+      <span class="visually-hidden">Open The Viewer, the live space-weather platform, in a new tab</span>
+      <span aria-hidden="true">The Viewer <em>live space weather</em> <span class="hero-link-arrow">↗</span></span>
+    </a>
+    <div class="cover-title">
       <h1>Earth Star</h1>
       <p class="subtitle">Regenerative Intelligence System</p>
       <p class="tagline">the butterfly stirs in the heart of empire</p>
+      <a class="cover-cue" href="#seed"><span aria-hidden="true">↓</span> plant the seed</a>
+    </div>
+  </header>
+
+<nav class="wayfinder" aria-label="Site">
+  <a class="wf-mark" href="#top" aria-label="Top of page">✦</a>
+  <div class="wf-search">
+    <label class="visually-hidden" for="siteSearch">Search ideas and documents</label>
+    <span class="wf-field">
+      <input type="search" id="siteSearch" class="wf-input" placeholder="search ideas, documents…" autocomplete="off" spellcheck="false">
+      <span class="wf-key" aria-hidden="true">/</span>
+    </span>
+    <span id="search-status" class="wf-status" aria-live="polite"></span>
+  </div>
+  <div class="wf-links">
+    <a href="#seed">Seed</a>
+    <a href="#scales">Scales</a>
+    <a href="#sky">Sky</a>
+    <a href="#ideas">Ideas</a>
+    <a href="#archive-section">Archive</a>
+    <a href="#begin">Out</a>
+    <a class="wf-viewer" href="/viewer/">The Viewer <span aria-hidden="true">↗</span></a>
+    <button type="button" class="wf-theme" id="themeToggle" aria-label="Switch to dark theme" title="Day / night">
+      <span class="t-light" aria-hidden="true">☾</span><span class="t-dark" aria-hidden="true">☀</span>
+    </button>
+  </div>
+</nav>
+
+<main id="main">
+
+<section id="seed" class="stage seed-stage" data-thread="Seed">
+  <div class="stage-inner">
+    <h2 class="section-label"><span class="stage-no">I</span> The seed <span class="section-sub">one cell, one rule; the rest is growth</span></h2>
+    <div class="seed-grid">
       <div class="seed">
         <div class="seed-copy-wrap">
           <div class="seed-body">
@@ -93,35 +134,90 @@
           </button>
         </div>
       </div>
+      <figure class="seedbed">
+        <div class="seedbed-frame">
+          <canvas id="seedbed" role="img" aria-label="A cellular automaton growing from one planted cell"></canvas>
+          <span class="seedbed-hint" aria-hidden="true">tap to plant</span>
+        </div>
+        <figcaption>
+          <div class="seedbed-controls" role="group" aria-label="Choose a rule">
+            <button type="button" class="chip" data-rule="30" aria-pressed="true">Rule 30</button>
+            <button type="button" class="chip" data-rule="90" aria-pressed="false">Rule 90</button>
+            <button type="button" class="chip" data-rule="110" aria-pressed="false">Rule 110</button>
+            <span class="seedbed-sep" aria-hidden="true"></span>
+            <button type="button" class="chip" id="seedbed-one">one seed</button>
+            <button type="button" class="chip" id="seedbed-scatter">scatter</button>
+          </div>
+          <p class="seedbed-note" id="seedbed-note" aria-live="polite"></p>
+          <p class="seedbed-why"><span class="badge" title="Empirical — mathematical fact">E</span> Each cell looks only at itself and its two neighbours. Nothing plans the whole. The pattern is grown, not imposed, which is the seed equation’s claim about coherence.</p>
+        </figcaption>
+      </figure>
     </div>
-  </header>
-
-<nav class="wayfinder" aria-label="Site">
-  <a class="wf-mark" href="#top" aria-label="Top of page">✦</a>
-  <div class="wf-search">
-    <label class="visually-hidden" for="siteSearch">Search ideas and documents</label>
-    <span class="wf-field">
-      <input type="search" id="siteSearch" class="wf-input" placeholder="search ideas, documents…" autocomplete="off" spellcheck="false">
-      <span class="wf-key" aria-hidden="true">/</span>
-    </span>
-    <span id="search-status" class="wf-status" aria-live="polite"></span>
   </div>
-  <div class="wf-links">
-    <a href="#sky">Sky</a>
-    <a href="#ideas">Ideas</a>
-    <a href="#archive-section">Archive</a>
-    <a href="#begin">Links out</a>
-    <a class="wf-viewer" href="/viewer/">The Viewer <span aria-hidden="true">↗</span></a>
-    <button type="button" class="wf-theme" id="themeToggle" aria-label="Switch to dark theme" title="Day / night">
-      <span class="t-light" aria-hidden="true">☾</span><span class="t-dark" aria-hidden="true">☀</span>
-    </button>
-  </div>
-</nav>
+</section>
 
-<main id="main">
-<section id="sky" class="sky" data-thread="Sky">
+<div class="window" aria-hidden="true"></div>
+
+<section id="scales" class="stage scales-stage" data-thread="Scales">
+  <div class="stage-inner">
+    <h2 class="section-label"><span class="stage-no">II</span> Five scales <span class="section-sub">and what tends each</span></h2>
+    <p class="stage-lede">Heal one scale and the pattern echoes through the rest. The things drawn below are <strong>Gomens</strong>: waste-eating agents imagined from fungus, bacteria and necessity. Every one is a design, not yet a device, and each is designed to apologise before it helps. Wake one.</p>
+    <ol class="scale-row">
+      <li class="scale" id="scale-body">
+        <span class="scale-name">Body</span>
+        <button type="button" class="gomen-pic" aria-pressed="false" aria-label="Wake the Antibody Gomens">
+          <!--BUILD:GOMEN antibody-->
+          <span class="gomen-say" aria-hidden="true">gomen’nasai</span>
+        </button>
+        <span class="gomen-name">Antibody Gomens <span class="badge" title="Design — proposal, not built hardware">D</span></span>
+        <p class="gomen-line">Designed to clear microplastic from the blood, one strand at a time.</p>
+      </li>
+      <li class="scale" id="scale-biome">
+        <span class="scale-name">Biome</span>
+        <button type="button" class="gomen-pic" aria-pressed="false" aria-label="Wake the Crab-Gomens">
+          <!--BUILD:GOMEN crab-->
+          <span class="gomen-say" aria-hidden="true">gomen’nasai</span>
+        </button>
+        <span class="gomen-name">Crab-Gomens <span class="badge" title="Design — proposal, not built hardware">D</span></span>
+        <p class="gomen-line">Iridescent, sideways, polite. Hand one a bottle cap and it beeps.</p>
+      </li>
+      <li class="scale" id="scale-being">
+        <span class="scale-name">Being</span>
+        <button type="button" class="gomen-pic" aria-pressed="false" aria-label="An undrawn Gomen: what would you draw?">
+          <!--BUILD:GOMEN undrawn-->
+          <span class="gomen-say" aria-hidden="true">draw me?</span>
+        </button>
+        <span class="gomen-name">Not yet drawn</span>
+        <p class="gomen-line">The taxonomy names emotional waste: grief no one has processed. Its Gomen has no drawing yet. What would you draw?</p>
+      </li>
+      <li class="scale" id="scale-network">
+        <span class="scale-name">Network</span>
+        <button type="button" class="gomen-pic" aria-pressed="false" aria-label="Wake the Weavers">
+          <!--BUILD:GOMEN weaver-->
+          <span class="gomen-say" aria-hidden="true">gomen’nasai</span>
+        </button>
+        <span class="gomen-name">Weavers <span class="badge" title="Design — proposal, not built hardware">D</span></span>
+        <p class="gomen-line">They connect what was isolated, so supply chains circulate instead of piling up.</p>
+      </li>
+      <li class="scale" id="scale-star">
+        <span class="scale-name">Star</span>
+        <button type="button" class="gomen-pic" aria-pressed="false" aria-label="Wake the Orbital Gomens">
+          <!--BUILD:GOMEN orbital-->
+          <span class="gomen-say" aria-hidden="true">gomen’nasai</span>
+        </button>
+        <span class="gomen-name">Orbital Gomens <span class="badge" title="Design — proposal, not built hardware">D</span></span>
+        <p class="gomen-line">On patrol in low orbit, gathering debris before it gathers itself.</p>
+        <a class="scale-live" href="#sky">the star scale, live ↓</a>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<div class="window" aria-hidden="true"></div>
+
+<section id="sky" class="stage sky" data-thread="Sky">
   <div class="sky-inner">
-    <h2 class="section-label">Sky now <span class="section-sub">live space weather, measured by NOAA</span></h2>
+    <h2 class="section-label"><span class="stage-no">III</span> Sky now <span class="section-sub">the star scale, measured this minute by NOAA</span></h2>
     <p class="sky-sentence" id="sky-sentence" aria-live="polite">Reading the sky…</p>
     <div class="sky-grid" id="sky-now">
       <div class="sky-tile" id="sky-kp" data-state="loading" role="group" aria-label="Planetary K index">
@@ -162,9 +258,10 @@
   </div>
 </section>
 
+<div class="depth">
 <section id="ideas" class="ideas" data-thread="Ideas">
   <div class="ideas-inner">
-    <h2 class="section-label">Ideas <span class="section-sub">the whole framework, one card each</span></h2>
+    <h2 class="section-label"><span class="stage-no">IV</span> Ideas <span class="section-sub">the whole framework, one card each</span></h2>
     <div class="ideas-bar">
       <div class="ideas-lenses" id="ideas-lenses" role="group" aria-label="Filter ideas by lens"><!--BUILD:IDEAS_LENSES--></div>
       <span class="ideas-count" id="ideas-count"></span>
@@ -177,14 +274,14 @@
 
 <section id="archive-section" class="archive" data-thread="Archive">
   <div class="archive-inner">
-    <h2 class="section-label">Archive <span class="section-sub">the documents</span></h2>
+    <h2 class="section-label"><span class="stage-no">V</span> Archive <span class="section-sub">the documents beneath</span></h2>
     <div class="archive-grid" id="archiveGrid"><!--BUILD:ARCHIVE_GRID--></div>
   </div>
 </section>
 
-<section id="begin" class="begin" data-thread="Links out">
+<section id="begin" class="begin" data-thread="Out">
   <div class="begin-inner">
-    <h2 class="section-label">Begin the tending <span class="section-sub">where to go from here</span></h2>
+    <h2 class="section-label"><span class="stage-no">VI</span> Links out <span class="section-sub">where it leads</span></h2>
     <div class="links">
       <a href="https://earthstar111.substack.com" class="link-btn btn-readmore" target="_blank" rel="noopener">Read the Writings</a>
       <a href="https://ko-fi.com/earthstar111" class="link-btn btn-stickers" target="_blank" rel="noopener">Stickers</a>
@@ -202,6 +299,7 @@
     </ul>
   </div>
 </section>
+</div>
 </main>
 
 <nav id="thread" class="thread" aria-label="Page sections">

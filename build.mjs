@@ -107,6 +107,13 @@ html = html.replace('<!--BUILD:IDEAS_GRID-->', ideasGrid);
 html = html.replace('<!--BUILD:IDEAS_LENSES-->', ideasLenses);
 html = html.replace('<!--BUILD:REGISTER_LEGEND-->', registerLegend);
 
+// Gomen pictograms: inlined so they take the page's ink and gold (currentColor
+// and theme tokens), and copied to assets/ so the Viewer can use the same files
+html = html.replace(/<!--BUILD:GOMEN ([a-z-]+)-->/g, (_, name) =>
+  readFileSync(p(`src/img/gomens/${name}.svg`), 'utf8').trim());
+mkdirSync(p('assets/img/gomens'), { recursive: true });
+cpSync(p('src/img/gomens'), p('assets/img/gomens'), { recursive: true });
+
 // Mock fixture for ?mock=1 and tests — never consulted by the live path
 mkdirSync(p('assets/data'), { recursive: true });
 cpSync(p('src/data/now.mock.json'), p('assets/data/now.mock.json'));
