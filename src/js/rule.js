@@ -1,12 +1,6 @@
 // Elementary cellular automata: one row of cells, each next cell decided by
 // itself and its two neighbours through an 8-entry rule (Wolfram numbering).
-// Shared by the seedbed you play with and the ground beneath the page.
-
-export const RULES = {
-  30: 'chaos from one cell',
-  90: 'the same triangle at every scale',
-  110: 'rich enough to compute anything',
-};
+// Used by the ground beneath the page.
 
 export function step(row, rule) {
   const cols = row.length;
@@ -17,7 +11,3 @@ export function step(row, rule) {
   }
   return next;
 }
-
-// Current rule and seed, so a ground that reseeds itself uses what the
-// visitor planted rather than forgetting it
-export const sown = { rule: 30, seed: null }; // seed: fractions 0..1 of lit columns

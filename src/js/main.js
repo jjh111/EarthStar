@@ -9,14 +9,12 @@ import { initThread } from './thread.js';
 import { initTheme } from './theme.js';
 import { initAutomata } from './automata.js';
 import { initSeedCopy } from './seed-copy.js';
-import { initSeedbed } from './seedbed.js';
 import { initGomens } from './gomens.js';
 
 // Theme and time-of-day first — they change what the page looks like
 initTheme();
 initTimeOfDay();
 initSeedCopy();
-initSeedbed();
 initGomens();
 
 // Archive and ideas immediately: deep links (#doc/…, #idea/…) must resolve on load

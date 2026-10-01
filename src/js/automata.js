@@ -1,27 +1,27 @@
-// The ground beneath the page: an elementary automaton slowly accreting up the
-// viewport, cells inked in the theme's gold — the one automaton that is always
-// running. It grows whatever the visitor last planted in the seedbed (rule and
-// seed), else Rule 30 from one random cell. Static under reduced motion,
-// paused in hidden tabs, re-seeded when the theme or the planting changes.
+// The ground beneath the page: a field of elementary cellular automata, inked
+// in the theme's gold at low strength. It never empties and never stops: each
+// sweep rises up the viewport replacing the generation beneath it, with a
+// slightly brighter wavefront that settles as it passes, then the next sweep
+// begins from a new seed under the next rule. Atmosphere, not a feature.
+// Static under reduced motion, paused in hidden tabs.
 
-import { step as ruleStep, sown } from './rule.js';
+import { step } from './rule.js';
 
 const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-const CELL = 4;           // px per cell (3px cell + 1px breath)
-const STEP_FRAMES = 2;    // one generation every N frames
-const HOLD_FRAMES = 420;  // rest, fully grown, before reseeding
-const TOP_FADE = 0.55;    // cells thin out toward the top of the viewport
-
-const step = (row) => ruleStep(row, sown.rule);
+const CELL = 4;            // px per cell (3px cell + 1px breath)
+const STEP_FRAMES = 3;     // one generation every N frames
+const HOLD_FRAMES = 90;    // a breath at the top before the next sweep
+const TOP_FADE = 0.6;      // cells thin out toward the top of the viewport
+const CREST = 10;          // rows of brighter wavefront trailing the sweep
+const CREST_GAIN = 1.9;    // how much brighter the crest is
+// Rules that read as texture at this scale: chaotic, fractal, woven
+const RULES = [30, 90, 150, 110, 18, 105, 45, 126];
 
 function seedRow(cols) {
   const row = new Uint8Array(cols);
-  if (sown.seed && sown.seed.length) {
-    for (const f of sown.seed) row[Math.min(cols - 1, Math.floor(f * cols))] = 1;
-  } else {
-    row[Math.floor(Math.random() * cols)] = 1;
-  }
+  const n = 1 + Math.floor(Math.random() * 4);
+  for (let k = 0; k < n; k++) row[Math.floor(Math.random() * cols)] = 1;
   return row;
 }
 
@@ -31,37 +31,34 @@ export function initAutomata() {
   const ctx = canvas.getContext('2d');
 
   let w = 0, h = 0, cols = 0, rows = 0;
+  let rule = 30, ruleIndex = 0;
   let row = null, rowIndex = 0, hold = 0, frame = 0;
+  let crest = [];                // the last CREST rows, kept to settle them
   let rafId = null, running = false;
-  let cellR = 180, cellG = 138, cellB = 14, baseAlpha = 0.14;
+  let rgb = '180,138,14', baseAlpha = 0.2;
 
   function readTheme() {
     const s = getComputedStyle(document.documentElement);
-    const rgb = s.getPropertyValue('--automata-rgb').trim();
+    const v = s.getPropertyValue('--automata-rgb').trim();
     const a = parseFloat(s.getPropertyValue('--automata-alpha'));
-    if (rgb) {
-      const p = rgb.split(',').map((v) => parseInt(v, 10));
-      if (p.length >= 3 && p.every((n) => !Number.isNaN(n))) {
-        cellR = p[0]; cellG = p[1]; cellB = p[2];
-      }
-    }
+    if (v) rgb = v.replace(/\s+/g, '');
     if (!Number.isNaN(a) && a > 0) baseAlpha = a;
   }
 
-  function alphaFor(i) {
-    return baseAlpha * (1 - TOP_FADE * (i / rows));
+  function paintRow(data, i, gain = 1) {
+    const a = Math.min(1, baseAlpha * gain * (1 - TOP_FADE * (i / rows)));
+    const y = h - (i + 1) * CELL;
+    ctx.clearRect(0, y, w, CELL);
+    ctx.fillStyle = `rgba(${rgb},${a.toFixed(3)})`;
+    for (let c = 0; c < cols; c++) if (data[c]) ctx.fillRect(c * CELL, y, CELL - 1, CELL - 1);
   }
 
-  function paintRow(data, i) {
-    const a = alphaFor(i);
-    ctx.fillStyle = `rgba(${cellR},${cellG},${cellB},${a.toFixed(3)})`;
-    const y = h - (i + 1) * CELL;
-    // Each new generation replaces the old one in its band: the ground is
-    // never empty, and a new seed arrives as a wave sweeping up the page
-    ctx.clearRect(0, y, w, CELL);
-    for (let c = 0; c < cols; c++) {
-      if (data[c]) ctx.fillRect(c * CELL, y, CELL - 1, CELL - 1);
-    }
+  function nextSweep() {
+    ruleIndex = (ruleIndex + 1 + Math.floor(Math.random() * 2)) % RULES.length;
+    rule = RULES[ruleIndex];
+    row = seedRow(cols);
+    rowIndex = 0;
+    crest = [];
   }
 
   function size() {
@@ -74,38 +71,33 @@ export function initAutomata() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     cols = Math.ceil(w / CELL);
     rows = Math.ceil(h / CELL) + 1;
-    reseed();
     return true;
   }
 
-  function reseed() {
-    row = seedRow(cols);
-    rowIndex = 0;
-    hold = 0;
-    frame = 0;
-  }
-
-  // Full cascade in one pass — for reduced motion and after resizes
+  // The whole field at once — on arrival, after a resize or theme change,
+  // and as the only state under reduced motion
   function renderFull() {
     ctx.clearRect(0, 0, w, h);
-    let r = row;
-    for (let i = 0; i < rows; i++) {
-      paintRow(r, i);
-      r = step(r);
-    }
+    let r = seedRow(cols);
+    for (let i = 0; i < rows; i++) { paintRow(r, i); r = step(r, rule); }
   }
 
   function frameTick() {
     rafId = null;
     if (!running) return;
     if (hold > 0) {
-      hold--;
-      if (hold === 0) reseed(); // a new seed, the field grows again
+      if (--hold === 0) nextSweep();
     } else if (frame % STEP_FRAMES === 0) {
-      paintRow(row, rowIndex);
-      row = step(row);
+      paintRow(row, rowIndex, CREST_GAIN);
+      crest.push([row, rowIndex]);
+      if (crest.length > CREST) { const [r, i] = crest.shift(); paintRow(r, i); }
+      row = step(row, rule);
       rowIndex++;
-      if (rowIndex >= rows) hold = HOLD_FRAMES;
+      if (rowIndex >= rows) {
+        for (const [r, i] of crest) paintRow(r, i);  // let the crest settle
+        crest = [];
+        hold = HOLD_FRAMES;
+      }
     }
     frame++;
     rafId = requestAnimationFrame(frameTick);
@@ -119,26 +111,26 @@ export function initAutomata() {
 
   function stop() {
     running = false;
-    if (rafId !== null) {
-      cancelAnimationFrame(rafId);
-      rafId = null;
-    }
+    if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
   }
 
-  // Arrive to a ground already grown; it rests, then regrows from its seed
+  function reset() {
+    renderFull();
+    nextSweep();
+    hold = REDUCED_MOTION ? 0 : 30;
+  }
+
   readTheme();
   size();
-  renderFull();
-  if (!REDUCED_MOTION) { hold = HOLD_FRAMES; start(); }
+  reset();
+  start();
 
   let resizeTimer = null;
   window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => {
-      // A phone's URL bar resizes the viewport on every scroll; only a real
-      // change of shape re-seeds the ground
-      if (size()) { renderFull(); if (!REDUCED_MOTION) hold = HOLD_FRAMES; }
-    }, 200);
+    // A phone's URL bar resizes the viewport on every scroll; only a real
+    // change of shape redraws the field
+    resizeTimer = setTimeout(() => { if (size()) reset(); }, 200);
   });
 
   document.addEventListener('visibilitychange', () => {
@@ -146,16 +138,5 @@ export function initAutomata() {
     else start();
   });
 
-  document.addEventListener('earthstar:theme', () => {
-    readTheme();
-    reseed();
-    renderFull();
-    if (!REDUCED_MOTION) hold = HOLD_FRAMES;
-  });
-
-  // The seedbed was planted: the ground starts over from the visitor's seed
-  document.addEventListener('earthstar:sown', () => {
-    reseed();
-    if (REDUCED_MOTION) renderFull();
-  });
+  document.addEventListener('earthstar:theme', () => { readTheme(); reset(); });
 }

@@ -1,17 +1,16 @@
-<svg class="gomen-svg gp-antibody" viewBox="0 0 96 96" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" overflow="hidden">
-  <!-- the vessel: two soft walls of a blood vessel -->
-  <path class="gp-faint" d="M4 14 C30 8 66 8 92 14 M4 88 C30 94 66 94 92 88"/>
-  <!-- drifting microplastic, not yet caught -->
-  <path class="gp-gold gp-drift" d="M68 70 q4 -5 8 0 t8 0"/>
-  <path class="gp-gold gp-drift gp-drift-2" d="M10 64 l4 -3 l3 4 l-4 2 z"/>
+<svg class="gomen-svg gp-antibody" viewBox="0 0 96 96" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" overflow="hidden">
+  <!-- the vessel, and the strands drifting in it -->
+  <path class="gp-faint" d="M6 12 Q48 4 90 12 M6 86 Q48 94 90 86"/>
+  <path class="gp-gold gp-drift" d="M66 72 q3 -4 6 0 t6 0 t6 0"/>
+  <path class="gp-gold gp-drift" d="M12 70 l4 -3 l3 3 l-3 3 z"/>
   <g class="gp-turn">
-    <!-- the Y: two heavy chains joined at the hinge -->
-    <path d="M44 82 V57 L25 38 L30 33 L48 51 L66 33 L71 38 L52 57 V82 Z"/>
-    <!-- light chains alongside each arm -->
-    <path d="M32.5 52.5 L21.5 41.5 M63.5 52.5 L74.5 41.5"/>
-    <!-- hinge bonds -->
-    <path class="gp-faint" d="M46 62 H50 M46 68 H50"/>
+    <!-- heavy chains: one continuous Y -->
+    <path d="M44.5 80 V57 L27 39.5 L31.5 35 L48 51.5 L64.5 35 L69 39.5 L51.5 57 V80 Z"/>
+    <!-- light chains -->
+    <path d="M33 53 L22.5 42.5 M63 53 L73.5 42.5"/>
+    <!-- hinge -->
+    <path class="gp-faint" d="M46.5 62 H49.5 M46.5 67 H49.5"/>
     <!-- a fragment, caught at the binding site -->
-    <path class="gp-gold gp-caught" d="M19 27 L25 23 L28 29 L22 32 Z"/>
+    <path class="gp-gold gp-caught" d="M20 28 l5 -4 l4 4 l-4 4 z"/>
   </g>
 </svg>

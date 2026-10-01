@@ -246,7 +246,7 @@ function isInteractive(target) {
   return !!target.closest(
     'a, button, input, textarea, select, summary, [role="button"], ' +
     '.archive-card, .archive-panel, .archive-panel-overlay, ' +
-    '.emoji-footer, .footer-garden, .coherence-meter, .seedbed, .gomen-pic'
+    '.emoji-footer, .footer-garden, .coherence-meter, .gomen-pic'
   );
 }
 

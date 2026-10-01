@@ -206,28 +206,17 @@ async function newPage(opts = {}) {
   await page.locator('.gomen-pic').nth(1).click();
   check('a tapped gomen wakes', await page.locator('.gomen-pic.is-awake').count() === 1);
 
-  await page.locator('#seed').scrollIntoViewIfNeeded();
-  const lit = () => page.evaluate(() => {
-    const c = document.getElementById('seedbed');
+  // The ground is alive: a few seconds apart, the field is not the same picture
+  const snap = () => page.evaluate(() => {
+    const c = document.getElementById('bgAutomaton');
     const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
-    let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
-    return n;
+    let hsh = 0; for (let i = 3; i < d.length; i += 4) hsh = (hsh * 31 + d[i]) | 0;
+    return hsh;
   });
-  await page.waitForTimeout(1500);
-  const r30 = await lit();
-  check('seedbed grows', r30 > 2000, String(r30));
-  await page.locator('[data-rule="90"]').click();
-  await page.waitForTimeout(1500);
-  check('rule chip switches', await page.locator('[data-rule="90"]').getAttribute('aria-pressed') === 'true' && (await lit()) !== r30);
-  let sown = false;
-  await page.exposeFunction('__sown', () => { sown = true; });
-  await page.evaluate(() => document.addEventListener('earthstar:sown', () => window.__sown()));
-  const box = await page.locator('#seedbed').boundingBox();
-  await page.mouse.click(box.x + box.width * 0.2, box.y + 10);
-  await page.waitForTimeout(300);
-  check('tapping the bed plants a cell', /2 cells planted/.test(await page.locator('#seedbed-note').textContent()));
-  check('planting reseeds the ground', sown);
-  check('seedbed tap does not plant the garden', await page.locator('.emoji-transient').count() === 0);
+  const g1 = await snap();
+  await page.waitForTimeout(4000);
+  check('the ground keeps changing', (await snap()) !== g1);
+  check('no playable bed left on the page', await page.locator('#seedbed').count() === 0);
   await ctx.close();
 }
 
