@@ -18,9 +18,8 @@ Earth Star is a regenerative intelligence framework that combines:
 
 The website at earthstar.space serves as the public face of the project, featuring:
 - A funnel from the core to the depth: the layered painting is the page's fixed ground (cursor, scroll
-  and tilt parallax) and everything scrolls over it — I · the seed (the equations beside a playable
-  cellular automaton: plant cells, pick Rule 30 / 90 / 110, and the gold ground beneath the whole page
-  regrows from your seed), II · five scales and the Gomen that tends each (SVG pictograms in
+  and tilt parallax) and everything scrolls over it, with a field of gold cellular automata rippling
+  through the background (each sweep a new seed under a new rule) — I · the seed, II · five scales and the Gomen that tends each (SVG pictograms in
   `src/img/gomens/`, inlined at build and copied to `assets/img/gomens/`), then Sky, Ideas, Archive, links
 - **Sky now** — live space weather from the Viewer's data pool, read straight from NOAA, with honest
   loading / no data / error / stale states
