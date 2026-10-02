@@ -203,15 +203,31 @@ export function parseXrayLatestClass(json: unknown): { time: string; class: stri
   return { time, class: cls };
 }
 
-/** Full 1-day series fallback: two energy bands interleaved in one array. */
+/**
+ * A GOES XRS flux, or null. The solar X-ray background is never zero, so a
+ * flux of 0 (or below) is upstream marking a gap — most often GOES passing
+ * through Earth's shadow near the equinoxes — not a measurement. Treating it
+ * as one showed "0 W/m²" as a live reading and failed the mirror's check.
+ */
+export function xrsFlux(v: unknown): number | null {
+  const n = num(v);
+  return n !== null && n > 0 ? n : null;
+}
+
+/**
+ * Full 1-day series fallback: two energy bands interleaved in one array.
+ * Reads the newest sample that is a real measurement in each band; during a
+ * gap that is an older sample, reported with its own (older) timestamp so the
+ * staleness rules mark it honestly.
+ */
 export function parseXrayFromSeries(json: unknown): XrayNow | null {
   const rows = asArray(json);
-  const long = newestBy(rows, 'time_tag', (r) => String(r['energy']).startsWith('0.1-0.8'));
-  const short = newestBy(rows, 'time_tag', (r) => String(r['energy']).startsWith('0.05-0.4'));
+  const long = newestBy(rows, 'time_tag', (r) => String(r['energy']).startsWith('0.1-0.8') && xrsFlux(r['flux']) !== null);
+  const short = newestBy(rows, 'time_tag', (r) => String(r['energy']).startsWith('0.05-0.4') && xrsFlux(r['flux']) !== null);
   const time = swpcTime(long?.['time_tag'] as string);
   if (!long || !time) return null;
-  const fluxLong = num(long['flux']);
-  return { time, flux_long: fluxLong, flux_short: num(short?.['flux']), class: xrayClass(fluxLong) };
+  const fluxLong = xrsFlux(long['flux']);
+  return { time, flux_long: fluxLong, flux_short: xrsFlux(short?.['flux']), class: xrayClass(fluxLong) };
 }
 
 /* ---------------------------------------------------------------- *
@@ -368,7 +384,7 @@ export function parseKpSeries(json: unknown): Series {
 export function parseXraySeries(json: unknown): Series {
   const rows = asArray(json)
     .filter((r) => String(r['energy']).startsWith('0.1-0.8'))
-    .map((r) => ({ t: swpcTime(r['time_tag'] as string), v: num(r['flux']) }))
+    .map((r) => ({ t: swpcTime(r['time_tag'] as string), v: xrsFlux(r['flux']) }))  // a gap stays a gap, not a dip to zero
     .filter((r): r is { t: string; v: number | null } => r.t !== null)
     .sort((a, b) => Date.parse(a.t) - Date.parse(b.t));
   return { time: rows.map((r) => r.t), value: rows.map((r) => r.v) };

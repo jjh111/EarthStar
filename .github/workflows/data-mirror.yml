@@ -132,3 +132,19 @@ jobs:
         will be useless if NOAA goes down while this is unfixed.
 
         ${{ needs.mirror.outputs.summary }}
+
+  # The other half of the alarm: a run that succeeds closes the standing
+  # issue. Without it the issue stayed open through every good run after the
+  # first failure, and an alarm that never clears stops being read.
+  clear:
+    needs: mirror
+    if: needs.mirror.result == 'success'
+    uses: ./.github/workflows/notify.yml
+    permissions:
+      issues: write
+    secrets: inherit
+    with:
+      failing: false
+      label: data-mirror
+      title: 'Data mirror'
+      body: 'The data branch is updating again.'

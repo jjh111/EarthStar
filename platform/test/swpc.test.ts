@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   parseAlerts, parseKpNow, parseScalesNow, parseSolarWindNow, parseSolarWindSeries,
-  parseXrayFromSeries, parseXrayLatestClass, parseRegions, swpcTime, num, xrayClass,
+  parseXrayFromSeries, parseXraySeries, parseXrayLatestClass, parseRegions, swpcTime, num, xrayClass,
 } from '../src/data/swpc.js';
 
 /* Real shape: NEWEST-FIRST, three spacecraft interleaved, only one `active`. */
@@ -184,6 +184,32 @@ describe('alerts', () => {
   it('extracts the WATCH/WARNING headline rather than the message code line', () => {
     expect(parseAlerts(RAW)[0]!.headline).toBe('WATCH: Geomagnetic Storm Category G1 Predicted');
     expect(parseAlerts(RAW)[1]!.headline).toBe('WARNING: Geomagnetic K-index of 4 expected');
+  });
+});
+
+describe('X-ray during a GOES data gap', () => {
+  // Observed on the mirror around the 2026 autumn equinox: the newest
+  // 0.1-0.8 nm row carried flux 0 — upstream's gap marker — and was read as
+  // a live 0 W/m² reading.
+  const gap = [
+    { time_tag: '2026-10-02T08:40:00Z', satellite: 18, energy: '0.1-0.8nm', flux: 2.9e-7 },
+    { time_tag: '2026-10-02T08:40:00Z', satellite: 18, energy: '0.05-0.4nm', flux: 5.1e-9 },
+    { time_tag: '2026-10-02T08:41:00Z', satellite: 18, energy: '0.1-0.8nm', flux: 0 },
+    { time_tag: '2026-10-02T08:41:00Z', satellite: 18, energy: '0.05-0.4nm', flux: 0 },
+  ];
+  it('reads the newest real sample, with its own older timestamp', () => {
+    const x = parseXrayFromSeries(gap)!;
+    expect(x.flux_long).toBe(2.9e-7);
+    expect(x.flux_short).toBe(5.1e-9);
+    expect(x.time).toBe('2026-10-02T08:40:00.000Z');
+    expect(x.class).toBe('B2.9');
+  });
+  it('reports nothing rather than zero when the whole window is a gap', () => {
+    expect(parseXrayFromSeries(gap.slice(2))).toBeNull();
+  });
+  it('leaves the gap as a gap in the plotted series', () => {
+    const s = parseXraySeries(gap);
+    expect(s.value).toEqual([2.9e-7, null]);
   });
 });
 

@@ -86,7 +86,7 @@ function kpLabel(s) {
 }
 
 function xrayClass(flux) {
-  if (flux == null) return null;
+  if (flux == null || !(flux > 0)) return null;
   const bands = [['A', 1e-8], ['B', 1e-7], ['C', 1e-6], ['M', 1e-5], ['X', 1e-4]];
   let letter = 'A', base = 1e-8;
   for (const [l, b] of bands) if (flux >= b) { letter = l; base = b; }
@@ -107,7 +107,9 @@ function parse(key, data) {
       : { time: n.d, spacecraft: n.r.source, speed: num(n.r.proton_speed), density: num(n.r.proton_density) };
   }
   if (key === 'xray') {
-    const n = newest(data, 'time_tag', (r) => r.energy === '0.1-0.8nm');
+    // flux 0 is GOES's gap marker (eclipse season, dropouts), not a reading:
+    // take the newest real sample, which carries its own older timestamp
+    const n = newest(data, 'time_tag', (r) => r.energy === '0.1-0.8nm' && num(r.flux) > 0);
     if (!n) return null;
     const flux = num(n.r.flux);
     return { time: n.d, flux_long: flux, class: xrayClass(flux), satellite: n.r.satellite };
