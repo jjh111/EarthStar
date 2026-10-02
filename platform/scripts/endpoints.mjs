@@ -12,7 +12,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 export const SWPC = 'https://services.swpc.noaa.gov';
-export const DONKI = 'https://kauai.ccmc.gsfc.nasa.gov/DONKI/WS/get';
+export const DONKI = 'https://ccmc.gsfc.nasa.gov/DONKI-API/get';  // moved from https://kauai.ccmc.gsfc.nasa.gov/DONKI/WS/get on 2026-09-30
 
 function walk(dir) {
   const out = [];
@@ -78,8 +78,8 @@ export function discover(srcDir = new URL('../src/', import.meta.url).pathname) 
  * asserts they do.
  */
 export function mirrorPath(url) {
-  // DONKI by service name — browsers read it from here since it stopped
-  // sending CORS headers (src/data/fetch-json.ts mirrorUrl is the other half)
+  // DONKI by service name — the fallback if CCMC's API moves, fails or drops
+  // CORS (src/data/fetch-json.ts mirrorUrl is the other half)
   if (url.startsWith(DONKI)) {
     const service = url.slice(DONKI.length).split('?')[0];
     return service ? `donki${service}.json` : null;

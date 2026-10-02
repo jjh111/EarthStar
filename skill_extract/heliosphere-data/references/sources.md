@@ -24,7 +24,7 @@ Tier vocabulary is the Accuracy Charter's: **Measured** `[E]`, **Modeled** `[D·
 | 7 | OVATION aurora grid | `json/ovation_aurora_latest.json` | 200 | `*` | 5 min | 9.2 min obs; forecast lead 76 min | Modeled·NOAA |
 | 8 | Solar regions | `json/solar_regions.json` | 200 | `*` | daily | 17.4 h | Measured |
 | 9 | F10.7, sunspots | `json/f107_cm_flux.json`, `products/10cm-flux-30-day.json`, `json/sunspot_report.json` | 200 | `*` | 3×/day · daily | 19 h / 1.9 h | Measured |
-| 10 | DONKI CME analyses | `kauai.ccmc.gsfc.nasa.gov/DONKI/WS/get/CMEAnalysis?…` (no key) | 200 | **`*`** (plan assumed none) | hours after event | 102 min after submission; ~5 h after CME onset | Modeled·NASA |
+| 10 | DONKI CME analyses | `ccmc.gsfc.nasa.gov/DONKI-API/get/CMEAnalysis?…` (no key; moved from `kauai.ccmc.gsfc.nasa.gov/DONKI/WS/get` on 2026-09-30) | 200 | **`*`** (plan assumed none) | hours after event | 102 min after submission; ~5 h after CME onset | Modeled·NASA |
 | 10b | DONKI CME with Enlil | `…/DONKI/WS/get/CME?…` — **only this endpoint carries `enlilList`** | 200 | `*` | hours | same | Modeled·NASA |
 | 10c | `api.nasa.gov/DONKI/CMEAnalysis?…&api_key=` | 200 | `*` | hours | same | rate-limited (`x-ratelimit-limit: 10` on DEMO_KEY) | Modeled·NASA |
 | 11 | DONKI FLR / GST / notifications | `…/get/FLR`, `…/get/GST`, `…/get/notifications?type=all` | 200 | `*` | hours | 96 / — / 72 min | Measured (catalogued) |
@@ -215,7 +215,7 @@ or taken from `json/solar-cycle/` (not verified here). `region: null` occurs.
 
 ## 10. DONKI CME analyses
 
-`https://kauai.ccmc.gsfc.nasa.gov/DONKI/WS/get/CMEAnalysis?startDate=2026-08-30&endDate=2026-09-06&mostAccurateOnly=true`
+`https://ccmc.gsfc.nasa.gov/DONKI-API/get/CMEAnalysis?startDate=2026-08-30&endDate=2026-09-06&mostAccurateOnly=true`
 Fetched 2026-09-06T17:30:56Z · 200 · **`Access-Control-Allow-Origin: *`** ·
 `Cache-Control: no-cache, no-store` · 31.8 KB (43 analyses). The plan assumed no CORS on
 the kauai mirror; it is present. **Slow**: a 14-day window with `mostAccurateOnly` twice

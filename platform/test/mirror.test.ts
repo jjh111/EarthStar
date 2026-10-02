@@ -41,8 +41,7 @@ describe('the writer and the reader agree on where a copy lives', () => {
   });
 
   it('mirrors DONKI by service, query dropped, and both sides agree', () => {
-    // DONKI stopped sending CORS headers in late September 2026; the mirror
-    // is how a browser reads it now.
+    // The mirror is DONKI's fallback; CCMC moved its API once already (2026-09-30).
     const up = `${DONKI_BASE}/CMEAnalysis?startDate=2026-09-25&mostAccurateOnly=true`;
     expect(mirrorPath(up)).toBe('donki/CMEAnalysis.json');
     expect(mirrorUrl(up)).toBe(`${MIRROR_BASE}/donki/CMEAnalysis.json`);
@@ -102,7 +101,7 @@ describe.skipIf(!dir)('the app can read what the mirror wrote', () => {
   });
 
   it('carries DONKI in a form the CME parser reads', () => {
-    // Browsers can only reach DONKI through this copy since it dropped CORS.
+    // DONKI's fallback. A move like CCMC's of 2026-09-30 lands here.
     const f = join(dir!, 'donki/CMEAnalysis.json');
     expect(existsSync(f)).toBe(true);
     expect(Array.isArray(parseCmes(JSON.parse(readFileSync(f, 'utf8'))))).toBe(true);

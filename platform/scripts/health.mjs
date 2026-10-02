@@ -131,9 +131,10 @@ async function probe(url) {
     r.kb = Math.round(body.length / 1024);
     if (!res.ok) { r.problem = `HTTP ${res.status}`; return r; }
     if (!r.cors || (r.cors !== '*' && r.cors !== ORIGIN)) {
-      // DONKI withdrew its CORS header in late September 2026. Browsers now
-      // read it from the stage B mirror, so it is a warning, not a dead lane —
-      // provided the mirror actually carries it, which probeMirror checks.
+      // DONKI is mirrored, so a missing CORS header there is a warning (the
+      // browser falls back to our copy), not a dead lane, provided the mirror
+      // carries it, which probeMirror checks. The September 2026 "no CORS"
+      // alarm was really CCMC's API move: the old base served HTML.
       if (url.startsWith(DONKI) && res.ok) {
         r.warn = `no CORS header (${r.cors ?? 'absent'}) — browsers read it from the mirror`;
       } else {
@@ -210,9 +211,9 @@ async function probeMirror() {
     }
     if (m.failed > 0) { r.problem = `${m.failed} of ${m.total} feeds failed to copy`; return r; }
     if (m.unchecked?.length) { r.problem = `${m.unchecked.length} endpoint(s) the mirror could not resolve`; return r; }
-    // DONKI is reachable from browsers only through here now
+    // DONKI's fallback lives here; without it a DONKI failure is unguarded
     if (!m.files?.some((f) => f.path?.startsWith('donki/') && f.ok)) {
-      r.problem = 'the mirror carries no DONKI copy, and browsers cannot read DONKI directly';
+      r.problem = 'the mirror carries no DONKI copy, so DONKI has no fallback';
       return r;
     }
     r.ok = true;

@@ -39,9 +39,11 @@ export interface Fetched<T> {
   mirrored?: boolean;
 }
 
-/** NASA CCMC's DONKI. Mirrored since it stopped sending CORS headers. Kept
- *  here rather than imported from cme.ts, which imports this module. */
-export const DONKI_ORIGIN = 'https://kauai.ccmc.gsfc.nasa.gov/DONKI/WS/get';
+/** NASA CCMC's DONKI API (moved 2026-09-30; see cme.ts DONKI_BASE). Mirrored
+ *  so a move, outage or CORS change falls back to our copy. Kept here rather
+ *  than imported from cme.ts, which imports this module; a test holds the two
+ *  equal. */
+export const DONKI_ORIGIN = 'https://ccmc.gsfc.nasa.gov/DONKI-API/get';
 
 /**
  * Where the mirror keeps a copy of `url`, or null for anything we do not

@@ -92,7 +92,7 @@ You do not need MHD simulations for the MVP. Three tiers cover it:
 | 7 | Aurora oval probability grid (OVATION) | SWPC `json/ovation_aurora_latest.json` (360×181 lon/lat) | ~5-min · 30–90 min forecast lead | Modeled·NOAA | 1 |
 | 8 | Sunspot / active regions (lat, lon, class, area) | SWPC `json/solar_regions.json` | daily | Measured | 1 |
 | 9 | F10.7 flux, sunspot number | SWPC `json/f107_cm_flux.json`, `json/sunspot_report.json` | daily | Measured | 1 |
-| 10 | CME analyses (cone parameters, ETA) | NASA CCMC DONKI `kauai.ccmc.gsfc.nasa.gov/DONKI/WS/get/CMEAnalysis?startDate=…&mostAccurateOnly=true` (no key) — or `api.nasa.gov/DONKI/CMEAnalysis` (key) | hours after event | Modeled·NASA | 2 |
+| 10 | CME analyses (cone parameters, ETA) | NASA CCMC DONKI `ccmc.gsfc.nasa.gov/DONKI-API/get/CMEAnalysis?startDate=…&mostAccurateOnly=true` (no key) — or `api.nasa.gov/DONKI/CMEAnalysis` (key) | hours after event | Modeled·NASA | 2 |
 | 11 | Flares, geomagnetic storms, notifications | DONKI `/get/FLR`, `/get/GST`, `/get/notifications` | hours | Measured/issued | 2 |
 | 12 | Sun imagery (AIA 171/193/304, HMI magnetogram; LASCO C2/C3) | Helioviewer `api.helioviewer.org/v2/` (`getClosestImage`, `takeScreenshot`, `getJP2Image`) | ~minutes native · tens of min via HV | Measured (image) | 2 |
 | 13 | Earth main field | **IGRF-14** coefficients (`igrf14coeffs.txt`, NCEI/BGS, released Nov 2024, valid through 2030 via SV) — vendored | static (annual SV) | Modeled | 1 |

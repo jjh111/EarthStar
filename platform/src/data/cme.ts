@@ -3,18 +3,20 @@
  * for the cone parameters, which are a human analyst's fit to coronagraph
  * imagery, and `[D]` for our propagation of them.
  *
- * DONKI at CCMC needs no API key. It sent `Access-Control-Allow-Origin: *`
- * when this lane was built and stopped in late September 2026, so browsers
- * now read it from the stage B mirror (the workflow fetches it server-side,
- * where CORS does not apply). The fetch goes through `get()` for exactly that
- * reason: upstream, retry, then the mirror.
+ * DONKI at CCMC needs no API key. CCMC moved its API on 2026-09-30 (see
+ * DONKI_BASE); the old address began answering with an HTML page, and this
+ * lane went dark without saying so. The fetch now goes through `get()`:
+ * upstream, retry, then the stage B mirror, which also carries DONKI, so a
+ * future move, outage or CORS change degrades to the mirror's copy.
  */
 
 import type { ConeParams } from '../models/cme-cone.js';
 import { get } from './fetch-json.js';
 import { arrivalAtEarth, angleFromEarth, isEarthDirected } from '../models/cme-cone.js';
 
-export const DONKI_BASE = 'https://kauai.ccmc.gsfc.nasa.gov/DONKI/WS/get';
+// Moved by CCMC on 2026-09-30 from https://kauai.ccmc.gsfc.nasa.gov/DONKI/WS/get: same parameters and JSON; the
+// old base now answers with an HTML page.
+export const DONKI_BASE = 'https://ccmc.gsfc.nasa.gov/DONKI-API/get';
 
 export interface Cme extends ConeParams {
   id: string;

@@ -27,11 +27,12 @@ Two findings reverse the plan's assumptions (§4 "CORS reality", §9):
   reachable and returns 200, but with no `Access-Control-Allow-Origin`, so a browser
   cannot read the response. **Sun imagery moves to stage B** — it cannot ship in phase 2
   as a direct fetch.
-- **Update, late September 2026: DONKI at CCMC stopped sending `Access-Control-Allow-Origin`.**
-  The health probe (with `Origin:` set) has seen no header since about 2026-09-30. Browsers
-  now read the CME catalogue from the stage B mirror (`donki/CMEAnalysis.json` on the `data`
-  branch), which the workflow fetches server-side. What follows is the original finding.
-- **DONKI at CCMC *did* send `Access-Control-Allow-Origin: *`**, and needs no API key.
+- **Update, 2026-09-30: CCMC moved the DONKI API** from `https://kauai.ccmc.gsfc.nasa.gov/DONKI/WS/get/…` to `https://ccmc.gsfc.nasa.gov/DONKI-API/get/…`, with
+  the same parameters and JSON. The old base began answering 200 with an HTML page, which
+  the health probe first reported as "no CORS header". The Viewer uses the new base, and the
+  stage B mirror carries `donki/CMEAnalysis.json` as a fallback. The finding below was made
+  against the old base.
+- **DONKI at CCMC *does* send `Access-Control-Allow-Origin: *`**, and needs no API key.
   The plan assumed it should be treated as no-CORS. CMEs can therefore ship in phase 2 on
   stage A, with no NASA key in client config at all. (`api.nasa.gov` also works and is
   ~2× faster, but costs a key and a rate limit for no benefit.)
@@ -116,7 +117,7 @@ the window (always keeping the newest), and states the size on the button — *"
 | F10.7 flux | `/json/f107_cm_flux.json` | — | Newest-first; value is in `flux`. |
 | Sunspot report | `/json/sunspot_report.json` | — | 183 KB raw, per-observatory records — heavier than the contract implies. |
 | Kp 3-hourly (official) | `/products/noaa-planetary-k-index.json` | — | Array of objects, **oldest-first**, capital `Kp`. |
-| CME analyses | `kauai.ccmc.gsfc.nasa.gov/DONKI/WS/get/CMEAnalysis` | 82 KB/30 d | No key. CORS `*` until ~2026-09-30, none since: browsers read the stage B mirror. Slow: **3.7 s**. |
+| CME analyses | `ccmc.gsfc.nasa.gov/DONKI-API/get/CMEAnalysis` (was `kauai…/DONKI/WS/get`, moved 2026-09-30) | 82 KB/30 d | No key. CORS `*` (old base, verified 2026-09-08). Also mirrored. Slow: **3.7 s**. |
 | DONKI notifications | `api.nasa.gov/DONKI/notifications` | 221 KB/30 d | 0.4 s with `DEMO_KEY`. |
 
 ---
