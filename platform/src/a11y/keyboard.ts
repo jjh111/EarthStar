@@ -3,6 +3,7 @@
  * are an accelerator on top, never the only route to a feature.
  */
 
+import { VIEWS } from '../scene/camera-rig.js';
 export interface KeyActions {
   /** Number keys 1..5 select a view, in the order they appear in the header. */
   view(index: number): void;
@@ -19,11 +20,13 @@ export interface KeyActions {
 }
 
 const HELP: [string, string][] = [
-  ['1–5', 'Deck, Sunward, Profile, Overhead, System views'],
+  // Built from the view list, so it cannot drift from what the keys select
+  // (it once announced "Overhead, System" for keys that chose Polar and Corona).
+  ['1–5', `${VIEWS.slice(0, 5).map((v) => v.label).join(', ')} views`],
   ['s', 'Toggle Globe / True scale'],
   ['m', 'Toggle reduced motion'], ['f', 'Toggle the magnetic shield'],
   ['a', 'Toggle the aurora overlay'], ['w', 'Toggle the solar wind stream'], ['c', 'Toggle CME cones'],
-  ['t', 'Show or hide the instrument tiles'],
+  ['t', 'Show or hide the instrument rail'],
   ['r', 'Refresh data now'], ['?', 'This help'],
 ];
 

@@ -1,7 +1,7 @@
 # The Viewer — Next Plan
 ## Director's review of what shipped, and the road to a whole-Earth viewer
 
-**Date:** 2026-09-08 (rev. 2, after PR #12 merged) · **Status:** PLAN · **Supersedes** the phase table in
+**Date:** 2026-09-08, §0 refreshed 2026-10-02 (rev. 3) · **Status:** PLAN · **Supersedes** the phase table in
 `VIEWER_PLATFORM_PLAN.md` §6 (phases 0–2 shipped; phase 3–4 items are re-sequenced here).
 
 Every phase below is written so that a fresh agent in this repo can execute it from its
@@ -11,7 +11,54 @@ brief in `plans/briefs/` without this session. Ownership rules from `VIEWER_PLAT
 
 ---
 
-## 0. State of the Viewer (director's review, `main` @ 7393857)
+## 0. State of the Viewer (director's review, rev. 3, 2026-10-02, `main` @ cb0186a)
+
+Sources: `plans/DIRECTOR_BRIEF.md` (the platform track's briefing, PR #29), the merges
+since, and the code. The 2026-09-08 review follows below as history.
+
+**Shipped since rev. 2.** Phase P polish (#14: raster Earth, field-line legibility, the four
+label states, self-hosted fonts, meta). Solar imagery corrected (#16, #20). **Tsyganenko T89c
+(#21) and T96 (#25)** — line-by-line ports of the Fortran, verified against independent
+implementations; T96 preferred when the wind is complete, T89 the fallback; drawn outside
+T96's fitted ranges with the driver named. One **subject registry** behind every
+explanation, with click-the-thing cards (#22, #24) and a report that is no longer a wall
+(#23). **Q2 — USGS earthquakes on the globe**, magnitude-sized and pickable (realtime-Earth
+merge). The **instrument tiles became a left rail** (#32). Operations: the mirror now copies
+NASA DONKI as well as SWPC, CME fetches retry and fall back to it, a GOES data gap is no
+longer read as a 0 W/m² X-ray reading, the alarms close themselves when clear, and the
+workflows trigger on `main` only.
+
+**Upstream change absorbed.** CCMC moved the DONKI API on 2026-09-30
+(`kauai.ccmc.gsfc.nasa.gov/DONKI/WS/get` → `ccmc.gsfc.nasa.gov/DONKI-API/get`). The CME lane
+was dark from then until 2026-10-02; it is restored and now has a mirror fallback.
+
+**Numbers.** 486 tests pass, 4 skipped. Bundle ≈ 925 KB raw / 281 KB gzip; `viewer/` 2.2 MB
+against the 3 MB budget.
+
+**Against the phases below.** P: done, except Lighthouse ≥ 90 mobile performance (scores
+~38; see the open ruling). Q: Q1 and Q2 done; **Q3 EPIC, Q4 SAA and poles, Q5 plates, Q6
+Parker spiral not started.** E: E1 folded into the knowledge track's session 1
+(`briefs/VIEWER_KNOWLEDGE.md`), which has **not started**; E2–E7 not started.
+
+**Open rulings (Director, with John).** From `DIRECTOR_BRIEF.md` §3, each enforced in code
+or blocking a session, none yet written into `VIEWER_PLATFORM_PLAN.md` §2:
+1. Split `[M]` into keyed and unkeyed, and require `limits` on every rendered element
+   (the suite already enforces both). Recommendation: accept.
+2. A derived tier for compound answers, decided before knowledge session 3.
+   Recommendation: accept.
+3. Lighthouse ≥ 90 mobile performance: retire it in favour of a11y 100, FCP < 3 s on slow
+   3G, the 3 MB budget and the frame-time budget — or fund "defer scene construction" as
+   its own phase. Recommendation: retire.
+4. Model depth (sheath draping, TS05) held behind E2's Earth breadth. Recommendation: hold.
+5. One git worktree per track (a splash commit once rode a platform push).
+
+**Next, in order:** knowledge session 1 → session 2 → Q4/Q5 on the registry → session 3
+(after ruling 2) → E2 GIBS. The registry's 37 `limits` sentences want a second reader
+before session 2 compiles them into search chunks.
+
+---
+
+### Previous review (rev. 2, 2026-09-08, `main` @ 7393857)
 
 **Shipped — well beyond the MVP plan.** Phases 0–2 plus most of 4 — and, merged since
 this plan's first revision, PR #12 *"solar imagery — sphere, card and plane"*: a SUVI frame
@@ -197,12 +244,9 @@ and a `sources.md` row + a `checks.ts` cross-check for every new feed.
 
 ## 4. Open items on the other tracks
 
-- **Skillset v3.1** — not done. `plans/briefs/SKILL_SESSION.md` stands as written; the
-  `heliosphere-data` catalog is now largely written *by the platform agent* in
-  `platform/docs/sources.md` and `data-inventory.md` — the skill session should lift it
-  rather than redo it.
-- **Splash teaser tiles** — `plans/briefs/WEB_SESSION.md` §1 still open; the door link is
-  in. Lower priority than Phase P.
+- **Skillset v3.1** — done (PR #13, 2026-09-08); the next cycle is `briefs/SKILL_NEXT.md`.
+- **Splash teaser tiles** — done: the splash's Sky section reads the same NOAA feeds
+  live (Web presence v2.0, 2026-09-09).
 
 ## 5. Parallelism map
 
@@ -214,7 +258,7 @@ and a `sources.md` row + a `checks.ts` cross-check for every new feed.
 | E2 GIBS | 1 agent | `claude/viewer-e2-gibs` | E1 |
 | E3 / E4 / E5 | 3 agents | `claude/viewer-e3-weather` … | E2 |
 | E6 / E7 | 1–2 agents | `claude/viewer-e6-time`, `-e7-art` | E3–E5 |
-| Skillset v3.1 | 1 agent | `claude/skill-v3-1-skillset-2` | nothing |
+| ~~Skillset v3.1~~ | done, PR #13 | — | — |
 
 Merge order per wave; the Director rebases and merges, and bumps the contract when a PR
 carries a change request.

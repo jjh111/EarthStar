@@ -1,9 +1,9 @@
 /**
  * Upstream health — does every feed the Viewer depends on still answer?
  *
- * The Viewer has no server. Its freshness is entirely the freshness of ~30
+ * The Viewer has no server. Its freshness is entirely the freshness of ~35
  * public endpoints, and it degrades honestly when one dies: the lane shows
- * `no data · <error>`, the last good value ages visibly, nothing is
+ * `unavailable · <reason>`, the last good value ages visibly, nothing is
  * substituted. That is the right behaviour and it is also the problem — an
  * honest failure nobody is looking at is indistinguishable from no failure.
  * This is the thing that looks.

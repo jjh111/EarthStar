@@ -74,24 +74,32 @@ the upstream traps.
 
 | | Source | Status |
 |---|--------|--------|
-| ✅ | `astronomy-engine` — Sun, Moon, inner planets | positions, sub-solar point, sidereal time |
+| ✅ | `astronomy-engine` — Sun, Moon, all eight planets | positions, sub-solar point, sidereal time |
 | ✅ | IGRF-14, vendored | field lines, both magnetic poles |
+| ✅ | Tsyganenko T96 and T89c, vendored Fortran ported to TypeScript | the external field added to IGRF in the field-line trace: T96 when pressure, Dst and the IMF are all in hand, T89c on Kp alone when they are not |
 | ✅ | DONKI `CMEAnalysis` (CCMC, **CORS, no key**) | cone parameters propagated and drawn; arrival estimated client-side with a stated window |
 | ◻ | DONKI `FLR`, `GST`, `notifications` | flare/storm event history with NASA's analysis |
 | ◻ | `json/stereo/stereo_a_1m` | **2.9 MB** | STEREO-A: wind, field and particles from a second vantage point, with `lead_lag_time_days` (−4.9 d today). Too large for the load path; worth a panel that fetches on demand. |
 | ⛔ | JPL Horizons | no CORS → stage B. Still the only route to PSP/Solar Orbiter |
 
+## 7. Earth — outside space weather
+
+| | Feed | Cadence | Status |
+|---|------|---------|--------|
+| ✅ | USGS `earthquake.usgs.gov/…/summary/all_day.geojson` (CORS open) | polled every 2 min | the last day's earthquakes, one marker per event on the globe |
+| ◻ | USGS `…/summary/all_week.geojson` | — | declared beside the day feed; nothing reads it yet |
+| ◻ | NWS `api.weather.gov` active alerts (US only) | polled every 2 min | fetched by the Earth store, not yet drawn |
+
+Neither host is in the catalogue `npm run health` probes or the mirror copies.
+
 ---
 
-## What is worth doing next, in order
+## What was worth doing next — since overtaken
 
-1. **Spacecraft markers** (§6). The Viewer says "measured by SOLAR1 at L1" but draws no L1.
-   `rtsw_ephemerides_1m` gives the real position without needing Horizons.
-2. **Enlil imagery** (§4). NOAA's own heliospheric wind forecast as an animation — the
-   proper context for the cone model, and a check on it: Enlil accounts for drag and the
-   ambient wind, which our constant-speed propagation does not.
-3. **Ground magnetometers and Dst** (§2, stage B). The canonical storm index is still
-   missing, and it is why the panel talks about Kp instead.
+The list that stood here has been worked through: **spacecraft markers** shipped (from
+`rtsw_ephemerides_1h`; the `_1m` name it cited 404s), **Enlil** arrived as numbers rather
+than the imagery it proposed, and **Dst** as NOAA's modelled index. Ground magnetometers
+remain blocked on stage B. The current list is *Next, in order*, at the end.
 
 ## Shipped since
 
@@ -146,7 +154,8 @@ Propagated wind, proton and electron flux, active regions, and the solar cycle �
 second, fourth and fifth items on the previous list. The propagation change is the one that
 altered existing numbers rather than adding new ones: the magnetopause standoff, the wind
 stream and the field-line confinement are now driven by plasma that has arrived, not by
-plasma still in transit. Where the propagation feed is unavailable the L1 reading is used
+plasma still in transit. (The confinement itself — a geometric clamp onto the Shue
+boundary — has since been removed; the field lines now take their shape from T89/T96.) Where the propagation feed is unavailable the L1 reading is used
 instead, and the Situation Report names which one it used.
 
 ## What is blocked, and on what

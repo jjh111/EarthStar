@@ -109,15 +109,23 @@ The panel shows the newest frame as a still, subsamples playback to 24 frames ev
 the window (always keeping the newest), and states the size on the button — *"Load loop ·
 24 frames, ~26 MB"* — before fetching any of it.
 
-### Verified but not yet consumed (phase 2)
+### Verified in phase 2, since consumed
 
 | Feed | Endpoint | gzip | Notes |
 |------|----------|------|-------|
-| Solar regions | `/json/solar_regions.json` | — | 29 fields/record, newest-first. Contract's field names do not match (§3.6). |
-| F10.7 flux | `/json/f107_cm_flux.json` | — | Newest-first; value is in `flux`. |
+| Solar regions | `/json/solar_regions.json` | — | 29 fields/record, newest-first. Contract's field names do not match (§3.6). Drives the active-region markers on the Sun (`src/scene/active-regions.ts`) and the imagery alignment check. |
+| CME analyses | `ccmc.gsfc.nasa.gov/DONKI-API/get/CMEAnalysis` (was `kauai…/DONKI/WS/get`, moved 2026-09-30) | 82 KB/30 d | No key. CORS `*` (old base, verified 2026-09-08). Also mirrored. Slow: **3.7 s**. Drives the CME cones (`src/data/cme.ts`, `src/scene/cmes.ts`). |
+
+F10.7 is consumed too, but not from the endpoint verified here (`/json/f107_cm_flux.json`,
+newest-first, value in `flux`): the Ahead tab reads the 47-byte
+`/products/summary/10cm-flux.json` instead (see *Forecast products*, §4).
+
+### Verified but not yet consumed
+
+| Feed | Endpoint | gzip | Notes |
+|------|----------|------|-------|
 | Sunspot report | `/json/sunspot_report.json` | — | 183 KB raw, per-observatory records — heavier than the contract implies. |
-| Kp 3-hourly (official) | `/products/noaa-planetary-k-index.json` | — | Array of objects, **oldest-first**, capital `Kp`. |
-| CME analyses | `ccmc.gsfc.nasa.gov/DONKI-API/get/CMEAnalysis` (was `kauai…/DONKI/WS/get`, moved 2026-09-30) | 82 KB/30 d | No key. CORS `*` (old base, verified 2026-09-08). Also mirrored. Slow: **3.7 s**. |
+| Kp 3-hourly (official) | `/products/noaa-planetary-k-index.json` | — | Array of objects, **oldest-first**, capital `Kp`. Declared as `SWPC_URL.kp3h`, so `npm run health` probes it and the mirror copies it, but nothing reads it yet. |
 | DONKI notifications | `api.nasa.gov/DONKI/notifications` | 221 KB/30 d | 0.4 s with `DEMO_KEY`. |
 
 ---
@@ -157,7 +165,7 @@ Confirmed by cross-check against `/products/summary/solar-wind-mag-field.json`:
 | **SWPC's own summary feed** | **−5** | **7** | 17:16 UTC |
 
 The active-record selection reproduces SWPC's published value; the naive selection does
-not. This is guarded by a test and by a row on the `verify` page.
+not. This is guarded by a test and by a row in the Checks tab (*L1 spacecraft selected*).
 
 > The contract's `/v1/solar-wind` shape has no field for which spacecraft a sample came
 > from. **Change request:** add `spacecraft` to `solar_wind`. The Viewer already emits it
@@ -229,9 +237,10 @@ current_int_xrlong  1.906e-3      ← reading this as flux yields class X19.1
 actual flux         3.703e-7      ← from xrays-6-hour.json, → B3.7 ✓
 ```
 
-The `verify` page caught this as a live drift (`X19.1` vs `B3.7`) before it could ship.
+The `verify` page (since folded into the Checks tab) caught this as a live drift (`X19.1`
+vs `B3.7`) before it could ship.
 Flux is now read from `xrays-6-hour.json` and the class computed from it; the flare feed
-is used only as the independent label for the verify cross-check. `max_xrlong` *is* in
+is used only as the independent label for the *X-ray class* row in the Checks tab. `max_xrlong` *is* in
 W/m² (1.136e-6 ↔ `max_class` `C1.1`), which is what makes the naming trap easy to fall into.
 
 ### 3.8 Quality flags
@@ -327,7 +336,7 @@ geodetic↔geocentric (the WGS-84 normal is tilted up to 0.19° from the radius 
 ### The two magnetic poles are not the same place
 
 Worth stating because conflating them is an easy and invisible error — the verify page
-caught exactly this during development:
+(now the Checks tab) caught exactly this during development:
 
 | | Location, 2026-09-06 | Definition |
 |---|---|---|
@@ -870,9 +879,11 @@ from Earth, looking back down the line LASCO photographs along.
 
 - Selection is **by timestamp and `active` flag**, never by array position.
 - A failed feed becomes `null` with an error on its provenance record, and renders as
-  "no data" — never a substituted value. Other feeds are unaffected.
+  "unavailable" with a reason class (`upstream 404`, `offline or blocked`, …) — never a
+  substituted value. "no data" is reserved for a fetch that completed and carried nothing
+  usable (`src/data/state.ts`). Other feeds are unaffected.
 - A modeled value disappears when its measured inputs do (no wind → no magnetopause).
 - The composite envelope's `data_time` is the **oldest** contributing timestamp, so the
   snapshot never claims to be fresher than its stalest ingredient.
-- `/verify` compares our numbers against SWPC's independently-published values at the
-  **same timestamp**, so a cadence offset cannot masquerade as agreement or as drift.
+- The Checks tab (`src/data/checks.ts`) compares our numbers against SWPC's
+  independently-published values at the **same timestamp**, so a cadence offset cannot masquerade as agreement or as drift.

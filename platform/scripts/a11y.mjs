@@ -10,8 +10,10 @@
 // no colour contrast to check and no links to name.
 import { chromium } from 'playwright-core';
 import fs from 'node:fs';
-const SC='/private/tmp/claude-501/-Users-johnhanacek-Documents-GitHub-EarthStar/d83fe656-023a-4511-a2c5-4518ce5f2085/scratchpad';
-const R = process.env.REPLAY_DIR || (SC+'/replay');
+// REPLAY_DIR: a directory of recorded feeds (and optionally a SUVI frame,
+// frame_suvi-primary-304.png). Defaults to ./replay; absent, feeds go live.
+const R = process.env.REPLAY_DIR || 'replay';
+const SC = R;
 const AXE = fs.readFileSync(new URL('../node_modules/axe-core/axe.min.js', import.meta.url), 'utf8');
 let FAILED = false;
 const b = await chromium.launch({ executablePath: process.env.CHROME, args:['--no-sandbox'] });

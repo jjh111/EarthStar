@@ -3,8 +3,9 @@
 **What this covers:** what updates by itself, what has an expiry date on it, and what a
 person has to do. Written 2026-09-08 against a live audit of every feed.
 
-The Viewer has no server. It is a static bundle on GitHub Pages that fetches ~30 public
-endpoints from the reader's own browser. That is why it costs nothing to run and why it
+The Viewer has no server. It is a static bundle on GitHub Pages that fetches 35 public
+space-weather endpoints (the count `npm run health` reports), plus the USGS earthquake and
+NWS alert feeds, from the reader's own browser. That is why it costs nothing to run and why it
 cannot quietly serve yesterday's numbers — there is no cache between the reader and NOAA.
 It is also why nothing on our side notices when an upstream product is renamed.
 
@@ -14,9 +15,11 @@ It is also why nothing on our side notices when an upstream product is renamed.
 
 | Lane | Cadence | Contents |
 |------|---------|----------|
-| Snapshot | 60 s | wind, Kp, X-ray, protons, electrons, GOES magnetometer, Dst, scales, alerts |
+| Snapshot | 60 s | wind, propagated wind, Kp, X-ray, protons, electrons, GOES magnetometer, Dst, scales, alerts |
 | Slow | 5 min | OVATION aurora grid, solar regions, DONKI CMEs, L1 ephemerides |
-| On demand | first open | solar-cycle record (1749→now), SUVI/LASCO frame lists |
+| Earth | 2 min | USGS earthquakes (day feed), NWS active alerts |
+| On demand | first open of a tab | Ahead: NOAA forecasts and WSA-Enlil · Sun: solar-cycle record (1749→now) · Checks: the comparison feeds |
+| Imagery | after the lanes above | SUVI/LASCO frame lists |
 | Scene | every frame | planet, Sun and Moon positions, from the clock |
 
 Plus a catch-up refresh on `visibilitychange`, so a backgrounded tab is never showing an
@@ -36,8 +39,13 @@ Three steps, in order, in `src/data/fetch-json.ts`:
    cleanly a moment later.
 2. **The mirror** (§2b) — only when upstream cannot be reached at all.
 3. **Age the last good envelope.** `NowStore.refresh()` never discards it. The lane ages
-   visibly, keeps its own timestamp, shows `no data` as literal text and never as a number
-   or a dash, and the slow-lane feeds fail independently of each other and of the snapshot.
+   visibly and keeps its own timestamp, and the slow-lane feeds fail independently of each
+   other and of the snapshot. With nothing to fall back on, the slot says which of four
+   states it is in (`src/data/state.ts`): `loading`; `no data` (a fetch completed and
+   carried nothing usable); `unavailable · upstream 404` or a sibling class (`offline or
+   blocked`, `upstream timeout`, `upstream HTTP 503`), followed by `· next attempt HH:MM
+   UTC` when one is scheduled; or, once a good value has aged out, `stale · no data since
+   HH:MM UTC`. Always literal text, never a number or a dash.
 
 A **cold start** is the case with nothing to fall back on — no previous envelope, and the
 next attempt a whole refresh interval away. That is what steps 1 and 2 are for.
@@ -46,12 +54,15 @@ next attempt a whole refresh interval away. That is what steps 1 and 2 are for.
 
 ## 2b. Stage B — the mirror
 
-`.github/workflows/data-mirror.yml` copies every SWPC feed to the `data` branch; `src/data/fetch-json.ts` reads it **only after a direct fetch has failed**, so
+`.github/workflows/data-mirror.yml` copies every SWPC feed, and DONKI, to the `data` branch; `src/data/fetch-json.ts` reads it **only after a direct fetch has failed**, so
 a healthy reader never touches it.
 
 It exists because the Viewer's one structural dependency is not ours: if
 `services.swpc.noaa.gov` goes down, or stops sending `Access-Control-Allow-Origin: *`,
-every reading on the page goes dark at once.
+every reading on the page goes dark at once. DONKI joined after CCMC moved its API on
+2026-09-30 and the old address began answering with an HTML page: a future move, outage or
+CORS change there now degrades to the mirror's copy (`donki/<service>.json`) rather than
+emptying the CME lane.
 
 **Copies are byte-for-byte**, stored under their own upstream paths. The fallback is a URL
 swap and nothing else — the same parsers over the same bytes. A mirror that reshaped the
@@ -67,8 +78,8 @@ hide is its own — which is why `manifest.json` records `mirrored_at` separatel
 `npm run health` fails when it exceeds twelve hours (§ the cadence note below).
 
 What is *not* mirrored: solar imagery (megabytes of PNG per frame, and a frame list is
-useless without them) and DONKI (human-curated, hours behind events anyway). Those lanes
-degrade the ordinary way.
+useless without them), and the Earth layers' USGS and NWS feeds, which are outside the
+catalogue the mirror is built from. Those lanes degrade the ordinary way.
 
 **Two lags to expect**, both harmless because the page reports real ages: the write
 cadence, and up to five minutes of `raw.githubusercontent.com` CDN cache on top.
@@ -126,18 +137,19 @@ until someone adds one line to `SPACECRAFT_NOTE` — an omission, never an inven
 
 ### Endpoint URLs — whenever SWPC reorganises
 
-Thirty-one URLs across `src/data/`. A rename shows the reader `no data · HTTP 404` on
-that lane alone. This is the failure `npm run health` exists to catch (§3).
+Thirty-five URLs across `src/data/`. A rename shows the reader `unavailable · upstream 404`
+on that lane alone. This is the failure `npm run health` exists to catch (§3).
 
 ---
 
 ## 3. `npm run health`
 
-Probes every endpoint the Viewer uses, plus the deployed page and the assets it names.
+Probes every SWPC and DONKI endpoint the Viewer uses, plus the deployed page and the assets
+it names. The Earth layers' USGS and NWS feeds are not in the catalogue yet.
 Exit 0 only when all of them answered, sent a usable CORS header, and parsed.
 
 The catalogue is **derived from the source**, never maintained beside it: the script reads
-the URLs out of `src/**/*.ts`. Add an endpoint and it is checked on the next run. Use a
+the SWPC and DONKI URLs out of `src/**/*.ts` (`scripts/endpoints.mjs`). Add an endpoint and it is checked on the next run. Use a
 template placeholder the substitution table does not know, and the run reports the URL as
 `UNCHECKED` and fails — silence is never an outcome.
 
