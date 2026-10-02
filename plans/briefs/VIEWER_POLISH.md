@@ -68,9 +68,7 @@ you open the PR.
    `https://earthstar.space/viewer/`, `theme-color`. **No visual-style changes** beyond
    what the state work needs: an Earth Star style guide is a separate future track; the
    Viewer keeps its current palette and type.
-6. **Hold the line.** Frame-time budget unchanged (see commit `9a5c807`); `npm run a11y`
-   zero violations; Lighthouse mobile ≥ 90 perf / 100 a11y on `/viewer/`; `viewer/`
-   ≤ 3 MB including the new textures.
+6. **Hold the line.** frame-time budget unchanged (`9a5c807`); `npm run a11y` zero violations and Lighthouse **accessibility 100**; first contentful paint < 3 s on Lighthouse's slow-3G mobile profile; `viewer/` ≤ 3 MB including the new textures. (Lighthouse *performance* ≥ 90 was retired 2026-10-02 — the score is script evaluation of the scene build, not transfer; see `VIEWER_PLATFORM_PLAN.md` §2a.)
 
 ## Acceptance
 Screenshots (deck, orbit, system, phone) in `platform/docs/screenshots/`; test + a11y

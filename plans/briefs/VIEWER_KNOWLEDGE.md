@@ -413,8 +413,8 @@ it likes without the rest being worth less.
   `VIEWER_NARRATIVE.md` both deferred. **Rev. 2:** it is also the home for the tiles and for
   E1, because they are the same refactor; session 1 splits into three PRs rather than into
   another brief.
-- **Rev. 2 — two contract changes now wait on the Director**, both enforced in code and
-  unstated in `VIEWER_PLATFORM_PLAN.md`:
+- **Rev. 2 — two contract changes, both ACCEPTED by the Director on 2026-10-02** and now
+  written into `VIEWER_PLATFORM_PLAN.md` §2 (and contract v1.3 for `"derived"`):
   1. From PR #22: split `[M]` into **keyed** and **unkeyed** ambience, and name `limits` and
      `toPromote` as required properties of every rendered element. `subjects.test.ts`
      already fails without them.
@@ -433,7 +433,7 @@ it likes without the rest being worth less.
   **E2 · GIBS** after that: the big unlock, and it wants the registry under it. **Session
   4** is a seam, not a stage, and never blocks any of the above.
 - Feeds the E-track: E1's layer registry and E5's places are chunk sources the day they
-  land; the `[X · derived]` treatment is proposed to the Director for the contract.
+  land; the `[X · derived]` tier is accepted (contract v1.3).
 - The Director's personal site can ingest `viewer-chunks.json` (same loader, same
   embedding recipe) and re-forward into the Viewer via `?card=…` — one chunk format, two
   registries, no backend on either side. That integration is **out of scope for every

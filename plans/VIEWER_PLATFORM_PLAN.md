@@ -36,9 +36,17 @@ the accessible "Situation Report":
 |------|---------|-------|----------|
 | **Measured** | A value read from an instrument, shown with its timestamp and latency | `[E]` | DSCOVR solar wind Bz/speed/density; Kp; GOES X-ray flux; ground magnetometers |
 | **Modeled** | Deterministically computed from measured inputs with a named, cited model | `[D·model]` | IGRF-14 field lines; Shue-1998 magnetopause from live wind; Parker spiral; CME cone propagation; planetary ephemerides; NOAA OVATION aurora (NOAA's model, our rendering) |
-| **Ambient** | Artistic, parameter-driven, not a physical simulation | `[M]` | solar-wind particle stream, corona shader brightness, glass shell, field-line "shiver" at high Kp |
+| **Ambient · keyed** | Invented form carrying a real number in its behaviour; `keyedTo` names the measurement | `[M]` | solar-wind particle stream (rate and speed from measured density and velocity), field-line "shiver" at high Kp |
+| **Ambient · unkeyed** | Invented form carrying nothing, and saying so | `[M]` | starfield, glow, glass shell |
+| **Derived** | A compound answer assembled from named inputs above, bounded by its weakest input | `[X]` | "is tonight good for aurora?" from OVATION, Kp, Bz and Moon illumination |
 
 Hard rules:
+- **Every rendered element declares `limits`** — one sentence on what it is *not* — **and
+  `toPromote`** — what would raise its tier or sharpen it. `[M]` elements also declare
+  `keyedTo` (a measurement, or `null` for unkeyed). Enforced by `platform/test/subjects.test.ts`.
+- **`[X]` never borrows a stronger badge.** A derived answer names its inputs and their
+  tiers, states its limit from the weakest of them, and is not ingested into the
+  Situation Report unless the reader asks for it.
 - **No fabricated values, ever.** Missing data renders as missing (dimmed element + "no data since HH:MM"), never as a plausible fill.
 - **Stale is visible.** Every Measured element carries `data_time` and `latency`; past a source-specific threshold it dims and the HUD says "stale."
 - **Units on everything.** nT, km/s, cm⁻³, W/m², Kp (0–9), Rₑ.
@@ -50,6 +58,21 @@ Hard rules:
 - **Ambient never impersonates Measured.** Particles are prettier than reality and are labeled `[M]`; their *rate and speed* come from real density and velocity, and the drawer explains exactly that.
 
 This is the veracity protocol, made visual.
+
+**Rulings, 2026-10-02 (Director with John, from `plans/DIRECTOR_BRIEF.md` §3).** The
+keyed/unkeyed split and the required `limits`/`toPromote` (from PR #22, already enforced in
+code) and the `[X]` derived tier (from `briefs/VIEWER_KNOWLEDGE.md`, decided before session 3)
+are accepted as written above.
+
+### 2a. Performance holds
+
+The Viewer is held to: frame-time budget unchanged (`9a5c807`); `npm run a11y` zero
+violations; Lighthouse **accessibility 100**; first contentful paint < 3 s on Lighthouse's
+slow-3G mobile profile; `viewer/` ≤ 3 MB. **Lighthouse performance ≥ 90 is retired**
+(2026-10-02): it scored ~38 from #14 on, and all of it is script evaluation of the scene
+build under 4× CPU throttle, not transfer — reaching 90 means not building the scene
+during load, which is a product decision, not a polish task. If it is ever wanted, it is
+its own phase titled *defer scene construction*.
 
 ## 3. Sims vs. Reconstructions — the Answer
 
@@ -243,6 +266,9 @@ contract, integration, and this file.
 | **Web presence** | session 3 | `claude/site-viewer-teaser` | `src/`, `index.html`, `assets/`, `archive/`, `test/` (the splash site) | `DATA_CONTRACT.md` (for the live teaser widgets) |
 
 Coordination mechanics:
+- **One git worktree per track** (ruling 2026-10-02): each session works in its own
+  `git worktree add ../EarthStar-<track> <branch>`, never in another track's checkout. Two
+  agents sharing one working tree once put a splash commit inside a platform push.
 - **Directory ownership is the conflict-avoidance strategy.** Nobody edits another track's
   directories. Shared files (`README.md`, `plans/*`) are Director-only; other tracks
   propose changes in their PR description.

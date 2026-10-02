@@ -1,10 +1,11 @@
-# Earth Star Data Contract — v1.2
+# Earth Star Data Contract — v1.3
 
 **Owner:** Director / platform track. **Consumers:** the Viewer platform, the splash site's
 live teaser widgets, and the skill track's `heliosphere-data` reference (its human-readable
-twin). **Status:** v1.2 — v1 frozen at Viewer phase 0; v1.1 accepted the platform agent's five change
+twin). **Status:** v1.3 — v1 frozen at Viewer phase 0; v1.1 accepted the platform agent's five change
 requests (`platform/docs/sources.md` §3); v1.2 accepts the skill agent's thirteen (PR #13,
-`skill_extract/heliosphere-data/references/sources.md`). The human-readable twin of this
+`skill_extract/heliosphere-data/references/sources.md`); v1.3 (2026-10-02) reserves `"derived"`
+as a tier for compound answers (`[X]`, platform plan §2). The human-readable twin of this
 contract is that `heliosphere-data` catalog — discrepancies between the two are defects.
 Changes still go through the Director.
 
@@ -20,7 +21,7 @@ envelope and the TypeScript interface in §3, never against a transport.
 {
   "source": "NOAA SWPC",                       // human name
   "source_url": "https://services.swpc.noaa.gov/products/solar-wind/mag-1-day.json",
-  "tier": "measured",                          // "measured" | "modeled" | "ambient"
+  "tier": "measured",                          // "measured" | "modeled" | "ambient" | "derived" (v1.3)
   "model": null,                               // for modeled: { "name": "Shue et al. 1998", "ref": "doi:..." }
   "fetched_at": "2026-09-06T16:40:12Z",        // when the proxy pulled upstream
   "data_time": "2026-09-06T16:38:00Z",         // timestamp of the most recent datum

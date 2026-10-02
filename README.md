@@ -33,6 +33,10 @@ The website at earthstar.space serves as the public face of the project, featuri
 
 ### Development
 
+Parallel agent tracks each work in their own git worktree
+(`git worktree add ../EarthStar-<track> <branch>`), never in a shared checkout — see
+`plans/VIEWER_PLATFORM_PLAN.md` §8.
+
 The served site (repo root: `index.html`, `assets/`, `archive/`) is **built output** — edit the
 sources in `src/` instead, then rebuild:
 

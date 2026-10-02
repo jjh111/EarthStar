@@ -279,7 +279,7 @@ The bioregion layer is the one item that does not fit a phase neatly — it is s
 
 ## 9. Memory and frame budget — the constraint that shapes the plan
 
-The existing perf/a11y hold from Phase P is the constraint: frame budget unchanged, `npm run a11y` zero, Lighthouse ≥ 90 perf mobile / 100 a11y on `/viewer/`. The realtime Earth layers live inside that, which is why:
+The existing perf/a11y hold from Phase P is the constraint: frame budget unchanged, `npm run a11y` zero, Lighthouse 100 a11y, FCP < 3 s on slow 3G, `viewer/` ≤ 3 MB (performance ≥ 90 retired 2026-10-02; `VIEWER_PLATFORM_PLAN.md` §2a). The realtime Earth layers live inside that, which is why:
 
 - **GIBS textures are device-tiered** — 2k on a phone, 4k on a desktop, with a size cap and LRU eviction. Two visible raster layers is two textures; the budget is the reason the compositor is one thing, not one fetcher per layer.
 - **GIBS imagery is not mirrored by the stage-B mirror** — the existing freshness.md says so explicitly (megabytes of PNG per frame, and a frame list is useless without them). GIBS tiles are fetched by the compositor on demand and cached in IndexedDB; the mirror is for the small JSON feeds (GFS wind, GVP volcanoes), not for imagery.

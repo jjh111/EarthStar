@@ -40,20 +40,16 @@ against the 3 MB budget.
 Parker spiral not started.** E: E1 folded into the knowledge track's session 1
 (`briefs/VIEWER_KNOWLEDGE.md`), which has **not started**; E2–E7 not started.
 
-**Open rulings (Director, with John).** From `DIRECTOR_BRIEF.md` §3, each enforced in code
-or blocking a session, none yet written into `VIEWER_PLATFORM_PLAN.md` §2:
-1. Split `[M]` into keyed and unkeyed, and require `limits` on every rendered element
-   (the suite already enforces both). Recommendation: accept.
-2. A derived tier for compound answers, decided before knowledge session 3.
-   Recommendation: accept.
-3. Lighthouse ≥ 90 mobile performance: retire it in favour of a11y 100, FCP < 3 s on slow
-   3G, the 3 MB budget and the frame-time budget — or fund "defer scene construction" as
-   its own phase. Recommendation: retire.
-4. Model depth (sheath draping, TS05) held behind E2's Earth breadth. Recommendation: hold.
-5. One git worktree per track (a splash commit once rode a platform push).
+**Rulings, decided 2026-10-02 (Director with John)** — from `DIRECTOR_BRIEF.md` §3, all
+as recommended and now written into `VIEWER_PLATFORM_PLAN.md`:
+1. `[M]` splits into keyed and unkeyed; `limits` and `toPromote` are required (§2).
+2. `[X]` is the derived tier for compound answers (§2; contract v1.3). Session 3 is unblocked.
+3. Lighthouse performance ≥ 90 is retired for the four holds in §2a.
+4. Model depth (sheath draping, TS05) waits until E2 GIBS has landed (§3 below).
+5. One git worktree per track (§8).
 
 **Next, in order:** knowledge session 1 → session 2 → Q4/Q5 on the registry → session 3
-(after ruling 2) → E2 GIBS. The registry's 37 `limits` sentences want a second reader
+→ E2 GIBS → then, and only then, the model-depth track. The registry's 37 `limits` sentences want a second reader
 before session 2 compiles them into search chunks.
 
 ---
@@ -160,8 +156,7 @@ first-time visitor on a laptop and a phone, before any new data lands.
   families, same weights); drop the Google Fonts preconnects. Add OG/Twitter card
   (a 1200×630 screenshot of the deck view), canonical, `theme-color`. No palette or
   type changes beyond what the state work needs.
-- **Perf/a11y hold:** frame budget from `9a5c807` unchanged; `npm run a11y` still zero;
-  Lighthouse on `/viewer/` ≥ 90 perf mobile, 100 a11y.
+- **Perf/a11y hold:** frame-time budget unchanged (`9a5c807`); `npm run a11y` zero violations and Lighthouse **accessibility 100**; first contentful paint < 3 s on Lighthouse's slow-3G mobile profile; `viewer/` ≤ 3 MB. (Lighthouse *performance* ≥ 90 was retired 2026-10-02 — the score is script evaluation of the scene build, not transfer; see `VIEWER_PLATFORM_PLAN.md` §2a.)
 
 ## 2. Phase Q — Low-hanging fruit (independent tickets; any agent, any order)
 
@@ -184,6 +179,11 @@ Q2, Q4, Q5 are deliberately the first three "whole Earth" layers — they are ch
 they prove the layer-registry design in Phase E1 before it exists.
 
 ## 3. Phase E — The Whole Earth (dev cycle; sequenced tickets, parallel where marked)
+
+> **Ruling 2026-10-02:** further magnetosphere modelling — magnetosheath draping, TS05
+> storm-time dynamics, flux-driven line brightness, aurora picking by latitude/longitude —
+> is **held until E2 has landed**. The Viewer is already far deeper in space weather than in
+> Earth; E2 is what restores the balance the whole-Earth ambition asks for.
 
 Brief: `plans/briefs/VIEWER_EARTH_LAYERS.md`. The ambition: **a whole-Earth viewer
 situated in the solar system** — Earth weather, geology, and the places that matter,
