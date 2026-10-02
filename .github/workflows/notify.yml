@@ -40,7 +40,7 @@ jobs:
       # Nothing is built or read from the tree, so the checkout carries no
       # credentials — `gh` is given a token explicitly, on the one step that
       # needs it, rather than one being written into .git/config for every step.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
           sparse-checkout: .github

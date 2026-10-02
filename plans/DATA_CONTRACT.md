@@ -46,8 +46,9 @@ no UI copy may name it as the source. Upstream depth is 1 day; 7-day series accu
 stage-B mirror. `products/*` are arrays of objects except `propagated-solar-wind-1-hour`, the
 one header-row feed in use.
 
-**CORS reality (verified with `Origin:` set, 2026-09-06/08):** SWPC, DONKI (CCMC and
-api.nasa.gov), USGS geomag, INTERMAGNET GIN, and the BGS IGRF calculator send
+**CORS reality (verified with `Origin:` set, 2026-09-06/08; DONKI at CCMC withdrew its header
+around 2026-09-30 and is now read from the stage B mirror):** SWPC, DONKI (CCMC and
+api.nasa.gov, as of the original check), USGS geomag, INTERMAGNET GIN, and the BGS IGRF calculator send
 `Access-Control-Allow-Origin: *`; **Helioviewer sends none** on any endpoint (its PNGs load
 only as tainted `<img>`, so WebGL texturing needs stage B); JPL Horizons sends none.
 

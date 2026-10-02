@@ -20,7 +20,13 @@ async function newPage(opts = {}) {
   // Upstream data hosts are allowed to fail (offline, sandboxed, blocked) — the
   // page must degrade honestly; the sky checks below assert that it does.
   const UPSTREAM = /services\.swpc\.noaa\.gov|raw\.githubusercontent\.com/;
-  page.on('requestfailed', r => { if (!UPSTREAM.test(r.url())) errors.push('reqfail: ' + r.url()); });
+  // ERR_ABORTED is the browser cancelling a request it no longer needs (a
+  // navigation interrupting the favicon fetch, say) — not a missing asset.
+  // Missing assets are caught by the same-origin 4xx check below.
+  page.on('requestfailed', r => {
+    if (UPSTREAM.test(r.url()) || /ERR_ABORTED/.test(r.failure()?.errorText ?? '')) return;
+    errors.push('reqfail: ' + r.url());
+  });
   return { ctx, page };
 }
 

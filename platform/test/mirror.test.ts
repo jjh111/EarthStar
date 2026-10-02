@@ -12,7 +12,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { mirrorPath } from '../scripts/endpoints.mjs';
-import { MIRROR_BASE, mirrorUrl } from '../src/data/fetch-json.js';
+import { DONKI_ORIGIN, MIRROR_BASE, mirrorUrl } from '../src/data/fetch-json.js';
+import { DONKI_BASE, parseCmes } from '../src/data/cme.js';
 import { DirectSource } from '../src/data/direct-source.js';
 import { SWPC_BASE } from '../src/data/swpc.js';
 
@@ -32,11 +33,20 @@ describe('the writer and the reader agree on where a copy lives', () => {
     expect(mirrorUrl(upstream)).toBe(`${MIRROR_BASE}/${mirrorPath(upstream)}`);
   });
 
-  it('mirrors neither imagery nor anything off SWPC', () => {
+  it('mirrors no imagery and nothing from an unknown host', () => {
     expect(mirrorUrl(`${SWPC_BASE}/products/animations/suvi-primary-304.json`)).toBeNull();
     expect(mirrorUrl(`${SWPC_BASE}/images/animations/suvi/primary/304/x.png`)).toBeNull();
-    expect(mirrorUrl('https://kauai.ccmc.gsfc.nasa.gov/DONKI/WS/get/CMEAnalysis')).toBeNull();
     expect(mirrorPath(`${SWPC_BASE}/products/animations/lasco-c2.json`)).toBeNull();
+    expect(mirrorUrl('https://example.com/x.json')).toBeNull();
+  });
+
+  it('mirrors DONKI by service, query dropped, and both sides agree', () => {
+    // DONKI stopped sending CORS headers in late September 2026; the mirror
+    // is how a browser reads it now.
+    const up = `${DONKI_BASE}/CMEAnalysis?startDate=2026-09-25&mostAccurateOnly=true`;
+    expect(mirrorPath(up)).toBe('donki/CMEAnalysis.json');
+    expect(mirrorUrl(up)).toBe(`${MIRROR_BASE}/donki/CMEAnalysis.json`);
+    expect(DONKI_ORIGIN).toBe(DONKI_BASE);
   });
 
   it('drops the query string, which is not part of a stored path', () => {
@@ -89,6 +99,13 @@ describe.skipIf(!dir)('the app can read what the mirror wrote', () => {
     // that every reading is a day old. See test/trim.test.ts.
     const ageH = (Date.now() - Date.parse(env.data.solar_wind!.time)) / 3.6e6;
     expect(ageH).toBeLessThan(2);
+  });
+
+  it('carries DONKI in a form the CME parser reads', () => {
+    // Browsers can only reach DONKI through this copy since it dropped CORS.
+    const f = join(dir!, 'donki/CMEAnalysis.json');
+    expect(existsSync(f)).toBe(true);
+    expect(Array.isArray(parseCmes(JSON.parse(readFileSync(f, 'utf8'))))).toBe(true);
   });
 
   it('keeps the sunspot record whole, so the century-scale claim stays true', () => {

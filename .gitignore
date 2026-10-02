@@ -9,3 +9,6 @@ experiments/manta-design/
 
 # Python venv for the model reference generators (scripts/gen-*-reference.py)
 .venv/
+
+# Local screen-recording probe scripts (.rec_probe.cjs etc.), never committed
+.rec_*

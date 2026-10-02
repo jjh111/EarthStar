@@ -78,6 +78,12 @@ export function discover(srcDir = new URL('../src/', import.meta.url).pathname) 
  * asserts they do.
  */
 export function mirrorPath(url) {
+  // DONKI by service name — browsers read it from here since it stopped
+  // sending CORS headers (src/data/fetch-json.ts mirrorUrl is the other half)
+  if (url.startsWith(DONKI)) {
+    const service = url.slice(DONKI.length).split('?')[0];
+    return service ? `donki${service}.json` : null;
+  }
   if (!url.startsWith(SWPC)) return null;
   const path = url.slice(SWPC.length).split('?')[0];
   if (path.startsWith('/images/') || path.includes('/animations/')) return null;

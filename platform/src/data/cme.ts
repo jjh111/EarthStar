@@ -3,11 +3,15 @@
  * for the cone parameters, which are a human analyst's fit to coronagraph
  * imagery, and `[D]` for our propagation of them.
  *
- * DONKI at CCMC sends `Access-Control-Allow-Origin: *` and needs no API key,
- * contrary to the plan's assumption — see docs/sources.md §1.
+ * DONKI at CCMC needs no API key. It sent `Access-Control-Allow-Origin: *`
+ * when this lane was built and stopped in late September 2026, so browsers
+ * now read it from the stage B mirror (the workflow fetches it server-side,
+ * where CORS does not apply). The fetch goes through `get()` for exactly that
+ * reason: upstream, retry, then the mirror.
  */
 
 import type { ConeParams } from '../models/cme-cone.js';
+import { get } from './fetch-json.js';
 import { arrivalAtEarth, angleFromEarth, isEarthDirected } from '../models/cme-cone.js';
 
 export const DONKI_BASE = 'https://kauai.ccmc.gsfc.nasa.gov/DONKI/WS/get';
@@ -101,15 +105,13 @@ export function activeCmes(
 }
 
 export async function fetchCmes(signal?: AbortSignal, days = 7): Promise<Cme[]> {
-  const end = new Date();
-  const start = new Date(end.getTime() - days * 86_400_000);
-  const url = `${DONKI_BASE}/CMEAnalysis?startDate=${start.toISOString().slice(0, 10)}`
-    + `&endDate=${end.toISOString().slice(0, 10)}&mostAccurateOnly=true`;
-  try {
-    const r = await fetch(url, { cache: 'no-store', signal });
-    if (!r.ok) return [];
-    return parseCmes(await r.json());
-  } catch {
-    return [];
-  }
+  const start = new Date(Date.now() - days * 86_400_000);
+  // One template literal, so the mirror's endpoint discovery copies exactly
+  // this query. endDate is omitted: DONKI defaults it to today.
+  const url = `${DONKI_BASE}/CMEAnalysis?startDate=${start.toISOString().slice(0, 10)}&mostAccurateOnly=true`;
+  const r = await get<unknown>(url, signal);
+  // A failure throws, so the lane shows an error. Returning [] here once made
+  // a blocked request look exactly like a quiet week with no ejections.
+  if (r.json === null) throw new Error(r.error ?? 'DONKI unreachable');
+  return parseCmes(r.json);
 }

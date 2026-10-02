@@ -39,13 +39,21 @@ export interface Fetched<T> {
   mirrored?: boolean;
 }
 
+/** NASA CCMC's DONKI. Mirrored since it stopped sending CORS headers. Kept
+ *  here rather than imported from cme.ts, which imports this module. */
+export const DONKI_ORIGIN = 'https://kauai.ccmc.gsfc.nasa.gov/DONKI/WS/get';
+
 /**
  * Where the mirror keeps a copy of `url`, or null for anything we do not
  * mirror — solar imagery (megabytes of PNG per frame, and a frame list is
- * useless without them) and DONKI, whose catalogue is human-curated and hours
- * behind events in any case. Those lanes degrade the ordinary way.
+ * useless without them). DONKI is mirrored by service name, one file per
+ * service, query dropped like every other mirrored path.
  */
 export function mirrorUrl(url: string): string | null {
+  if (url.startsWith(DONKI_ORIGIN)) {
+    const service = url.slice(DONKI_ORIGIN.length).split('?')[0]!;
+    return service ? `${MIRROR_BASE}/donki${service}.json` : null;
+  }
   if (!url.startsWith(SWPC_BASE)) return null;
   const path = url.slice(SWPC_BASE.length).split('?')[0]!;
   if (path.startsWith('/images/') || path.includes('/animations/')) return null;

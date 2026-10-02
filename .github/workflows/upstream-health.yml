@@ -37,11 +37,11 @@ jobs:
     steps:
       # Nothing here pushes, so the checkout is told not to leave a credential
       # in .git/config for the rest of the job to inherit.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
 

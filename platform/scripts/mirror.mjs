@@ -65,7 +65,7 @@ let failed = 0;
 
 for (const url of urls) {
   const rel = mirrorPath(url);
-  if (!rel) continue;                       // imagery and DONKI are not mirrored
+  if (!rel) continue;                       // imagery is not mirrored
   const record = { url: url.replace(SWPC, '').replace(DONKI, 'DONKI'), path: rel };
   try {
     const res = await fetchRetrying(url);
@@ -74,8 +74,12 @@ for (const url of urls) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     let body = text;
-    if (url.endsWith('.json')) {
-      const { value, trimmed, archive, byTime } = trim(JSON.parse(text));  // throws on a bad body
+    if (url.endsWith('.json') || url.startsWith(DONKI)) {
+      // DONKI answers a window with no events with an empty body rather than
+      // []. Same meaning; storing [] keeps a quiet week from reading as a
+      // failed copy.
+      const src = url.startsWith(DONKI) && text.trim() === '' ? '[]' : text;
+      const { value, trimmed, archive, byTime } = trim(JSON.parse(src));  // throws on a bad body
       body = JSON.stringify(value);
       record.trimmed = trimmed;
       if (archive) record.archive = true;
@@ -104,9 +108,9 @@ for (const url of urls) {
 
 const manifest = {
   mirrored_at: new Date().toISOString(),
-  note: 'Byte-for-byte copies of NOAA SWPC payloads, long arrays cut to their '
+  note: 'Byte-for-byte copies of NOAA SWPC payloads and NASA DONKI\'s CME analyses, long arrays cut to their '
     + 'newest rows. Every record keeps upstream\'s own timestamps. Consulted by '
-    + 'the Viewer only when NOAA itself is unreachable.',
+    + 'the Viewer only when upstream is unreachable from the browser.',
   max_rows: MAX_ROWS,
   total: entries.length,
   failed,

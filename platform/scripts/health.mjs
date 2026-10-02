@@ -67,6 +67,21 @@ const ORIGIN = 'https://earthstar.space';
  *  catalogue that carries a timestamp publishes at least daily. */
 const STALE_WARN_H = 24;
 
+/**
+ * Feeds that do not keep a daily clock, so the 24 h rule raised false alarms:
+ * event-driven lists are quiet when the Sun is (no new alert or flare is news,
+ * not a stalled feed), and the daily forecast products are stamped with the
+ * day they are *for*, which reads up to two days old just before the next
+ * issue. Observed on the standing health issue, Sept–Oct 2026.
+ */
+const STALE_OVERRIDE_H = {
+  '/products/alerts.json': Infinity,
+  '/json/goes/primary/xray-flares-7-day.json': Infinity,
+  '/json/goes/primary/xray-flares-latest.json': Infinity,
+  '/json/solar_probabilities.json': 54,
+  '/json/solar_regions.json': 54,
+};
+
 // ---------------------------------------------------------------- discovery
 
 const { urls: catalogue, unchecked } = discover();
@@ -116,8 +131,15 @@ async function probe(url) {
     r.kb = Math.round(body.length / 1024);
     if (!res.ok) { r.problem = `HTTP ${res.status}`; return r; }
     if (!r.cors || (r.cors !== '*' && r.cors !== ORIGIN)) {
-      r.problem = `no usable CORS header (${r.cors ?? 'absent'})`;
-      return r;
+      // DONKI withdrew its CORS header in late September 2026. Browsers now
+      // read it from the stage B mirror, so it is a warning, not a dead lane —
+      // provided the mirror actually carries it, which probeMirror checks.
+      if (url.startsWith(DONKI) && res.ok) {
+        r.warn = `no CORS header (${r.cors ?? 'absent'}) — browsers read it from the mirror`;
+      } else {
+        r.problem = `no usable CORS header (${r.cors ?? 'absent'})`;
+        return r;
+      }
     }
     if (url.endsWith('.json') || url.includes('DONKI')) {
       try { JSON.parse(body); } catch { r.problem = 'body is not JSON'; return r; }
@@ -127,7 +149,8 @@ async function probe(url) {
       r.newest = stamp;
       r.ageH = (Date.now() - Date.parse(stamp)) / 3.6e6;
       // Forecast feeds legitimately run ahead of the clock; only lateness counts.
-      if (r.ageH > STALE_WARN_H) r.warn = `newest datum is ${r.ageH.toFixed(0)} h old`;
+      const limit = STALE_OVERRIDE_H[r.url.split('?')[0]] ?? STALE_WARN_H;
+      if (r.ageH > limit) r.warn = `newest datum is ${r.ageH.toFixed(0)} h old`;
     }
     r.ok = true;
     return r;
@@ -187,6 +210,11 @@ async function probeMirror() {
     }
     if (m.failed > 0) { r.problem = `${m.failed} of ${m.total} feeds failed to copy`; return r; }
     if (m.unchecked?.length) { r.problem = `${m.unchecked.length} endpoint(s) the mirror could not resolve`; return r; }
+    // DONKI is reachable from browsers only through here now
+    if (!m.files?.some((f) => f.path?.startsWith('donki/') && f.ok)) {
+      r.problem = 'the mirror carries no DONKI copy, and browsers cannot read DONKI directly';
+      return r;
+    }
     r.ok = true;
     return r;
   } catch (e) {
