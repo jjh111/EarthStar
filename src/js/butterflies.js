@@ -1,6 +1,8 @@
 // Living butterfly system — max 5, orbit the cursor, wander when it leaves.
 // The rAF loop only runs while butterflies exist.
 
+import { drawInto } from './glyph.js';
+
 const MAX = 5;
 
 let butterflies = [];
@@ -30,7 +32,7 @@ export function clearButterflies() {
 export function spawnButterfly(x, y) {
   const el = document.createElement('div');
   el.className = 'butterfly-living';
-  el.textContent = '🦋';
+  drawInto(el, '🦋');
   const spawnX = x + (Math.random() - 0.5) * 40;
   const spawnY = y + (Math.random() - 0.5) * 40;
   el.style.left = (spawnX - 12) + 'px';

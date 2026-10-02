@@ -9,8 +9,9 @@ exists (references pending).
 green inverted by day and night, gold only for what is alive, flat grid (2026-09-09); then a
 funnel (2026-10-01/02) — the painting as fixed background, a field of gold cellular
 automata rippling beneath translucent sections, I · the seed (full seed phrase shown),
-II · five scales with SVG Gomen pictograms (`src/img/gomens/`, Being drawn as the Circle,
-`[M]`), III · Sky now, then Ideas, Archive, Links out. The style tokens at the top of
+II · five scales and their Gomens, III · Sky now, then Ideas, Archive, Links out. Since
+2026-10-03 every glyph is drawn by the Earth Star script (`src/glyphs/`, radicals from the logo
+and the painting, `[M]`), with Gomen lore in `src/gomens.json`. The style tokens at the top of
 `src/css/site.css` are the de facto style guide until W6 writes it down. Still open: W1
 (Viewer links back), W2 (register badges in the Archive manifest), W3, W4, W5, W6.
 

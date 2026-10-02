@@ -19,14 +19,18 @@ Earth Star is a regenerative intelligence framework that combines:
 The website at earthstar.space serves as the public face of the project, featuring:
 - A funnel from the core to the depth: the layered painting is the page's fixed ground (cursor, scroll
   and tilt parallax) and everything scrolls over it, with a field of gold cellular automata rippling
-  through the background (each sweep a new seed under a new rule) — I · the seed, II · five scales and the Gomen that tends each (SVG pictograms in
-  `src/img/gomens/`, inlined at build and copied to `assets/img/gomens/`), then Sky, Ideas, Archive, links
+  through the background (each sweep a new seed under a new rule) — I · the seed, II · five scales and the Gomen that tends each, with their lore, then Sky, Ideas, Archive, links
 - **Sky now** — live space weather from the Viewer's data pool, read straight from NOAA, with honest
   loading / no data / error / stale states
 - **Ideas** — the whole framework as sixteen searchable cards (`src/concepts.json`), each with its
   evidence-register badge and links into the Archive and the Viewer
 - The Archive — policy documents, the framework spec, the research protocol, the data catalog
 - One search over all of it (`/` to focus), a sticky wayfinder, and the golden thread down the margin
+- **The Earth Star script.** Every glyph on the page (the Gomen figures, their name cartouches, the
+  idea marks, the bead numerals, the garden) is drawn at build time by a seeded brush in
+  `src/glyphs/` (`brush.mjs`, `script.mjs`) from radicals that descend from the logo and the
+  painting, written to `assets/img/glyphs/` and `assets/img/gomens/`, and used as CSS masks so it
+  takes the theme's ink and gold. Gomen lore lives in `src/gomens.json`. Register `[M]`: vision.
 - Two schemes, inverted: tan paper with dark-green ink by day, dark-green ground with tan ink by night
   (follows the system, or the ☾/☀ toggle); gold is reserved for what is alive — automata, equations, live readings
 - Interactive butterfly and plant-growing elements, margin-star constellations, and a coherence meter that grows with your garden

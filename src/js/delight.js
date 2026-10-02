@@ -3,6 +3,7 @@
 // where movement is involved.
 
 import { composteOldestSprout } from './garden.js';
+import { drawInto, gomenArt } from './glyph.js';
 
 const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -74,7 +75,9 @@ function summonCrab() {
   crabActive = true;
   const crab = document.createElement('div');
   crab.className = 'gomen-crab';
-  crab.innerHTML = '<span class="gomen-crab-body">🦀</span><span class="gomen-crab-say">gomen’nasai</span>';
+  // a Shore-walker, drawn in the script, comes up the page's shore
+  crab.innerHTML = '<span class="gomen-crab-body"></span><span class="gomen-crab-say">gomen’nasai</span>';
+  crab.querySelector('.gomen-crab-body').appendChild(gomenArt('shorewalkers'));
   document.body.appendChild(crab);
 
   const say = crab.querySelector('.gomen-crab-say');
@@ -94,7 +97,7 @@ function summonCrab() {
     if (ate) {
       const sparkle = document.createElement('span');
       sparkle.className = 'gomen-crab-sparkle';
-      sparkle.textContent = '✨';
+      drawInto(sparkle, '✨');
       crab.appendChild(sparkle);
       setTimeout(() => sparkle.remove(), 1500);
     }

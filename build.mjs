@@ -8,6 +8,8 @@
 //   assets/js/main.js — single minified bundle
 //   assets/fonts/     — self-hosted variable woff2 subsets
 //   assets/img/       — responsive AVIF/WebP hero layers, logo, banner, favicon, og card
+//   assets/img/glyphs, assets/img/gomens — the Earth Star script, generated from
+//                       src/glyphs/ on every build (deterministic: seeded brush)
 //   archive/<id>.html — pre-rendered document fragments, fetched on demand
 //
 // Filenames are not content-hashed on purpose: GitHub Pages serves everything
@@ -18,12 +20,47 @@ import { execFileSync } from 'node:child_process';
 import { marked } from 'marked';
 import { transform } from 'esbuild';
 import { cardHTML } from './src/js/card-template.mjs';
+import {
+  buildIdea, IDEA_IDS, buildGomen, GOMEN_IDS, washSvg, buildCartouche,
+  buildMark, MARK_IDS, RADICALS, svgOf, pen,
+} from './src/glyphs/script.mjs';
 
 const ROOT = new URL('.', import.meta.url).pathname;
 const p = (rel) => ROOT + rel;
 
 const manifest = JSON.parse(readFileSync(p('src/archive/manifest.json'), 'utf8'));
 const concepts = JSON.parse(readFileSync(p('src/concepts.json'), 'utf8'));
+const gomenLore = JSON.parse(readFileSync(p('src/gomens.json'), 'utf8'));
+
+// ── The script: every glyph, figure and mark on the page, drawn by the brush ──
+// Shipped as SVG files used as CSS masks, so each layer takes the theme's ink
+// or gold; the wash layer carries the painting's own colours. Regenerated from
+// src/glyphs/ on every build — the source of truth is the code, not the files.
+
+const GLYPHS = 'assets/img/glyphs', GOMENS = 'assets/img/gomens';
+rmSync(p(GLYPHS), { recursive: true, force: true });
+rmSync(p(GOMENS), { recursive: true, force: true });
+mkdirSync(p(GLYPHS), { recursive: true });
+mkdirSync(p(GOMENS), { recursive: true });
+for (const id of IDEA_IDS) writeFileSync(p(`${GLYPHS}/idea-${id}.svg`), svgOf(buildIdea(id).ink));
+for (const id of MARK_IDS) writeFileSync(p(`${GLYPHS}/${id}.svg`), svgOf(buildMark(id).ink));
+for (const id of GOMEN_IDS) {
+  const L = buildGomen(id);
+  writeFileSync(p(`${GOMENS}/${id}-ink.svg`), svgOf(L.ink, { size: 96 }));
+  writeFileSync(p(`${GOMENS}/${id}-gold.svg`), svgOf(L.gold, { size: 96 }));
+  writeFileSync(p(`${GOMENS}/${id}-wash.svg`), washSvg(L.wash));
+  const c = buildCartouche(id).ink;
+  writeFileSync(p(`${GLYPHS}/cart-${id}.svg`), svgOf(c, { size: 52 }).replace('viewBox="0 0 52 52"', 'viewBox="0 0 28 52"'));
+}
+// The favicon: the script's star, gold on the night ground
+{
+  const f = pen('favicon', { w: 3, step: 1.5 });
+  f.star(32, 33.5, 23);
+  writeFileSync(p('assets/img/favicon.svg'),
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#0e2117"/>`
+    + `<path fill="#e9b92c" d="${f.layers.ink.join('')}"/></svg>`);
+}
+const mask = (file) => `style="--m:url(${file})"`;
 
 // ── 0. Ideas dashboard: concept tiles rendered at build time (no JS needed to read them) ──
 
@@ -34,7 +71,9 @@ function ideaHTML(c) {
   const links = (c.links || []).map((l) => `<a href="${esc(l.href)}">${esc(l.label)}</a>`).join('');
   return `<article class="idea" id="idea-${esc(c.id)}" data-id="${esc(c.id)}" data-lens="${esc((c.lens || []).join(' '))}" data-register="${esc(c.register)}" data-search="${esc(search)}">
   <button class="idea-head" type="button" aria-expanded="false" aria-controls="idea-${esc(c.id)}-more">
-    <span class="idea-glyph" aria-hidden="true">${esc(c.glyph)}</span>
+    ${IDEA_IDS.includes(c.id)
+      ? `<span class="idea-glyph glyph" aria-hidden="true" ${mask(`${GLYPHS}/idea-${esc(c.id)}.svg`)}></span>`
+      : `<span class="idea-glyph" aria-hidden="true">${esc(c.glyph)}</span>`}
     <span class="idea-name">${esc(c.name)}</span>
     <span class="badge" title="${esc(concepts.registers[c.register] || '')}">${esc(c.register)}</span>
   </button>
@@ -107,12 +146,38 @@ html = html.replace('<!--BUILD:IDEAS_GRID-->', ideasGrid);
 html = html.replace('<!--BUILD:IDEAS_LENSES-->', ideasLenses);
 html = html.replace('<!--BUILD:REGISTER_LEGEND-->', registerLegend);
 
-// Gomen pictograms: inlined so they take the page's ink and gold (currentColor
-// and theme tokens), and copied to assets/ so the Viewer can use the same files
-html = html.replace(/<!--BUILD:GOMEN ([a-z-]+)-->/g, (_, name) =>
-  readFileSync(p(`src/img/gomens/${name}.svg`), 'utf8').trim());
-mkdirSync(p('assets/img/gomens'), { recursive: true });
-cpSync(p('src/img/gomens'), p('assets/img/gomens'), { recursive: true });
+// Section II: the Gomens and the key to their script, from src/gomens.json
+const REG = { D: 'Design — a proposal, not built hardware', M: 'Mythopoetic — vision and commitment' };
+const gomenLi = (g) => `<li class="scale" id="scale-${esc(g.scale.toLowerCase())}">
+  <span class="scale-name">${esc(g.scale)}</span>
+  <button type="button" class="gomen-pic" aria-pressed="false" aria-label="Wake ${esc(g.name)}">
+    <span class="gomen-art" aria-hidden="true">
+      <img class="ga-wash" src="${GOMENS}/${esc(g.id)}-wash.svg" alt="" width="96" height="96" decoding="async">
+      <span class="ga-ink" ${mask(`${GOMENS}/${esc(g.id)}-ink.svg`)}></span>
+      <span class="ga-gold" ${mask(`${GOMENS}/${esc(g.id)}-gold.svg`)}></span>
+    </span>
+    <span class="gomen-say" aria-hidden="true">${esc(g.say)}</span>
+  </button>
+  <div class="gomen-label">
+    <span class="cart glyph" aria-hidden="true" ${mask(`${GLYPHS}/cart-${esc(g.id)}.svg`)}></span>
+    <div>
+      <span class="gomen-name">${esc(g.name)} <span class="badge" title="${esc(REG[g.register] || '')}">${esc(g.register)}</span></span>
+      <p class="gomen-reading"><span class="gomen-radicals">${esc(g.radicals)}</span>${esc(g.reading)}</p>
+    </div>
+  </div>
+  <p class="gomen-line">${esc(g.lore)}</p>${g.link ? `
+  <a class="scale-live" href="${esc(g.link.href)}">${esc(g.link.label)}</a>` : ''}
+</li>`;
+html = html.replace('<!--BUILD:GOMENS-->', gomenLore.gomens.map(gomenLi).join('\n'));
+const scriptKey = `<div class="script-key">
+  <p class="key-lede"><span class="badge" title="${esc(REG.M)}">M</span> ${esc(gomenLore.key.lede)}</p>
+  <ul class="key-row" aria-label="Key to the script">${RADICALS.map((r) =>
+    `<li><span class="glyph" aria-hidden="true" ${mask(`${GLYPHS}/radical-${r}.svg`)}></span><span><b>${esc(r)}</b><small>${esc(gomenLore.key.radicals[r] || '')}</small></span></li>`).join('')}</ul>
+</div>`;
+html = html.replace('<!--BUILD:SCRIPT_KEY-->', scriptKey);
+// Section numerals, counted in beads, and the wayfinder's star
+html = html.replace(/<!--BUILD:NUM (\d)-->/g, (_, n) => `<span class="glyph num" aria-hidden="true" ${mask(`${GLYPHS}/num-${n}.svg`)}></span>`);
+html = html.replace('<!--BUILD:STAR-->', `<span class="glyph" aria-hidden="true" ${mask(`${GLYPHS}/star.svg`)}></span>`);
 
 // Mock fixture for ?mock=1 and tests — never consulted by the live path
 mkdirSync(p('assets/data'), { recursive: true });
@@ -172,13 +237,7 @@ if (process.argv.includes('--images')) {
     .composite([...paintStack, { input: logoBuf, left: 36, top: 36 }])
     .jpeg({ quality: 86 }).toFile(`${IMG}/og.jpg`);
 
-  // Favicon: gold four-point star on the site's night ground
-  writeFileSync(`${IMG}/favicon.svg`,
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">` +
-    `<rect width="64" height="64" rx="14" fill="#0e2117"/>` +
-    `<path d="M32 8 L37 27 L56 32 L37 37 L32 56 L27 37 L8 32 L27 27 Z" fill="#e9b92c"/>` +
-    `<circle cx="32" cy="32" r="3.4" fill="#0e2117"/>` +
-    `</svg>`);
+  // (The favicon is drawn by the script's brush on every build; see above.)
 
   // The index page's Viewer screenshot card. Source is the Viewer's own og card
   // (`viewer/og.jpg`) so the two can never disagree, and it IS generated here

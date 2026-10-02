@@ -87,7 +87,7 @@
   </header>
 
 <nav class="wayfinder" aria-label="Site">
-  <a class="wf-mark" href="#top" aria-label="Top of page">✦</a>
+  <a class="wf-mark" href="#top" aria-label="Top of page"><!--BUILD:STAR--></a>
   <div class="wf-search">
     <label class="visually-hidden" for="siteSearch">Search ideas and documents</label>
     <span class="wf-field">
@@ -114,7 +114,7 @@
 
 <section id="seed" class="stage seed-stage" data-thread="Seed">
   <div class="stage-inner">
-    <h2 class="section-label"><span class="stage-no">I</span> The seed <span class="section-sub">everything else grows from this</span></h2>
+    <h2 class="section-label"><span class="stage-no" title="I"><!--BUILD:NUM 1--><span class="visually-hidden">I</span></span> The seed <span class="section-sub">everything else grows from this</span></h2>
     <div class="seed-grid">
       <div class="seed">
         <div class="seed-copy-wrap">
@@ -140,62 +140,17 @@
 
 <section id="scales" class="stage scales-stage" data-thread="Scales">
   <div class="stage-inner">
-    <h2 class="section-label"><span class="stage-no">II</span> Five scales <span class="section-sub">and what tends each</span></h2>
-    <p class="stage-lede">Heal one scale and the pattern echoes through the rest. The things drawn below are <strong>Gomens</strong>: waste-eating agents imagined from fungus, bacteria and necessity. Every one is a design, not yet a device, and each is designed to apologise before it helps. Wake one.</p>
-    <ol class="scale-row">
-      <li class="scale" id="scale-body">
-        <span class="scale-name">Body</span>
-        <button type="button" class="gomen-pic" aria-pressed="false" aria-label="Wake the Antibody Gomens">
-          <!--BUILD:GOMEN antibody-->
-          <span class="gomen-say" aria-hidden="true">gomen’nasai</span>
-        </button>
-        <span class="gomen-name">Antibody Gomens <span class="badge" title="Design — proposal, not built hardware">D</span></span>
-        <p class="gomen-line">Designed to clear microplastic from the blood, one strand at a time.</p>
-      </li>
-      <li class="scale" id="scale-biome">
-        <span class="scale-name">Biome</span>
-        <button type="button" class="gomen-pic" aria-pressed="false" aria-label="Wake the Crab-Gomens">
-          <!--BUILD:GOMEN crab-->
-          <span class="gomen-say" aria-hidden="true">gomen’nasai</span>
-        </button>
-        <span class="gomen-name">Crab-Gomens <span class="badge" title="Design — proposal, not built hardware">D</span></span>
-        <p class="gomen-line">Iridescent, sideways, polite. Hand one a bottle cap and it beeps.</p>
-      </li>
-      <li class="scale" id="scale-being">
-        <span class="scale-name">Being</span>
-        <button type="button" class="gomen-pic" aria-pressed="false" aria-label="Wake the Circle">
-          <!--BUILD:GOMEN being-->
-          <span class="gomen-say" aria-hidden="true">gomen’nasai</span>
-        </button>
-        <span class="gomen-name">The Circle <span class="badge" title="Mythopoetic — vision and commitment">M</span></span>
-        <p class="gomen-line">Grief no one has processed is waste too. Here the tending is a circle: people around one heart, holding what no one holds alone.</p>
-      </li>
-      <li class="scale" id="scale-network">
-        <span class="scale-name">Network</span>
-        <button type="button" class="gomen-pic" aria-pressed="false" aria-label="Wake the Weavers">
-          <!--BUILD:GOMEN weaver-->
-          <span class="gomen-say" aria-hidden="true">gomen’nasai</span>
-        </button>
-        <span class="gomen-name">Weavers <span class="badge" title="Design — proposal, not built hardware">D</span></span>
-        <p class="gomen-line">They connect what was isolated, so supply chains circulate instead of piling up.</p>
-      </li>
-      <li class="scale" id="scale-star">
-        <span class="scale-name">Star</span>
-        <button type="button" class="gomen-pic" aria-pressed="false" aria-label="Wake the Orbital Gomens">
-          <!--BUILD:GOMEN orbital-->
-          <span class="gomen-say" aria-hidden="true">gomen’nasai</span>
-        </button>
-        <span class="gomen-name">Orbital Gomens <span class="badge" title="Design — proposal, not built hardware">D</span></span>
-        <p class="gomen-line">On patrol in low orbit, gathering debris before it gathers itself.</p>
-        <a class="scale-live" href="#sky">the star scale, live ↓</a>
-      </li>
-    </ol>
+    <h2 class="section-label"><span class="stage-no" title="II"><!--BUILD:NUM 2--><span class="visually-hidden">II</span></span> Five scales <span class="section-sub">and what tends each</span></h2>
+    <p class="stage-lede">Heal one scale and the pattern echoes through the rest. What tends each one is a <strong>Gomen</strong>.</p>
+    <p class="gomen-lore">A Gomen is industry run in reverse. Where a factory takes ground and returns waste, a Gomen would take waste and return ground: soil, clean water, open sky. It would be grown, not manufactured &mdash; fungus for a body plan, bacteria for a gut, carbon drawn from the air for bone, sunlight for a pulse. Not a machine and not quite an animal: a new branch of life that answers to the Earth rather than to an owner, apologises as it works, and steps aside when something better grows. <span class="lore-coda">Each here is a design, not yet a device. Wake one.</span></p>
+    <ol class="scale-row"><!--BUILD:GOMENS--></ol>
+    <!--BUILD:SCRIPT_KEY-->
   </div>
 </section>
 
 <section id="sky" class="stage sky" data-thread="Sky">
   <div class="sky-inner">
-    <h2 class="section-label"><span class="stage-no">III</span> Sky now <span class="section-sub">the star scale, measured this minute by NOAA</span></h2>
+    <h2 class="section-label"><span class="stage-no" title="III"><!--BUILD:NUM 3--><span class="visually-hidden">III</span></span> Sky now <span class="section-sub">the star scale, measured this minute by NOAA</span></h2>
     <p class="sky-sentence" id="sky-sentence" aria-live="polite">Reading the sky…</p>
     <div class="sky-grid" id="sky-now">
       <div class="sky-tile" id="sky-kp" data-state="loading" role="group" aria-label="Planetary K index">
@@ -239,7 +194,7 @@
 <div class="depth">
 <section id="ideas" class="ideas" data-thread="Ideas">
   <div class="ideas-inner">
-    <h2 class="section-label"><span class="stage-no">IV</span> Ideas <span class="section-sub">the whole framework, one card each</span></h2>
+    <h2 class="section-label"><span class="stage-no" title="IV"><!--BUILD:NUM 4--><span class="visually-hidden">IV</span></span> Ideas <span class="section-sub">the whole framework, one card each</span></h2>
     <div class="ideas-bar">
       <div class="ideas-lenses" id="ideas-lenses" role="group" aria-label="Filter ideas by lens"><!--BUILD:IDEAS_LENSES--></div>
       <span class="ideas-count" id="ideas-count"></span>
@@ -252,14 +207,14 @@
 
 <section id="archive-section" class="archive" data-thread="Archive">
   <div class="archive-inner">
-    <h2 class="section-label"><span class="stage-no">V</span> Archive <span class="section-sub">the documents beneath</span></h2>
+    <h2 class="section-label"><span class="stage-no" title="V"><!--BUILD:NUM 5--><span class="visually-hidden">V</span></span> Archive <span class="section-sub">the documents beneath</span></h2>
     <div class="archive-grid" id="archiveGrid"><!--BUILD:ARCHIVE_GRID--></div>
   </div>
 </section>
 
 <section id="begin" class="begin" data-thread="Out">
   <div class="begin-inner">
-    <h2 class="section-label"><span class="stage-no">VI</span> Links out <span class="section-sub">where it leads</span></h2>
+    <h2 class="section-label"><span class="stage-no" title="VI"><!--BUILD:NUM 6--><span class="visually-hidden">VI</span></span> Links out <span class="section-sub">where it leads</span></h2>
     <div class="links">
       <a href="https://earthstar111.substack.com" class="link-btn btn-readmore" target="_blank" rel="noopener">Read the Writings</a>
       <a href="https://ko-fi.com/earthstar111" class="link-btn btn-stickers" target="_blank" rel="noopener">Stickers</a>

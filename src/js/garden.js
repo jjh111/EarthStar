@@ -3,6 +3,7 @@
 // the margin-star constellations.
 
 import { spawnButterfly, clearButterflies, butterflyCount } from './butterflies.js';
+import { drawInto } from './glyph.js';
 
 const CONFIG = {
   stars: { emoji: '✦', max: 8 },
@@ -92,7 +93,7 @@ function notifyStarsChanged() {
 function createTransientEmoji(x, y) {
   const emoji = document.createElement('div');
   emoji.className = 'emoji-transient';
-  emoji.textContent = CONFIG.transient.emojis[Math.floor(Math.random() * CONFIG.transient.emojis.length)];
+  drawInto(emoji, CONFIG.transient.emojis[Math.floor(Math.random() * CONFIG.transient.emojis.length)]);
   emoji.style.left = (x - 12) + 'px';
   emoji.style.top = (y - 12) + 'px';
   document.body.appendChild(emoji);
@@ -159,7 +160,7 @@ export function composteOldestSprout() {
 function createPersistentEmoji(x, y, emojiChar, offsetY = 0) {
   const el = document.createElement('div');
   el.className = 'emoji-persistent';
-  el.textContent = emojiChar;
+  drawInto(el, emojiChar);
   el.style.left = (x - 14) + 'px';
   el.style.top = (y - 14 + offsetY) + 'px';
   document.body.appendChild(el);
@@ -169,7 +170,7 @@ function createPersistentEmoji(x, y, emojiChar, offsetY = 0) {
 function fadeAwayEmoji(x, y, emojiChar) {
   const el = document.createElement('div');
   el.className = 'emoji-fading';
-  el.textContent = emojiChar;
+  drawInto(el, emojiChar);
   el.style.left = (x - 14) + 'px';
   el.style.top = (y - 14) + 'px';
   document.body.appendChild(el);
@@ -194,7 +195,7 @@ function renderFooterGarden() {
     } else {
       el.className = 'emoji-footer';
     }
-    el.textContent = item.emoji;
+    drawInto(el, item.emoji);
     const untilTree = 5 - state.itemsSinceLastTree;
     el.title = (item.isTree ? 'A grown tree. ' : '') + 'Click to remove. ' + untilTree + ' more until next tree.';
     el.addEventListener('click', (e) => {

@@ -79,6 +79,7 @@ async function newPage(opts = {}) {
   await page.mouse.click(700, 450);
   await page.waitForTimeout(300);
   check('body click plants', await page.locator('.emoji-transient, .butterfly-living').count() > 0);
+  check('the garden plants drawn glyphs, not emoji', await page.locator('.emoji-transient .glyph, .butterfly-living .glyph').count() > 0);
 
   for (const y of [500, 560, 620]) await page.mouse.click(30, y);
   await page.waitForTimeout(1600);
@@ -208,7 +209,16 @@ async function newPage(opts = {}) {
     document.querySelector('.hero').getBoundingClientRect().top === 0 &&
     parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sink')) > 0.9));
 
-  check('five gomen pictograms inlined', await page.locator('.scale .gomen-svg').count() === 5);
+  check('five gomen figures, each in three layers', await page.locator('.scale .gomen-art').count() === 5
+    && await page.locator('.scale .gomen-art .ga-wash, .scale .gomen-art .ga-ink, .scale .gomen-art .ga-gold').count() === 15);
+  // Every glyph on the page is a mask over a generated file; each must resolve
+  const masks = await page.evaluate(() => [...new Set([...document.querySelectorAll('[style*="--m"]')]
+    .map((el) => (el.getAttribute('style').match(/url\(([^)]+)\)/) || [])[1]).filter(Boolean))]);
+  const dead = [];
+  for (const m of masks) { const r = await page.request.get(BASE + '/' + m); if (!r.ok()) dead.push(`${r.status()} ${m}`); }
+  check('every script glyph resolves', masks.length >= 40 && dead.length === 0, dead.length ? dead.join(', ') : `${masks.length} glyph files`);
+  check('the script key lists its radicals', await page.locator('.key-row li').count() === 10);
+  check('idea cards carry drawn glyphs', await page.locator('.idea .idea-glyph.glyph').count() === await page.locator('.idea').count());
   await page.locator('.gomen-pic').nth(1).click();
   check('a tapped gomen wakes', await page.locator('.gomen-pic.is-awake').count() === 1);
 

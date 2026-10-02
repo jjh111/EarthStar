@@ -24,6 +24,7 @@
   --gold-glow: rgba(200, 150, 12, 0.35);
   --scrim: rgba(20, 46, 29, 0.55);
   --live: #1f6b3a;          /* the one green-on-tan accent: a live reading */
+  --leaf: #3e7b3c;          /* the garden's growing things */
   --automata-rgb: 180, 138, 14;   /* the Rule 30 ground, read by automata.js */
   --automata-alpha: 0.36;
   --sheet: color-mix(in srgb, var(--bg) 60%, transparent);
@@ -53,6 +54,8 @@
     --gold-glow: rgba(255, 215, 0, 0.45);
     --scrim: rgba(8, 20, 12, 0.6);
     --live: #ffe9a8;
+  --leaf: #86c97a;
+    --leaf: #86c97a;
     --automata-rgb: 233, 185, 44;
     --automata-alpha: 0.3;
   }
@@ -234,12 +237,14 @@ h1 {
 .stage { border-top: 1px solid var(--line); }
 .depth { border-top: 1px solid var(--line); }
 .stage-inner { max-width: var(--col); margin: 0 auto; padding: 28px var(--pad-x) 30px; }
-.stage-no {
-  font-family: var(--serif); font-size: 2.1em; font-weight: 500; letter-spacing: 0; text-transform: none;
-  color: var(--gold-2); line-height: 0.6; margin-right: 2px;
-}
+.stage-no { display: inline-flex; align-items: center; color: var(--gold-2); margin-right: 2px; align-self: center; }
+.stage-no .num { width: 2.6em; height: 2.6em; }
 .stage-lede { max-width: 70ch; font-size: 1.06em; line-height: 1.6; color: var(--ink); margin: -2px 0 16px; }
 .stage-lede strong { color: var(--ink); font-weight: 600; }
+/* lore set as lore: serif, an illuminated initial in the script's gold */
+.gomen-lore { max-width: 64ch; margin: 0 0 18px; font-family: var(--serif); font-size: 1.24em; line-height: 1.5; color: var(--ink); }
+.gomen-lore::first-letter { float: left; font-size: 2.7em; line-height: 0.82; padding: 6px 8px 0 0; color: var(--gold-2); font-weight: 500; }
+.lore-coda { font-style: italic; color: var(--ink-2); }
 
 /* I · the seed */
 .seed-grid { display: block; }
@@ -254,14 +259,26 @@ h1 {
 }
 .scale-name { font-size: 0.74em; font-weight: 600; letter-spacing: 0.26em; text-transform: uppercase; color: var(--ink-2); }
 .gomen-pic {
-  position: relative; display: block; width: 100%; max-width: 132px; aspect-ratio: 1; margin: 0 auto 2px;
+  position: relative; display: block; width: 100%; max-width: 150px; margin: 0 auto 4px;
   background: none; border: 0; padding: 0; color: var(--ink); cursor: pointer;
 }
 .gomen-pic:focus-visible { outline-offset: 2px; }
-.gomen-svg { display: block; width: 100%; height: 100%; }
-.gomen-name { font-family: var(--serif); font-size: 1.22em; font-weight: 600; line-height: 1.2; color: var(--ink); text-wrap: balance; }
-.gomen-name .badge { margin-left: 6px; vertical-align: 0.15em; }
-.gomen-line { font-size: 0.94em; line-height: 1.55; color: var(--ink-2); }
+/* A figure is three layers: the painting's wash beneath, then ink, then gold —
+   the two drawn layers are masks, so they take the theme's colours */
+.gomen-art { position: relative; display: block; width: 100%; aspect-ratio: 1; transform-origin: 50% 88%; }
+.gomen-art > * { position: absolute; inset: 0; width: 100%; height: 100%; }
+.ga-ink, .ga-gold { -webkit-mask: var(--m) center / contain no-repeat; mask: var(--m) center / contain no-repeat; }
+.ga-ink { background: var(--ink); }
+.ga-gold { background: var(--gold); }
+.ga-wash { transform-origin: 50% 50%; }
+/* the label: the name's cartouche as a seal beside the name and its reading */
+.gomen-label { display: grid; grid-template-columns: auto 1fr; gap: 0 9px; align-items: start; }
+.cart.glyph { width: 21px; height: 39px; color: var(--gold-2); margin-top: 1px; }
+.gomen-name { display: block; font-family: var(--serif); font-size: 1.18em; font-weight: 600; line-height: 1.15; color: var(--ink); text-wrap: balance; }
+.gomen-name .badge { vertical-align: 0.15em; margin-left: 2px; }
+.gomen-reading { font-family: var(--serif); font-style: italic; font-size: 1.02em; line-height: 1.35; color: var(--ink); }
+.gomen-radicals { display: block; font-family: var(--sans); font-style: normal; font-size: 0.68em; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 2px; }
+.gomen-line { font-size: 0.88em; line-height: 1.5; color: var(--ink-2); margin-top: 4px; }
 .scale-live { margin-top: auto; padding-top: 4px; font-size: 0.88em; color: var(--ink); text-decoration-color: var(--gold); text-underline-offset: 3px; }
 .gomen-say {
   position: absolute; left: 50%; top: -16px; transform: translate(-50%, 4px); white-space: nowrap; pointer-events: none;
@@ -271,54 +288,46 @@ h1 {
 }
 .gomen-pic.is-awake .gomen-say { opacity: 1; transform: translate(-50%, 0); }
 
-/* pictogram parts: ink lines, gold for what is caught, woven, or alive */
-.gomen-svg .gp-faint { opacity: 0.45; }
-.gomen-svg .gp-gold { stroke: var(--gold); }
-.gomen-svg path.gp-gold[d$="z"], .gomen-svg path.gp-gold[d$="Z"], .gomen-svg .gp-heart { fill: var(--gold); }
-.gomen-svg .gp-nodes, .gomen-svg .gp-fill { fill: var(--bg-2); }
-.gomen-svg .gp-iri { stroke: #d9789a; }
-.gomen-svg .gp-beep { font-family: var(--mono); font-size: 8px; fill: var(--gold); stroke: none; opacity: 0; transition: opacity 0.2s; }
-.gomen-svg .gp-q { font-family: var(--serif); font-style: italic; font-size: 30px; fill: currentColor; stroke: none; }
-.gomen-svg g, .gomen-svg path, .gomen-svg circle { transform-box: view-box; }
-.gp-turn { transform-origin: 48px 60px; }
-.gp-claw { transform-origin: 66px 56px; }
-.gp-patrol { transform-origin: 48px 158px; }
-.gp-dash, .gp-people { transform-origin: 48px 50px; }
-.gp-being .gp-heart { transform-origin: 48px 50px; }
-.gp-heart { transform-origin: 48px 49px; }
-.gp-spark { transform-origin: 77px 21px; }
-.gp-thread { stroke-dasharray: 5 4; }
-
-/* waking: hover on a fine pointer, or a tap (.is-awake) anywhere */
-.gomen-pic.is-awake .gp-turn { animation: gp-turn 1.2s ease-in-out 2; }
-.gomen-pic.is-awake .gp-caught { animation: gp-pulse 0.6s ease-in-out 4; }
-.gomen-pic.is-awake .gp-scuttle { animation: gp-scuttle 0.5s steps(2) 4; }
-.gomen-pic.is-awake .gp-claw { animation: gp-snap 0.35s ease-in-out 5; }
-.gomen-pic.is-awake .gp-beep { opacity: 1; }
-.gomen-pic.is-awake .gp-thread { animation: gp-weave 0.9s linear infinite; }
-.gomen-pic.is-awake .gp-heart { animation: gp-pulse 0.9s ease-in-out 3; }
-.gomen-pic.is-awake .gp-patrol { animation: gp-patrol 2.4s ease-in-out 1; }
-.gomen-pic.is-awake .gp-dash { animation: gp-spin 6s linear infinite; }
-.gomen-pic.is-awake .gp-people { animation: gp-spin 9s linear infinite; }
-.gomen-pic.is-awake .gp-spark { animation: gp-pulse 0.8s ease-in-out 3; }
-@media (hover: hover) and (pointer: fine) {
-  .gomen-pic:hover .gp-turn { animation: gp-turn 1.2s ease-in-out infinite; }
-  .gomen-pic:hover .gp-scuttle { animation: gp-scuttle 0.5s steps(2) infinite; }
-  .gomen-pic:hover .gp-claw { animation: gp-snap 0.35s ease-in-out infinite; }
-  .gomen-pic:hover .gp-beep { opacity: 1; }
-  .gomen-pic:hover .gp-thread { animation: gp-weave 0.9s linear infinite; }
-  .gomen-pic:hover .gp-patrol { animation: gp-patrol 3s ease-in-out infinite alternate; }
-  .gomen-pic:hover .gp-dash { animation: gp-spin 6s linear infinite; }
-  .gomen-pic:hover .gp-people { animation: gp-spin 12s linear infinite; }
-  .gomen-pic:hover .gp-being .gp-heart, .gomen-pic:hover .gp-heart { animation: gp-pulse 1.2s ease-in-out infinite; }
+/* phones: one Gomen per row, the figure beside its words */
+@media (max-width: 640px) {
+  .scale-row { grid-template-columns: 1fr; }
+  .scale { display: grid; grid-template-columns: 112px 1fr; column-gap: 14px; row-gap: 4px; align-items: start; }
+  .scale > .gomen-pic { grid-column: 1; grid-row: 1 / span 4; margin: 0; max-width: none; }
+  .scale > :not(.gomen-pic) { grid-column: 2; }
+  .gomen-lore { font-size: 1.12em; }
+  .scale:last-child { grid-column: auto; }
 }
-@keyframes gp-turn { 0%, 100% { transform: rotate(0); } 30% { transform: rotate(-8deg); } 70% { transform: rotate(8deg); } }
-@keyframes gp-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.18); opacity: 0.7; } }
-@keyframes gp-scuttle { from { transform: translateX(-3px); } to { transform: translateX(3px); } }
-@keyframes gp-snap { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-14deg); } }
-@keyframes gp-weave { to { stroke-dashoffset: -18; } }
-@keyframes gp-patrol { 0% { transform: rotate(-9deg); } 100% { transform: rotate(9deg); } }
-@keyframes gp-spin { to { transform: rotate(360deg); } }
+
+/* Waking: the figure sways from its base, its gold kindles, the wash breathes.
+   Hover on a fine pointer, or a tap (.is-awake) anywhere. */
+.gomen-pic.is-awake .gomen-art { animation: ga-sway 1.6s ease-in-out 2; }
+.gomen-pic.is-awake .ga-gold { animation: ga-kindle 1.1s ease-in-out 3; }
+.gomen-pic.is-awake .ga-wash { animation: ga-breathe 2.2s ease-in-out 1; }
+@media (hover: hover) and (pointer: fine) {
+  .gomen-pic:hover .gomen-art { animation: ga-sway 3.4s ease-in-out infinite; }
+  .gomen-pic:hover .ga-wash { animation: ga-breathe 3.4s ease-in-out infinite; }
+  .gomen-pic:hover .ga-gold { animation: ga-kindle 1.7s ease-in-out infinite; }
+}
+@keyframes ga-sway { 0%, 100% { transform: rotate(0); } 30% { transform: rotate(-2.6deg); } 70% { transform: rotate(2.6deg); } }
+@keyframes ga-kindle { 0%, 100% { filter: none; } 50% { filter: drop-shadow(0 0 3px var(--gold-glow)) brightness(1.18); } }
+@keyframes ga-breathe { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.07); opacity: 0.85; } }
+
+/* The garden and the page's small living things, drawn in the script */
+.emoji-transient .glyph, .emoji-persistent .glyph, .emoji-fading .glyph, .emoji-footer .glyph,
+.butterfly-living .glyph, .gomen-crab-sparkle .glyph { display: block; width: 1em; height: 1em; }
+.g-garden-sprout, .g-garden-leaf, .g-garden-tree { color: var(--leaf); }
+.g-garden-bloom, .g-star, .g-spark, .g-butterfly { color: var(--gold); }
+.emoji-footer { line-height: 1; }
+
+/* The key to the script */
+.script-key { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.key-lede { font-size: 0.92em; color: var(--ink-2); max-width: 74ch; }
+.key-lede .badge { margin-right: 4px; }
+.key-row { list-style: none; margin: 12px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px 14px; }
+.key-row li { display: flex; align-items: center; gap: 10px; }
+.key-row .glyph { width: 34px; height: 34px; color: var(--ink); flex: none; }
+.key-row b { display: block; font-family: var(--serif); font-size: 1.05em; font-weight: 600; line-height: 1.1; color: var(--ink); }
+.key-row small { display: block; font-size: 0.8em; line-height: 1.3; color: var(--ink-3); }
 
 /* The seed: a flat card; the equations are the flourish, so they are gold */
 .seed {
@@ -349,6 +358,16 @@ h1 {
 .seed-phrase p { margin-top: 8px; font-family: var(--mono); font-size: 0.95em; line-height: 1.85; color: var(--ink); }
 .equation-live { color: var(--gold-2); }
 
+/* ── The script ──
+   Every glyph on the page is drawn by src/glyphs (a seeded brush, build-time)
+   and shipped as an SVG used as a mask, so it takes whatever colour it is
+   given: bronze-gold for marks, ink for the key, leaf for the garden. */
+.glyph {
+  display: inline-block; width: 1em; height: 1em; flex: none; vertical-align: middle;
+  background: currentColor;
+  -webkit-mask: var(--m) center / contain no-repeat; mask: var(--m) center / contain no-repeat;
+}
+
 /* ── Wayfinder ── */
 .wayfinder {
   position: sticky; top: 0; z-index: 50;
@@ -358,7 +377,8 @@ h1 {
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
   border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
 }
-.wf-mark { color: var(--gold); text-decoration: none; font-size: 1.1em; padding: 4px 6px; }
+.wf-mark { display: inline-flex; color: var(--gold); text-decoration: none; padding: 4px 6px; }
+.wf-mark .glyph { width: 22px; height: 22px; }
 .wf-search { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .wf-field { position: relative; flex: 1; min-width: 0; max-width: 460px; }
 .wf-input {
@@ -501,7 +521,8 @@ h1 {
   background: none; border: 0; padding: 0; cursor: pointer; text-align: left; color: inherit;
 }
 .idea-head:focus-visible { outline-offset: 4px; }
-.idea-glyph { font-family: var(--mono); font-size: 1.25em; color: var(--gold); width: 1.4em; text-align: center; }
+.idea-glyph { font-family: var(--mono); font-size: 1.25em; color: var(--gold-2); width: 1.4em; text-align: center; }
+.idea-glyph.glyph { font-size: inherit; width: 2.15em; height: 2.15em; }
 .idea-name { flex: 1; font-family: var(--serif); font-size: 1.22em; font-weight: 600; line-height: 1.25; color: var(--ink); letter-spacing: 0.02em; }
 .idea-head::after { content: '+'; font-family: var(--mono); color: var(--ink-3); font-size: 1.1em; }
 .idea-head[aria-expanded="true"]::after { content: '−'; }
@@ -678,7 +699,7 @@ footer > p { margin-top: 4px; }
   15% { transform: scale(1) translateY(0); opacity: 1; }
   100% { transform: scale(1) translateY(-80px); opacity: 0; }
 }
-.emoji-persistent { position: fixed; pointer-events: none; z-index: 9995; font-size: 32px; color: var(--gold); text-shadow: 0 0 10px var(--gold-glow); animation: persistentFloat 3s ease-in-out infinite; }
+.emoji-persistent { position: fixed; pointer-events: none; z-index: 9995; font-size: 30px; color: var(--gold); filter: drop-shadow(0 0 6px var(--gold-glow)); animation: persistentFloat 3s ease-in-out infinite; }
 @keyframes persistentFloat { 0%, 100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-8px) rotate(3deg); } }
 .emoji-fading { position: fixed; pointer-events: none; z-index: 9997; font-size: 28px; animation: fadeAway 0.8s ease-out forwards; }
 @keyframes fadeAway { 0% { transform: scale(1) translateY(0); opacity: 1; } 100% { transform: scale(0.5) translateY(-30px); opacity: 0; } }
@@ -690,7 +711,7 @@ footer > p { margin-top: 4px; }
 @keyframes treeGrow { 0% { transform: scale(0.5) rotate(-10deg); opacity: 0; } 50% { transform: scale(1.3) rotate(5deg); opacity: 0.8; } 100% { transform: scale(1) rotate(0deg); opacity: 1; } }
 
 .butterfly-living {
-  position: fixed; pointer-events: none; z-index: 10000; font-size: 22px; transform-origin: center;
+  position: fixed; pointer-events: none; z-index: 10000; font-size: 28px; transform-origin: center;
   will-change: transform, left, top;
   filter: drop-shadow(0 0 8px var(--gold-glow)); animation: butterflyGlow 4s ease-in-out infinite;
 }
@@ -701,16 +722,19 @@ footer > p { margin-top: 4px; }
 @keyframes constellationDraw { to { stroke-dashoffset: 0; } }
 
 .gomen-crab { position: fixed; bottom: 8px; left: 0; z-index: 10001; pointer-events: none; font-size: 26px; }
+/* It walks over anything — the painting, the page — so, like a map label,
+   it carries a halo of the page's ground to stay legible on all of them */
+.gomen-crab .gomen-art { width: 72px; filter: drop-shadow(0 0 1.5px var(--bg)) drop-shadow(0 0 3px var(--bg)); }
 .gomen-crab-body { display: inline-block; animation: crabScuttle 0.4s ease-in-out infinite; }
 @keyframes crabScuttle { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-2px) rotate(3deg); } }
 .gomen-crab-say {
-  position: absolute; bottom: 34px; left: 50%; transform: translateX(-50%); white-space: nowrap;
+  position: absolute; bottom: calc(100% + 2px); left: 50%; transform: translateX(-50%); white-space: nowrap;
   font-family: var(--serif); font-style: italic; font-size: 0.55em; color: var(--ink);
   background: var(--bg-2); border: 1px solid var(--gold); border-radius: var(--radius); padding: 3px 10px;
   opacity: 0; transition: opacity 0.4s ease;
 }
 .gomen-crab-say.visible { opacity: 1; }
-.gomen-crab-sparkle { position: absolute; bottom: 20px; left: 60%; font-size: 0.7em; animation: transientFloat 1.5s ease-out forwards; }
+.gomen-crab-sparkle { position: absolute; bottom: 60%; left: 70%; font-size: 0.7em; animation: transientFloat 1.5s ease-out forwards; }
 
 /* The golden thread */
 .thread { opacity: clamp(0, calc((var(--sink, 0) - 0.55) * 3), 1); position: fixed; left: 14px; top: 12vh; height: 76vh; width: 22px; z-index: 40; pointer-events: none; }
@@ -768,7 +792,7 @@ footer > p { margin-top: 4px; }
 @media (prefers-reduced-motion: reduce) {
   .emoji-persistent, .emoji-transient, .butterfly-living, .constellation-line, .gomen-crab-body,
   .emoji-footer.new, .emoji-footer.tree, .sky-value, .cover-cue span,
-  .gomen-svg *, .gomen-pic * { animation: none !important; }
+  .gomen-pic * { animation: none !important; }
   .constellation-line { stroke-dashoffset: 0; }
   .hero-images img, .hero-image-frame::before, .thread-fill, .thread-knot, .idea, .chip, .archive-card,
   .emoji-footer, .coherence-meter-fill, .gomen-say { transition: none !important; }

@@ -1,0 +1,71 @@
+{
+  "note": "The Gomens of Section II. Lore is [D] design (would, designed to, grown) except the Circle, whose body is people [M]. Readings name the radicals in each Gomen's cartouche, in the script drawn by src/glyphs/script.mjs.",
+  "gomens": [
+    {
+      "id": "clearers",
+      "scale": "Body",
+      "name": "The Clearers",
+      "register": "D",
+      "radicals": "river · open hands · seed",
+      "reading": "the hands in the river",
+      "say": "gomen’nasai",
+      "lore": "Folded from the body’s own proteins, a Clearer would drift in the blood like a seedling in a stream, opening its hands to every thread of plastic it meets. What it gathers it carries out; when the work is done it dissolves into nothing the body cannot use."
+    },
+    {
+      "id": "shorewalkers",
+      "scale": "Biome",
+      "name": "The Shore-walkers",
+      "register": "D",
+      "radicals": "wave · dome · shard",
+      "reading": "the house that eats what the sea returns",
+      "say": "gomen’nasai",
+      "lore": "Shells grown from the carbon they eat, faceted like crystal and bright like oil on water; legs that hold the sand the way roots do. A Shore-walker would sort the tide line all day, plastic into the slow furnace under its shell, everything living left where it lay. Hand one a bottle cap and it would chirp."
+    },
+    {
+      "id": "circle",
+      "scale": "Being",
+      "name": "The Circle",
+      "register": "M",
+      "radicals": "figure · heart",
+      "reading": "the people around the heart",
+      "say": "we’re here",
+      "lore": "Grief no one has processed is waste too, and no machine can metabolise it. People do, together. This is the one Gomen whose body is us: a ring of hands around a heart, holding what no one holds alone."
+    },
+    {
+      "id": "weavers",
+      "scale": "Network",
+      "name": "The Weavers",
+      "register": "D",
+      "radicals": "root · thread · star",
+      "reading": "the knot between roots",
+      "say": "gomen’nasai",
+      "lore": "Under a forest, fungal threads trade water and minerals for the trees’ sugar, and may pass what one tree has to another. Weavers would carry that pattern into supply chains and data: threads that move and never hoard, grown where a link is needed and dissolved when it is not."
+    },
+    {
+      "id": "gleaners",
+      "scale": "Star",
+      "name": "The Gleaners",
+      "register": "D",
+      "radicals": "star · leaf · shard",
+      "reading": "the leaf that gathers the sky",
+      "say": "gomen’nasai",
+      "lore": "A seed pod with leaves for solar wings and a net spun like silk: a satellite grown rather than launched. A Gleaner would drift through low orbit gathering what launches left behind, bind it together, and ease it down to burn away high in the air.",
+      "link": { "label": "the star scale, live ↓", "href": "#sky" }
+    }
+  ],
+  "key": {
+    "lede": "Written in a script imagined for the people who would tend them. Every mark descends from the logo (star, bead, figure, tree) or from the painting (vessel, crystal, root, stream).",
+    "radicals": {
+      "star": "the whole; what coheres",
+      "bead": "a seed, a scale, a count",
+      "figure": "a person",
+      "tree": "what lives and grows",
+      "vessel": "what holds life safe",
+      "crystal": "what is grown to last",
+      "root": "tending from below",
+      "stream": "passage, flow, light",
+      "shard": "what was thrown away",
+      "heart": "what is held together"
+    }
+  }
+}
