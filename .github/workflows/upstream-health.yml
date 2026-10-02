@@ -17,7 +17,10 @@ on:
   schedule:
     - cron: '17 */6 * * *'   # offset from the hour; every service crons on :00
   workflow_dispatch:
+  # main only: a feature-branch push followed by its merge would otherwise run
+  # this twice and post the same report twice
   push:
+    branches: [main]
     paths:
       - 'platform/src/**'
       - 'platform/scripts/health.mjs'
@@ -57,7 +60,8 @@ jobs:
           {
             echo 'report<<HEALTH_EOF'
             grep -E '^(DEAD|WARN|UNCHECKED)' -A1 /tmp/health.txt | head -40
-            tail -3 /tmp/health.txt
+            # the summary line only: the lines above it repeat what grep found
+            tail -1 /tmp/health.txt
             echo HEALTH_EOF
           } >> "$GITHUB_OUTPUT"
 

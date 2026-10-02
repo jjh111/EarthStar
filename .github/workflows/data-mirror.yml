@@ -25,7 +25,10 @@ on:
     # delivery; see MIRROR_STALE_H in platform/scripts/health.mjs.
     - cron: '*/30 * * * *'
   workflow_dispatch:
+  # main only: this publishes to the data branch, which must only ever be
+  # written by reviewed code
   push:
+    branches: [main]
     paths:
       - 'platform/scripts/mirror.mjs'
       - 'platform/scripts/endpoints.mjs'
