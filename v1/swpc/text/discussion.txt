@@ -1,0 +1,52 @@
+:Product: Forecast Discussion
+:Issued: 2026 Oct 03 1230 UTC
+# Prepared by the U.S. Dept. of Commerce, NOAA, Space Weather Prediction Center
+#
+Solar Activity
+
+.24 hr Summary...
+Solar activity was at very low levels. A new region was observed
+rotating around the Suns E limb and will be assigned an active region
+number if it persists. The remaining numbered active regions on the
+visible disk were mostly simple and quiet.
+
+No Earth-directed CMEs were observed in coronagraph imagery. 
+
+.Forecast...
+Solar activity is expected to be at very low levels, with a chance for
+C-flares through 05 Oct.
+
+Energetic Particle
+
+.24 hr Summary...
+The greater than 2 MeV electron flux was at moderate levels. The greater
+than 10 MeV proton flux continued at background levels.
+
+.Forecast...
+The greater than 2 MeV electron flux is expected to be at normal to
+moderate levels on 03-05 Oct. The greater than 10 MeV proton flux is
+expected to remain at background levels through 05 Oct.
+
+Solar Wind
+
+.24 hr Summary...
+Solar wind parameters showed a minor enhancement after 03/0118 UTC.
+Total magnetic field strength increased from ~4 nT to a peak of 9 nT and
+the Bz component rotated as far south as -6 nT. Solar wind speeds
+increased from 271 km/s to ~300 km/s. Phi angle was oriented primarily
+in the negative solar sector.
+
+.Forecast...
+Enhanced solar wind conditions from the influence of a CH HSS are
+expected over 03-05 Oct.
+
+Geospace
+
+.24 hr Summary...
+The geomagnetic field was at quiet to unsettled levels.
+
+.Forecast...
+Active levels on 03 Oct followed by G1 (Minor) storm levels on 04 Oct
+are likely due to the influence of a coronal hole high-speed stream.
+Unsettled to active levels are expected to persist into 05 Oct as CH HSS
+influence wane.
