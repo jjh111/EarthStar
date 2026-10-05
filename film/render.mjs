@@ -63,6 +63,7 @@ const FILMS = {
   seed: { page: 'seed.html', seconds: 30, out: 'earth-star-a-seed.mp4', title: 'Earth Star — a seed' },
   loom: { page: 'loom.html', seconds: 48, out: 'earth-star-the-loom.mp4', title: 'Earth Star — the loom' },
   lifted: { page: 'lifted.html', seconds: 60, out: 'earth-star-the-loom-lifted.mp4', title: 'Earth Star — the loom, lifted', gl: true },
+  'lifted-tall': { page: 'lifted.html?tall', seconds: 60, out: 'earth-star-the-loom-lifted-tall.mp4', title: 'Earth Star — the loom, lifted (tall)', gl: true, w: 1080, h: 1920, score: 'lifted' },
 };
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.png': 'image/png',
@@ -82,7 +83,7 @@ if (!film) { console.log(`usage: node film/render.mjs <${Object.keys(FILMS).join
 const srv = await serve();
 const args = film.gl ? ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] : [];
 const browser = await chromium.launch({ executablePath: CHROMIUM, args });
-const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+const page = await browser.newPage({ viewport: { width: film.w || 1920, height: film.h || 1080 } });
 page.on('pageerror', (e) => console.log('page error:', e.message));
 await page.goto(`http://127.0.0.1:${srv.address().port}/film/${film.page}`);
 await page.evaluate(() => window.ready);
@@ -95,7 +96,7 @@ if (flag === '--stills') {
   }
 } else {
   const FF = process.env.FF || 'ffmpeg', S = film.seconds, N = FPS * S;
-  const drone = SCORES[name](CHIMES[name]).join('+');
+  const score = film.score || name, drone = SCORES[score](CHIMES[score]).join('+');
   const ff = spawn(FF, ['-y', '-loglevel', 'error',
     '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-',
     '-f', 'lavfi', '-i', `aevalsrc='${drone}':s=48000:d=${S}`,

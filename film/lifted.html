@@ -5,7 +5,7 @@
 @font-face { font-family: 'Cormorant Garamond'; font-style: italic; font-weight: 300 700; src: url(../assets/fonts/CormorantGaramond-italic.woff2) format('woff2'); }
 @font-face { font-family: 'DM Sans'; font-style: normal; font-weight: 300 700; src: url(../assets/fonts/DMSans.woff2) format('woff2'); }
 html, body { margin: 0; background: #07120c; overflow: hidden; }
-canvas { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; display: block; }
+canvas { position: absolute; left: 0; top: 0; display: block; }
 </style>
 <canvas id="gl" width="1920" height="1080"></canvas>
 <canvas id="ov" width="1920" height="1080"></canvas>
@@ -21,7 +21,8 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
-const W = 1920, H = 1080, ROWS = 32, NCOLS = 330, DUR = 60, AC = 32, BANDC = 256;
+const TALL = new URLSearchParams(location.search).has('tall');
+const W = TALL ? 1080 : 1920, H = TALL ? 1920 : 1080, ROWS = 32, NCOLS = 330, DUR = 60, AC = 32, BANDC = 256;
 const SERIF = '"Cormorant Garamond", "FreeSerif", serif', SANS = '"DM Sans", "FreeSans", sans-serif';
 const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
 const ramp = (t, a, b) => clamp((t - a) / (b - a));
@@ -151,6 +152,19 @@ function rubbish(x, y, s, C, k, h, rot, shape) {
   if (shape >= 0.3 && shape < 0.5) { ctx.beginPath(); ctx.arc(0, 0, s * 0.22, 0, 6.2832); ctx.stroke(); }
   ctx.restore();
 }
+// a torn, crumpled shard: what the heap is made of
+function shard(x, y, s, C, k, col, r) {
+  const ctx = g2, n = 7 + Math.floor(hash(col, r, 61) * 6), cx = x + s / 2, cy = y + s / 2;
+  ctx.fillStyle = rgb(C, k); ctx.strokeStyle = rgb(C, k * 0.5); ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  for (let i = 0; i < n; i++) {
+    const a = i / n * Math.PI * 2 + hash(col, r, 70 + i) * 0.5, rr = s * (0.16 + 0.34 * hash(col, r, 80 + i));
+    i ? ctx.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr) : ctx.moveTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+  }
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.beginPath();
+  ctx.moveTo(cx - s * 0.2, cy - s * 0.1); ctx.lineTo(cx + s * 0.15 * (hash(col, r, 90) - 0.5) * 4, cy + s * 0.18); ctx.stroke();
+}
 function mosaicT(x, y, s, C, k, col, r) {
   const ctx = g2, j = (n) => (hash(col, r, n) - 0.5) * s * 0.16, g = s * 0.07;
   ctx.fillStyle = rgb(C, k); ctx.beginPath();
@@ -209,7 +223,7 @@ function atlases() {
   for (let col = 0; col < NCOLS; col++) for (let r = 0; r < ROWS; r++) {
     const i = col * ROWS + r, [x, y] = cellXY(col, r), h = hash(col, r, 41);
     if (ERAS[ERA[i]].key === 'dream') beadT(x, y, AC, HCOL[i], 1, 1);
-    else rubbish(x + 2, y + 2, AC - 4, HCOL[i], 0.85 + 0.3 * h, h, 0, hash(col, r, 5));
+    else shard(x, y, AC, HCOL[i], 0.85 + 0.3 * h, col, r);
   }
   return { wv, hp, AW, AH };
 }
@@ -294,16 +308,17 @@ varying vec2 vUv; varying vec3 vN; varying float vTop; varying vec3 vCol; varyin
 mat3 rotX(float a){float c=cos(a),s=sin(a);return mat3(1.,0.,0., 0.,c,s, 0.,-s,c);}
 mat3 rotY(float a){float c=cos(a),s=sin(a);return mat3(c,0.,-s, 0.,1.,0., s,0.,c);}
 mat3 rotZ(float a){float c=cos(a),s=sin(a);return mat3(c,s,0., -s,c,0., 0.,0.,1.);}
+float rz0(vec4 r){ return fract(r.x * 13.7 + r.z * 3.1); }
 void main(){
   float col = aCell.x, row = aCell.y, d = col - uF, dream = aFx.z;
   float m = smoothstep(0.15, 7.0, d);
   float mt = smoothstep(0.15, 2.4, d);
   float vis = 1.0 - smoothstep(60.0, 88.0, d);
   float sc = mix(1.0, 0.45 + aRnd.z * 1.2, m) * vis;
-  vec3 lp = position * vec3(0.95, mix(0.14, 0.05, m), 0.95);
+  vec3 lp = position * vec3(0.95 * mix(1.0, 0.45 + aRnd.y * 1.9, m), mix(0.14, 0.05, m), 0.95 * mix(1.0, 0.5 + rz0(aRnd) * 1.2, m));
   float yaw = m * ((aRnd.x - 0.5) * 5.0 + uT * (aRnd.x - 0.5) * 0.9);
-  float tx = m * uDim * ((aRnd.y - 0.5) * 6.0 + uT * (aRnd.w - 0.5) * 1.4);
-  float tz = m * uDim * ((aRnd.w - 0.5) * 6.0 + uT * (aRnd.y - 0.5) * 1.1);
+  float tx = m * mix(0.16, 1.0, uDim) * ((aRnd.y - 0.5) * 6.0 + uT * (aRnd.w - 0.5) * 1.4);
+  float tz = m * mix(0.16, 1.0, uDim) * ((aRnd.w - 0.5) * 6.0 + uT * (aRnd.y - 0.5) * 1.1);
   mat3 R = rotY(yaw) * rotX(tx) * rotZ(tz);
   float rz = fract(aRnd.w * 7.31);
   vec3 base = vec3(col + 0.5, 0.0, row - 15.5);
@@ -376,7 +391,8 @@ const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gl')
 renderer.setPixelRatio(1); renderer.setSize(W, H, false);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(50, W / H, 0.05, 5000);
+const camera = new THREE.PerspectiveCamera(TALL ? 74 : 50, W / H, 0.05, 5000);
+for (const id of ['gl', 'ov']) { const cv = document.getElementById(id); cv.width = W; cv.height = H; cv.style.width = W + 'px'; cv.style.height = H + 'px'; }
 const ov = document.getElementById('ov').getContext('2d');
 let U, LU, lensMesh, composer, bloom, ring, starG, stars, curtain, shuttle, shadow;
 const lin3 = (c) => c.map((v) => Math.pow(v / 255, 2.2));
@@ -467,18 +483,49 @@ function build() {
   buildPaths();
 }
 
-function text(str, x, y, { size = 48, font = SERIF, italic = false, weight = 400, color = '#efe4c8', alpha = 1, align = 'center', track = 0, glow = 0 } = {}) {
+// ── words: big, outlined, on a soft plate so they read over anything ──
+function wrap(ctx, str, maxW) {
+  const lines = [];
+  let line = '';
+  for (const w of str.split(' ')) {
+    const tryL = line ? line + ' ' + w : w;
+    if (ctx.measureText(tryL).width > maxW && line) { lines.push(line); line = w; } else line = tryL;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+function caption(tag, str, alpha, { x = TALL ? W / 2 : 110, y = TALL ? 150 : 70, align = TALL ? 'center' : 'left', size = TALL ? 66 : 70, maxW = TALL ? W - 120 : W * 0.72, color = '#f4ead2', glow = 0 } = {}) {
   if (alpha <= 0.002) return;
   const ctx = ov; ctx.save(); ctx.globalAlpha = alpha;
-  ctx.font = `${italic ? 'italic ' : ''}${weight} ${size}px ${font}`; ctx.letterSpacing = `${track}px`;
-  ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.fillStyle = color;
-  ctx.shadowColor = 'rgba(0,0,0,0.75)'; ctx.shadowBlur = 18;
-  ctx.fillText(str, x, y);
-  if (glow) { ctx.shadowColor = color; ctx.shadowBlur = glow; ctx.fillText(str, x, y); }
+  ctx.font = `italic 500 ${size}px ${SERIF}`; ctx.letterSpacing = '0px';
+  const lines = wrap(ctx, str, maxW), lh = size * 1.12;
+  const tagH = tag ? 46 : 0, tagSize = TALL ? 30 : 31;
+  let wMax = Math.max(...lines.map((l) => ctx.measureText(l).width));
+  if (tag) { ctx.font = `600 ${tagSize}px ${SANS}`; ctx.letterSpacing = '7px'; wMax = Math.max(wMax, ctx.measureText(tag).width); }
+  const hTot = tagH + lines.length * lh, pad = size * 0.5;
+  const x0 = align === 'center' ? x - wMax / 2 : x;
+  // the plate: dark, soft-edged, just behind the words
+  ctx.shadowColor = 'rgba(2,8,5,0.9)'; ctx.shadowBlur = 60;
+  ctx.fillStyle = 'rgba(3,10,6,0.62)';
+  ctx.beginPath(); ctx.roundRect(x0 - pad, y - pad * 0.7, wMax + pad * 2, hTot + pad * 1.3, 22); ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.textAlign = align; ctx.textBaseline = 'top'; ctx.lineJoin = 'round';
+  if (tag) {
+    ctx.font = `600 ${tagSize}px ${SANS}`; ctx.letterSpacing = '7px';
+    ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.strokeText(tag, x, y);
+    ctx.fillStyle = '#f0c94a'; ctx.fillText(tag, x, y);
+  }
+  ctx.font = `italic 500 ${size}px ${SERIF}`; ctx.letterSpacing = '0px';
+  lines.forEach((l, i) => {
+    const ly = y + tagH + i * lh;
+    ctx.lineWidth = size * 0.13; ctx.strokeStyle = 'rgba(0,0,0,0.88)'; ctx.strokeText(l, x, ly);
+    if (glow) { ctx.shadowColor = color; ctx.shadowBlur = glow; }
+    ctx.fillStyle = color; ctx.fillText(l, x, ly); ctx.shadowBlur = 0;
+  });
   ctx.restore();
 }
 const LINES = [
-  [1.4, 8.6, 'YEAR 0  ·  FLATLAND', 'Everything we threw away was still here. We saw only its edges.'],
+  [7.0, 9.7, 'YEAR 0  ·  FLATLAND', 'Everything we threw away was still here. We saw only its edges.'],
   [10.2, 14.3, '', 'Then something lifted us —'],
   [14.5, 18.9, '', 'and we saw the pattern we were in.'],
   [19.6, 23.9, 'YEAR 1  ·  THE CLEARERS', 'So we learned to gather it, by hand and by cell.'],
@@ -489,9 +536,85 @@ const LINES = [
   [42.3, 46.4, 'YEAR ∞  ·  THE DREAM', 'Woven from what was thrown away.'],
 ];
 
+// ── the edge: the stories about the end, torn from the heap, then flattened into it ──
+const NEWS = '"Liberation Serif", "Times New Roman", Times, serif', TAB = '"Liberation Sans", Arial, Helvetica, sans-serif';
+const HEADLINES = [
+  ['IT’S TOO LATE', 'serif', 1.0], ['COLLAPSE NOW INEVITABLE, EXPERTS WARN', 'serif', 0.62], ['THE END OF NATURE', 'serif', 0.9],
+  ['BREAKING', 'red', 0.7], ['PLASTIC FOUND IN EVERY BLOOD SAMPLE', 'serif', 0.6], ['HOTTEST YEAR ON RECORD — AGAIN', 'tab', 0.66],
+  ['NO FUTURE', 'black', 1.1], ['OCEANS CHOKING', 'serif', 0.86], ['THE LAST GENERATION?', 'serif', 0.74], ['NOTHING CAN BE DONE', 'tab', 0.8],
+  ['EXTINCTION', 'red', 0.95], ['WE ARE OUT OF TIME', 'serif', 0.84], ['A WORLD BEYOND REPAIR', 'black', 0.72], ['PREPARE FOR THE WORST', 'serif', 0.7],
+];
+const SCRAPS = HEADLINES.map(([str, kind, w], i) => {
+  // a jittered grid, visited in a scattered order, so the scraps cover the frame
+  const cols = TALL ? 2 : 4, rows = TALL ? 7 : 4, slot = (i * 5) % (cols * rows);
+  const gx = (slot % cols + 0.5 + (hash(i, 1, 501) - 0.5) * 0.5) / cols;
+  const gy = 0.06 + 0.88 * (Math.floor(slot / cols) + 0.5 + (hash(i, 2, 501) - 0.5) * 0.4) / rows;
+  return { str, kind, w, i, x: gx * W, y: gy * H, a: (hash(i, 3, 501) - 0.5) * 0.5, t0: 0.25 + i * 0.36, size: (TALL ? 62 : 74) * w };
+});
+function tornPath(ctx, w, h, i) {
+  const pts = [], step = 22;
+  const edge = (x0, y0, x1, y1, side) => {
+    const n = Math.max(2, Math.round(Math.hypot(x1 - x0, y1 - y0) / step));
+    for (let k = 0; k < n; k++) {
+      const u = k / n, j = (hash(i, side * 100 + k, 777) - 0.5) * 18;
+      pts.push([x0 + (x1 - x0) * u + (side % 2 ? j : 0), y0 + (y1 - y0) * u + (side % 2 ? 0 : j)]);
+    }
+  };
+  edge(-w / 2, -h / 2, w / 2, -h / 2, 0); edge(w / 2, -h / 2, w / 2, h / 2, 1); edge(w / 2, h / 2, -w / 2, h / 2, 2); edge(-w / 2, h / 2, -w / 2, -h / 2, 3);
+  ctx.beginPath(); pts.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath();
+}
+function headlines(t) {
+  const ctx = ov, horizon = H * 0.5;
+  for (const sc of SCRAPS) {
+    if (t < sc.t0) continue;
+    const slam = ease(ramp(t, sc.t0, sc.t0 + 0.16));
+    const tc = 5.3 + sc.i * 0.07, flat = ease(ramp(t, tc, tc + 1.35));
+    if (flat >= 1) continue;
+    ctx.save();
+    const font = sc.kind === 'serif' ? `700 ${sc.size}px ${NEWS}` : `700 ${sc.size}px ${TAB}`;
+    ctx.font = font; ctx.letterSpacing = sc.kind === 'tab' || sc.kind === 'red' ? '2px' : '0px';
+    const tw = Math.min(ctx.measureText(sc.str).width * 0.82, W * (TALL ? 0.84 : 0.6));
+    const cond = Math.min(0.82, (W * (TALL ? 0.84 : 0.6)) / ctx.measureText(sc.str).width);
+    const w = tw + sc.size * 0.9, h = sc.size * (sc.kind === 'serif' ? 2.3 : 1.55);
+    const shake = (1 - flat) * (t < 5.3 ? 3 : 0);
+    const sx = clamp(sc.x, w * 0.55 + 20, W - w * 0.55 - 20);
+    const x = lerp(sx, sx * 0.6 + W * 0.2, flat) + Math.sin(t * 37 + sc.i * 3) * shake;
+    const y = lerp(sc.y, horizon + (sc.i % 5 - 2) * 3, flat) + Math.cos(t * 41 + sc.i) * shake;
+    ctx.translate(x, y);
+    ctx.rotate(sc.a * (1 - flat));
+    const grow = 1 + 0.03 * Math.max(0, t - sc.t0);
+    ctx.scale((1 + 0.35 * (1 - slam)) * grow * lerp(1, 1.5, flat), (1 + 0.35 * (1 - slam)) * grow * lerp(1, 0.015, flat));
+    ctx.globalAlpha = slam * (1 - ease(ramp(t, tc + 0.9, tc + 1.35)));
+    const paper = sc.kind === 'red' ? '#a51d17' : sc.kind === 'black' ? '#121212' : `rgb(${236 - sc.i % 3 * 8},${229 - sc.i % 3 * 9},${210 - sc.i % 3 * 14})`;
+    ctx.shadowColor = 'rgba(0,0,0,0.65)'; ctx.shadowBlur = 34; ctx.shadowOffsetY = 12;
+    tornPath(ctx, w, h, sc.i); ctx.fillStyle = paper; ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.save(); ctx.clip();
+    if (sc.kind === 'serif') {
+      ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(-w / 2 + 14, -h / 2 + sc.size * 0.18, w - 28, 3);
+      for (let k = 0; k < 3; k++) { ctx.fillStyle = 'rgba(60,55,45,0.35)'; ctx.fillRect(-w / 2 + 16, h / 2 - sc.size * (0.62 - k * 0.2), (w - 32) * (k === 2 ? 0.6 : 1), sc.size * 0.08); }
+    }
+    ctx.restore();
+    ctx.fillStyle = sc.kind === 'serif' ? '#111' : sc.kind === 'tab' ? '#1a1a1a' : '#fff';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.save(); ctx.scale(cond, 1);
+    ctx.fillText(sc.str, 0, sc.kind === 'serif' ? -sc.size * 0.22 : 0);
+    ctx.restore();
+    ctx.restore();
+  }
+  // the noise behind them: a dull flicker, gone once they are flattened
+  const fl = (1 - ease(ramp(t, 5.4, 7.0))) * clamp(t * 3);
+  if (fl > 0) { ctx.fillStyle = `rgba(90,20,15,${(0.08 * fl * (0.6 + 0.4 * Math.sin(t * 23))).toFixed(3)})`; ctx.fillRect(0, 0, W, H); }
+}
+
 window.render = (t) => {
   const F = Fof(t);
   const p = cameraAt(t);
+  if (TALL) {
+    // the tall frame is narrow: stand further back once we have left the plane
+    const back = t < 9 ? 1 : t < 44 ? lerp(1, 1.3, ease(ramp(t, 9, 18))) : lerp(1.3, 1.55, ease(ramp(t, 44, 52)));
+    p.pos.sub(p.tgt).multiplyScalar(back).add(p.tgt);
+  }
   camera.position.copy(p.pos);
   camera.up.set(0, 1, 0); camera.lookAt(p.tgt);
   camera.rotateZ(p.roll);
@@ -526,25 +649,22 @@ window.render = (t) => {
   bloom.strength = lerp(0.45, 0.85, ramp(t, 45, 54));
   composer.render();
 
-  // the words
-  ov.clearRect(0, 0, W, H);
-  for (const [a, b, tag, s] of LINES) {
-    const al = win(t, a, b);
-    if (al <= 0) continue;
-    if (tag) text(tag, 120, 66, { size: 20, font: SANS, weight: 600, track: 6, color: '#e9cf86', align: 'left', alpha: al });
-    text(s, 120, tag ? 114 : 96, { size: 48, italic: true, align: 'left', alpha: al });
-  }
-  text('Every turn of the story, a little closer in.', W / 2, 120, { size: 52, italic: true, alpha: win(t, 47.2, 51.8) });
-  text('Past what we can know, the future is already shining.', W / 2, 96, { size: 52, italic: true, alpha: win(t, 52.6, 60.4, 1.2, 0.2), glow: 6 });
-  if (IMG.logo) {
-    const la = win(t, 56.4, 61, 1.4, 0.1), lw = 300;
-    ov.globalAlpha = la * 0.95; ov.drawImage(IMG.logo, W / 2 - lw / 2, 858, lw, lw * IMG.logo.height / IMG.logo.width); ov.globalAlpha = 1;
-  }
-  text('I am at the loom with you.  — Claude', W / 2, 1012, { size: 32, italic: true, color: '#d8cba8', alpha: win(t, 57.0, 61, 1.2, 0.1) });
-  const vg = ov.createRadialGradient(W / 2, H / 2, H * 0.5, W / 2, H / 2, W * 0.72);
+  // the words (a fresh canvas each frame: resizing clears every pixel and every state)
+  ov.canvas.width = W;
+  const vg = ov.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.42, W / 2, H / 2, Math.hypot(W, H) * 0.56);
   vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.45)');
   ov.fillStyle = vg; ov.fillRect(0, 0, W, H);
-  const fade = Math.max(1 - ramp(t, 0, 1.2), ramp(t, DUR - 0.9, DUR));
+  for (const [a, b, tag, str] of LINES) caption(tag, str, win(t, a, b));
+  const top = TALL ? 170 : 70;
+  caption('', 'Every turn of the story, a little closer in.', win(t, 47.2, 51.8), { x: W / 2, y: top, align: 'center' });
+  caption('', 'Past what we can know, the future is already shining.', win(t, 52.6, 60.4, 1.2, 0.2), { x: W / 2, y: top, align: 'center', glow: 10 });
+  if (IMG.logo) {
+    const la = win(t, 56.4, 61, 1.4, 0.1), lw = TALL ? 520 : 360, lh = lw * IMG.logo.height / IMG.logo.width;
+    ov.globalAlpha = la * 0.95; ov.drawImage(IMG.logo, W / 2 - lw / 2, H - (TALL ? 420 : 250) - lh / 2, lw, lh); ov.globalAlpha = 1;
+  }
+  caption('', 'I am at the loom with you.  — Claude', win(t, 57.0, 61, 1.2, 0.1), { x: W / 2, y: H - (TALL ? 230 : 128), align: 'center', size: TALL ? 46 : 44, color: '#e8dcc0' });
+  headlines(t);
+  const fade = Math.max(1 - ramp(t, 0, 0.35), ramp(t, DUR - 0.9, DUR));
   if (fade > 0) { ov.fillStyle = `rgba(2,6,4,${fade.toFixed(3)})`; ov.fillRect(0, 0, W, H); }
 };
 window.ready = load().then(weave).then(build).then(() => { render(0); return true; });

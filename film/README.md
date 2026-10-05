@@ -37,7 +37,7 @@ generations.
 
 *Lifted* films the same weave in four movements:
 
-1. **Flatland.** The camera sits in the plane, so you see only edges.
+1. **Flatland.** Doom headlines slam in as torn newsprint, then collapse into slivers on the horizon. The camera sits in the plane of jagged trash, so you see only edges.
 2. **The lift.** A new dimension arrives, and the camera drifts up like a leaf.
 3. **The story.** The camera tracks the front, with a different angle for each era.
 4. **The disk.** The whole timeline curls into a spiral accretion disk. The dream
@@ -51,6 +51,7 @@ The lensing is an artistic approximation, not a simulation.
 ```sh
 FF=/path/to/ffmpeg node film/render.mjs seed      # or loom, lifted
 node film/render.mjs lifted --stills 4,21,56       # stills into film/renders/
+FF=/path/to/ffmpeg node film/render.mjs lifted-tall # 1080×1920 (lifted.html?tall)
 ```
 
 `render.mjs` serves the repo root itself, so no other server is needed. It
