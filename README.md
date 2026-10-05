@@ -73,6 +73,12 @@ NASA directly from your browser, with a mirror on the `data` branch as a fallbac
   `platform/docs/sources.md` before touching any data source
 - Roadmap: `plans/VIEWER_NEXT_PLAN.md`; charter: `plans/VIEWER_PLATFORM_PLAN.md`
 
+## Films
+
+Three short art films are drawn in code from the painting and the Earth Star
+script: *a seed*, *the loom* and *the loom, lifted*. Their sources, the
+renderer and the videos are in `film/`, and `film/README.md` describes them.
+
 ## Links
 
 - [Read More](https://earthstar111.substack.com) - Substack writings
