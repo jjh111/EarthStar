@@ -12,3 +12,4 @@ experiments/manta-design/
 
 # Local screen-recording probe scripts (.rec_probe.cjs etc.), never committed
 .rec_*
+__pycache__/
