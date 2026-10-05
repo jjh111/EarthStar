@@ -13,6 +13,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { tmpdir } from 'node:os';
 
 const HERE = dirname(fileURLToPath(import.meta.url)), ROOT = join(HERE, '..');
 const CHROMIUM = process.env.CHROMIUM || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -39,31 +40,16 @@ const SCORES = {
   chime(31.0, 987.77), chime(37.4, 1108.73), chime(41.0, 1318.51, 0.05), chime(41.6, 1760, 0.03),
   chime(44.4, 880), chime(44.4, 1108.73, 0.04), chime(44.4, 1318.51, 0.04),
   ],
-  lifted: (chime) => [
-  '0.09*sin(2*PI*110*t)*(0.75+0.25*sin(2*PI*0.08*t))',
-  '0.05*sin(2*PI*164.81*t)*(0.7+0.3*sin(2*PI*0.05*t+1))*min(1,max(0,(t-9)/4))',
-  '0.04*sin(2*PI*220*t)*min(1,max(0,(t-11)/4))',
-  '0.06*sin(2*PI*55*t)*min(1,max(0,(t-45)/8))',
-  '0.035*sin(2*PI*277.18*t)*min(1,max(0,(t-47)/5))',
-  '0.028*sin(2*PI*440*t)*(0.5+0.5*sin(2*PI*0.3*t))*min(1,max(0,(t-52)/4))',
-  '0.05*sin(2*PI*150*t)*exp(-28*mod(t-1.2,0.72))*between(t,1.2,44)',
-  '0.02*sin(2*PI*300*t)*exp(-40*mod(t-1.56,0.72))*between(t,1.56,44)',
-  chime(10.4, 440, 0.04), chime(10.9, 554.37, 0.04), chime(11.4, 659.26, 0.04), chime(11.9, 880, 0.04),
-  chime(22.0, 659.26), chime(26.7, 739.99), chime(31.2, 880), chime(31.2, 1108.73, 0.03),
-  chime(35.7, 987.77), chime(40.1, 1108.73), chime(43.0, 1318.51, 0.045),
-  chime(55.6, 880), chime(55.6, 1108.73, 0.04), chime(55.6, 1318.51, 0.04), chime(56.4, 1760, 0.025),
-  ],
 };
 const CHIMES = {
   seed: (t0, f, a = 0.07) => `${a}*sin(2*PI*${f}*t)*exp(-2.2*(t-${t0}))*gte(t,${t0})`,
   loom: (t0, f, a = 0.06) => `${a}*sin(2*PI*${f}*t)*exp(-1.8*(t-${t0}))*gte(t,${t0})`,
-  lifted: (t0, f, a = 0.055) => `${a}*sin(2*PI*${f}*t)*exp(-1.6*(t-${t0}))*gte(t,${t0})`,
 };
 const FILMS = {
   seed: { page: 'seed.html', seconds: 30, out: 'earth-star-a-seed.mp4', title: 'Earth Star — a seed' },
   loom: { page: 'loom.html', seconds: 48, out: 'earth-star-the-loom.mp4', title: 'Earth Star — the loom' },
-  lifted: { page: 'lifted.html', seconds: 60, out: 'earth-star-the-loom-lifted.mp4', title: 'Earth Star — the loom, lifted', gl: true },
-  'lifted-tall': { page: 'lifted.html?tall', seconds: 60, out: 'earth-star-the-loom-lifted-tall.mp4', title: 'Earth Star — the loom, lifted (tall)', gl: true, w: 1080, h: 1920, score: 'lifted' },
+  lifted: { page: 'lifted.html', seconds: 60, out: 'earth-star-the-loom-lifted.mp4', title: 'Earth Star — the loom, lifted', gl: true, wav: 'synthLifted' },
+  'lifted-tall': { page: 'lifted.html?tall', seconds: 60, out: 'earth-star-the-loom-lifted-tall.mp4', title: 'Earth Star — the loom, lifted (tall)', gl: true, w: 1080, h: 1920, wav: 'synthLifted' },
 };
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.png': 'image/png',
@@ -87,6 +73,10 @@ const page = await browser.newPage({ viewport: { width: film.w || 1920, height: 
 page.on('pageerror', (e) => console.log('page error:', e.message));
 await page.goto(`http://127.0.0.1:${srv.address().port}/film/${film.page}`);
 await page.evaluate(() => window.ready);
+// warm up: the first frame uploads the texture atlases, which can take a minute on SwiftShader
+page.setDefaultTimeout(600000);
+await page.evaluate(() => render(0));
+await page.screenshot({ type: 'jpeg', quality: 10 });
 
 if (flag === '--stills') {
   for (const t of (list || '0').split(',').map(Number)) {
@@ -96,11 +86,20 @@ if (flag === '--stills') {
   }
 } else {
   const FF = process.env.FF || 'ffmpeg', S = film.seconds, N = FPS * S;
-  const score = film.score || name, drone = SCORES[score](CHIMES[score]).join('+');
+  const drone = SCORES[name] ? SCORES[name](CHIMES[name]).join('+') : '';
+  // the score: a synthesised WAV (sound.mjs), or a sine drone from ffmpeg's aevalsrc
+  let audio;
+  if (film.wav) {
+    const { [film.wav]: synth, writeWav } = await import('./sound.mjs');
+    const wav = join(tmpdir(), `earthstar-${name}.wav`);
+    writeWav(wav, synth(S));
+    audio = ['-i', wav, '-filter_complex', '[1:a]anull[a]'];
+  } else {
+    audio = ['-f', 'lavfi', '-i', `aevalsrc='${drone}':s=48000:d=${S}`,
+      '-filter_complex', `[1:a]lowpass=f=2400,afade=t=in:d=2.5,afade=t=out:st=${S - 2.5}:d=2.5,volume=0.9[a]`];
+  }
   const ff = spawn(FF, ['-y', '-loglevel', 'error',
-    '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-',
-    '-f', 'lavfi', '-i', `aevalsrc='${drone}':s=48000:d=${S}`,
-    '-filter_complex', `[1:a]lowpass=f=2400,afade=t=in:d=2.5,afade=t=out:st=${S - 2.5}:d=2.5,volume=0.9[a]`,
+    '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-', ...audio,
     '-map', '0:v', '-map', '[a]', '-c:v', 'libx264', '-preset', 'slow', '-crf', '21', '-pix_fmt', 'yuv420p', '-movflags', '+faststart',
     '-c:a', 'aac', '-b:a', '160k', '-metadata', `title=${film.title}`, join(HERE, 'renders', film.out)], { stdio: ['pipe', 'inherit', 'inherit'] });
   const done = new Promise((ok, no) => ff.on('close', (c) => (c === 0 ? ok() : no(new Error('ffmpeg exited ' + c)))));

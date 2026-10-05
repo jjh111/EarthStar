@@ -22,7 +22,9 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 const TALL = new URLSearchParams(location.search).has('tall');
-const W = TALL ? 1080 : 1920, H = TALL ? 1920 : 1080, ROWS = 32, NCOLS = 330, DUR = 60, AC = 32, BANDC = 256;
+const W = TALL ? 1080 : 1920, H = TALL ? 1920 : 1080, DUR = 60, AC = 32, BANDC = 256;
+// the weave's resolution: RES cells per world unit (the camera and the eras are in world units)
+const RES = 1.5, ROWS = 48, NCOLS = 495;
 const SERIF = '"Cormorant Garamond", "FreeSerif", serif', SANS = '"DM Sans", "FreeSans", sans-serif';
 const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
 const ramp = (t, a, b) => clamp((t - a) / (b - a));
@@ -40,7 +42,7 @@ const mix = (p, q, x) => [lerp(p[0], q[0], x), lerp(p[1], q[1], x), lerp(p[2], q
 // ── the eras (as in the flat loom) ──
 const ERAS = [
   { key: 'heap', start: 0, rule: 30, year: 'YEAR 0', name: 'flatland',
-    ground: [[58, 58, 54], [77, 74, 68], [43, 46, 44], [70, 62, 52]], pattern: [[127, 160, 184], [201, 194, 176], [176, 82, 58], [109, 138, 74], [216, 176, 74], [90, 120, 160]] },
+    ground: [[46, 112, 60], [34, 88, 122], [62, 132, 72], [28, 74, 108], [52, 100, 54]], pattern: [[182, 38, 26], [214, 66, 30], [138, 26, 22], [238, 108, 38]] },
   { key: 'mosaic', start: 40, rule: 90, fig: 'clearers', cf: 60, year: 'YEAR 1', name: 'the clearers',
     ground: [[28, 47, 90], [34, 56, 106], [24, 40, 80], [30, 52, 98]], pattern: [[217, 165, 33], [240, 201, 74]], ink: [236, 226, 200], gold: [246, 196, 52], wash: [70, 140, 130] },
   { key: 'wool', start: 86, rule: 150, fig: 'shorewalkers', cf: 110, year: 'YEAR 7', name: 'the shore-walkers',
@@ -54,7 +56,9 @@ const ERAS = [
   { key: 'dream', start: 286, rule: 45, fig: 'star', cf: 304, year: 'YEAR ∞', name: 'the dream',
     ground: [[30, 66, 50], [24, 52, 44]], pattern: [[233, 185, 44], [134, 201, 122]], ink: [240, 230, 200], gold: [255, 222, 120], wash: [134, 201, 122] },
 ];
-const eraOfCol = (col) => { let e = 0; for (let i = 0; i < ERAS.length; i++) if (col >= ERAS[i].start) e = i; return e; };
+// what was thrown away: the heap's colours, before anything is woven
+const GARBAGE = { ground: [[58, 58, 54], [77, 74, 68], [43, 46, 44], [70, 62, 52]], pattern: [[127, 160, 184], [201, 194, 176], [176, 82, 58], [109, 138, 74], [216, 176, 74], [90, 120, 160]] };
+const eraOfCol = (col) => { let e = 0; for (let i = 0; i < ERAS.length; i++) if (col >= ERAS[i].start * RES) e = i; return e; };
 
 const SRC = { bg: '../Assets/0-BG.png', earth: '../Assets/1-earth.png', sun: '../Assets/2-sun.png', ship: '../Assets/3-islandship.png', glim: '../Assets/4-glimmer.png',
   logo: '../Assets/EarthStar Logo JH 2025 w.png', 'star-ink': '../assets/img/glyphs/star.svg' };
@@ -80,14 +84,14 @@ function coverage(img, n, sub = 4) {
 }
 
 // ── the weave: tone, era, colour, and what each tile was before ──
-const FIG = 26, FIG_TOP = 3;
+const FIG = 40, FIG_TOP = 4;
 let TONE, ERA, COLR, HCOL;
 function weave() {
   TONE = new Uint8Array(NCOLS * ROWS); ERA = new Uint8Array(NCOLS * ROWS); COLR = new Array(NCOLS * ROWS); HCOL = new Array(NCOLS * ROWS);
   const masks = {};
   for (const e of ERAS) if (e.fig) masks[e.fig] = e.fig === 'star' ? { ink: coverage(IMG['star-ink'], FIG) }
     : { ink: coverage(IMG[`${e.fig}-ink`], FIG), gold: coverage(IMG[`${e.fig}-gold`], FIG), wash: coverage(IMG[`${e.fig}-wash`], FIG) };
-  const pe = ERAS[5], pw = ERAS[6].start - pe.start;
+  const pe = ERAS[5], pw = (ERAS[6].start - pe.start) * RES;
   const po = document.createElement('canvas'); po.width = pw * 3; po.height = ROWS * 3;
   const px = po.getContext('2d', { willReadFrequently: true });
   for (const k of ['bg', 'earth', 'sun', 'ship', 'glim']) {
@@ -99,12 +103,13 @@ function weave() {
   let row = new Uint8Array(ROWS); row[ROWS >> 1] = 1;
   for (let col = 0; col < NCOLS; col++) {
     const e = ERAS[eraOfCol(col)];
-    if (col > 0) {
+    // in Year 0 the destruction spreads at half speed, so it reads as a widening wedge
+    if (col > 0 && !(e.key === 'heap' && col % 2)) {
       const n = new Uint8Array(ROWS);
       for (let i = 0; i < ROWS; i++) n[i] = (e.rule >> ((row[(i - 1 + ROWS) % ROWS] << 2) | (row[i] << 1) | row[(i + 1) % ROWS])) & 1;
       row = n;
     }
-    const fx = e.fig ? col - (e.cf - FIG / 2) : -1, figTone = new Uint8Array(ROWS);
+    const fx = e.fig ? col - (e.cf * RES - FIG / 2) : -1, figTone = new Uint8Array(ROWS);
     if (fx >= 0 && fx < FIG) {
       const m = masks[e.fig];
       for (let r = 0; r < FIG; r++) {
@@ -119,7 +124,8 @@ function weave() {
     for (let r = 0; r < ROWS; r++) {
       const k = col * ROWS + r, h = hash(col, r, 7);
       let ei = eraOfCol(col);
-      if (ei > 0 && col - ERAS[ei].start < 5 && hash(col, r, 3) > (col - ERAS[ei].start + 0.5) / 5) ei -= 1;
+      const into = col - ERAS[ei].start * RES, span = 5 * RES;
+      if (ei > 0 && into < span && hash(col, r, 3) > (into + 0.5) / span) ei -= 1;
       const E = ERAS[ei], tone = figTone[r] ? figTone[r] : row[r];
       TONE[k] = tone; ERA[k] = ei;
       let C;
@@ -127,11 +133,13 @@ function weave() {
       else if (tone === 1) C = E.pattern[(hash(col, r, 9) * E.pattern.length) | 0];
       else C = tone === 2 ? E.ink : tone === 3 ? E.gold : E.wash;
       if (E.key === 'paint') {
-        const p = paintAt(clamp(col - pe.start, 0, pw - 1), r);
+        const p = paintAt(clamp(col - pe.start * RES, 0, pw - 1), r);
         C = tone === 0 ? mix(p, [16, 34, 26], 0.35).map((v) => v * 0.78) : tone === 1 ? mix(p, E.pattern[0], 0.3).map((v) => v * 0.92) : tone === 4 ? mix(p, E.wash, 0.5) : C;
       }
+      // and the living world it moves through is scorched, a little more every year
+      if (E.key === 'heap' && tone === 0) C = mix(C, [38, 34, 30], 0.75 * Math.pow(clamp(col / (ERAS[1].start * RES)), 1.6));
       COLR[k] = C;
-      const HP = ERAS[0];
+      const HP = GARBAGE;
       HCOL[k] = E.key === 'dream' ? (tone ? [255, 226, 140] : [150, 210, 170])
         : hash(col, r, 11) < 0.55 ? HP.pattern[(hash(col, r, 12) * HP.pattern.length) | 0] : HP.ground[(hash(col, r, 13) * HP.ground.length) | 0];
     }
@@ -206,14 +214,14 @@ function atlases() {
   const wv = document.createElement('canvas'); wv.width = AW; wv.height = AH;
   const hp = document.createElement('canvas'); hp.width = AW; hp.height = AH;
   g2 = wv.getContext('2d'); g2.fillStyle = '#0a1611'; g2.fillRect(0, 0, AW, AH);
-  const gfx = ERAS[3].cf;
+  const gfx = ERAS[3].cf * RES;
   for (let col = 0; col < NCOLS; col++) for (let r = 0; r < ROWS; r++) {
     const i = col * ROWS + r, E = ERAS[ERA[i]], h = hash(col, r, 7), C = COLR[i], k = 0.88 + 0.24 * h, [x, y] = cellXY(col, r);
     switch (E.key) {
       case 'heap': rubbish(x, y, AC, C, k, h, (h - 0.5) * 0.5, hash(col, r, 5)); break;
       case 'mosaic': mosaicT(x, y, AC, C, k, col, r); break;
       case 'wool': woolT(x, y, AC, C, k); break;
-      case 'glass': { const dd = ((col - gfx) ** 2 + (r - 14) ** 2) / 200; glassT(x, y, AC, C, k * (0.75 + 0.6 * Math.exp(-dd))); break; }
+      case 'glass': { const dd = ((col - gfx) ** 2 + (r - 14 * RES) ** 2) / (200 * RES * RES); glassT(x, y, AC, C, k * (0.75 + 0.6 * Math.exp(-dd))); break; }
       case 'faience': faienceT(x, y, AC, C, k); break;
       case 'paint': paintT(x, y, AC, C, k, h, col, r); break;
       case 'dream': g2.fillStyle = '#06100b'; g2.fillRect(x, y, AC, AC); beadT(x, y, AC, C, k, TONE[i]); break;
@@ -300,6 +308,9 @@ function cameraAt(t) {
 
 // ── shaders ──
 const VERT = /* glsl */`
+#define RES ${RES.toFixed(4)}
+#define ROWS ${ROWS.toFixed(1)}
+#define NCOLS ${NCOLS.toFixed(1)}
 attribute vec2 aCell; attribute vec4 aRnd; attribute vec3 aCol; attribute vec3 aGcol; attribute vec4 aFx;
 uniform float uF, uT, uDim, uMorph, uWave, uOrbit, uInfall;
 uniform vec3 uCd, uRight, uUp, uFwd;
@@ -310,30 +321,30 @@ mat3 rotY(float a){float c=cos(a),s=sin(a);return mat3(c,0.,-s, 0.,1.,0., s,0.,c
 mat3 rotZ(float a){float c=cos(a),s=sin(a);return mat3(c,s,0., -s,c,0., 0.,0.,1.);}
 float rz0(vec4 r){ return fract(r.x * 13.7 + r.z * 3.1); }
 void main(){
-  float col = aCell.x, row = aCell.y, d = col - uF, dream = aFx.z;
+  float col = aCell.x, row = aCell.y, cw = col / RES, d = (col - uF) / RES, dream = aFx.z;
   float m = smoothstep(0.15, 7.0, d);
   float mt = smoothstep(0.15, 2.4, d);
   float vis = 1.0 - smoothstep(60.0, 88.0, d);
   float sc = mix(1.0, 0.45 + aRnd.z * 1.2, m) * vis;
-  vec3 lp = position * vec3(0.95 * mix(1.0, 0.45 + aRnd.y * 1.9, m), mix(0.14, 0.05, m), 0.95 * mix(1.0, 0.5 + rz0(aRnd) * 1.2, m));
+  vec3 lp = position / RES * vec3(0.95 * mix(1.0, 0.45 + aRnd.y * 1.9, m), mix(0.14, 0.05, m), 0.95 * mix(1.0, 0.5 + rz0(aRnd) * 1.2, m));
   float yaw = m * ((aRnd.x - 0.5) * 5.0 + uT * (aRnd.x - 0.5) * 0.9);
   float tx = m * mix(0.16, 1.0, uDim) * ((aRnd.y - 0.5) * 6.0 + uT * (aRnd.w - 0.5) * 1.4);
   float tz = m * mix(0.16, 1.0, uDim) * ((aRnd.w - 0.5) * 6.0 + uT * (aRnd.y - 0.5) * 1.1);
   mat3 R = rotY(yaw) * rotX(tx) * rotZ(tz);
   float rz = fract(aRnd.w * 7.31);
-  vec3 base = vec3(col + 0.5, 0.0, row - 15.5);
-  base.y += sin(col * 0.13 - uT * 1.3) * uWave * (1.0 - m);
+  vec3 base = vec3((col + 0.5) / RES, 0.0, (row - ROWS * 0.5 + 0.5) / RES);
+  base.y += sin(cw * 0.13 - uT * 1.3) * uWave * (1.0 - m);
   float spread = mix(1.0, 2.0, dream);
   vec3 scat = vec3((aRnd.y - 0.5) * 7.0 + sin(uT * 0.3 + aRnd.x * 9.0) * 0.8,
                    uDim * ((aRnd.w - 0.2) * 15.0 * spread + sin(uT * (0.5 + aRnd.x * 0.7) + aRnd.x * 20.0) * 0.8),
                    (rz - 0.5) * 30.0 * spread + sin(uT * (0.4 + aRnd.z * 0.6) + aRnd.y * 14.0) * 0.7);
   base += m * scat;
   // the timeline curls into a spiral disk, oldest outside, the dream falling in
-  float u = (col + 0.5) / 330.0;
+  float u = (col + 0.5) / NCOLS;
   float mm = smoothstep(0.0, 1.0, clamp(uMorph * 1.7 - u * 0.7, 0.0, 1.0));
   float r0 = mix(95.0, 34.0, u);
-  float r = r0 + (row - 15.5) * 0.95;
-  float fall = uInfall * dream * (0.45 + 0.55 * aRnd.x) * smoothstep(286.0, 330.0, col);
+  float r = r0 + (row - ROWS * 0.5 + 0.5) * 0.95 / RES;
+  float fall = uInfall * dream * (0.45 + 0.55 * aRnd.x) * smoothstep(286.0, 330.0, cw);
   r -= fall;
   float th = -u * 6.2832 * 1.15 + uOrbit * pow(95.0 / max(r, 18.0), 1.5) + 1.3;
   float arc = mix(1.0, r0 * 6.2832 * 1.15 / 330.0, mm);
@@ -359,7 +370,7 @@ void main(){
 #endif
   // the atlas cell
   float band = floor(col / 256.0);
-  vec2 cell = vec2(mod(col, 256.0) * 32.0, band * 1024.0 + row * 32.0);
+  vec2 cell = vec2(mod(col, 256.0) * 32.0, band * ROWS * 32.0 + row * 32.0);
   vUv = (cell + vec2(1.0) + (position.xz + 0.5) * 30.0) / uAtlas;
   vTop = abs(normal.y) > 0.5 ? 1.0 : 0.0;
   vN = nrm; vM = mt;
@@ -410,7 +421,7 @@ function build() {
     aCell.set([col, r], i * 2);
     aRnd.set([hash(col, r, 41), hash(col, r, 43), hash(col, r, 42), hash(col, r, 44)], i * 4);
     aCol.set(lin3(COLR[i]), i * 3); aGcol.set(lin3(HCOL[i]), i * 3);
-    const glassLight = E.key === 'glass' ? 0.12 + 0.22 * Math.exp(-((col - 160) ** 2 + (r - 14) ** 2) / 200) : 0;
+    const glassLight = E.key === 'glass' ? 0.12 + 0.22 * Math.exp(-((col / RES - 160) ** 2 + (r / RES - 14) ** 2) / 200) : 0;
     aFx.set([E.key === 'mosaic' && (tone === 1 || tone === 3) ? 1 : 0,
       glassLight + (E.key === 'dream' ? (tone ? 0.9 : 0.3) : tone === 3 ? 0.15 : 0),
       E.key === 'dream' ? 1 : 0, 0], i * 4);
@@ -626,7 +637,7 @@ window.render = (t) => {
   renderer.setClearColor(bgc.clone().convertSRGBToLinear());
   const fog = t < 19 ? [lerp(10, 70, ease(ramp(t, 8, 18))), lerp(110, 260, ease(ramp(t, 8, 18)))] : t < 44 ? [70, 260] : [lerp(70, 500, ramp(t, 44, 50)), lerp(260, 1400, ramp(t, 44, 50))];
   for (const u of [U, LU]) {
-    u.uF.value = F; u.uT.value = t;
+    u.uF.value = F * RES; u.uT.value = t;
     u.uDim.value = ease(ramp(t, 9, 14.5));
     u.uWave.value = 0.3 * ease(ramp(t, 10, 16)) * (1 - ramp(t, 44, 47));
     u.uMorph.value = ease(ramp(t, 44.3, 50.8));

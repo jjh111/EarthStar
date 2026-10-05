@@ -23,7 +23,7 @@ runs along the timeline, one column per step:
 
 | Era | Craft | Rule |
 |---|---|---|
-| Year 0 | rubbish | 30 |
+| Year 0 | rubbish: red destruction spreading through green and blue | 30 |
 | Year 1 | Byzantine mosaic | 90 |
 | Year 7 | knitted wool | 150 |
 | Year 49 | stained glass | 18 |
@@ -61,8 +61,12 @@ takes two settings from the environment:
 - `FF`: an ffmpeg with libx264 and aac. A static build from the
   `imageio-ffmpeg` wheel works.
 
-The score is synthesised by ffmpeg's `aevalsrc`: an open-fifth drone on A, the
-loom's knock, and chimes at each turn.
+The scores for *a seed* and *the loom* are synthesised by ffmpeg's `aevalsrc`: an
+open-fifth drone on A, the loom's knock, and chimes at each turn. *Lifted* has its
+own score, written sample by sample in `sound.mjs` (`node film/sound.mjs out.wav`).
+It opens with a breaking-news cue: a D-minor pulse, brass stabs, a clock, and a
+paper slap on every headline. The tape stops into Flatland. Wind carries the lift,
+a deep boom marks the horizon, and the star shimmers.
 
 *Lifted* needs WebGL. Without a GPU it falls back to SwiftShader, at about
 1.2 s a frame, or roughly 37 minutes for the film.
