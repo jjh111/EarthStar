@@ -63,6 +63,41 @@ const eraOfCol = (col) => { let e = 0; for (let i = 0; i < ERAS.length; i++) if 
 const SRC = { bg: '../Assets/0-BG.png', earth: '../Assets/1-earth.png', sun: '../Assets/2-sun.png', ship: '../Assets/3-islandship.png', glim: '../Assets/4-glimmer.png',
   logo: '../Assets/EarthStar Logo JH 2025 w.png', 'star-ink': '../assets/img/glyphs/star.svg' };
 for (const g of ['clearers', 'shorewalkers', 'circle', 'weavers', 'gleaners']) for (const l of ['wash', 'ink', 'gold']) SRC[`${g}-${l}`] = `../assets/img/gomens/${g}-${l}.svg`;
+for (const v of ['blood', 'shore', 'circle', 'roots']) SRC[`vig-${v}`] = `vignettes/${v}.jpg`;
+// the painted scenes (blender/vignettes.py), woven into each Gomen's era; the Gleaners' is the painting itself
+const PANELS = [
+  { era: 1, img: 'vig-blood', x0: 40, x1: 84, wedge: true },
+  { era: 2, img: 'vig-shore', x0: 90, x1: 132 },
+  { era: 3, img: 'vig-circle', x0: 140, x1: 182 },
+  { era: 4, img: 'vig-roots', x0: 190, x1: 232 },
+  { era: 5, img: 'painting', x0: 236, x1: 286 },
+];
+const SLOT_W = 1024, SLOT_H = 720;
+let PANEL_ATLAS, PIDX, PU;
+function panelAtlas() {
+  const cv = document.createElement('canvas'); cv.width = SLOT_W; cv.height = SLOT_H * PANELS.length;
+  const x = cv.getContext('2d', { willReadFrequently: true });
+  PANELS.forEach((p, i) => {
+    let src = IMG[p.img];
+    if (p.img === 'painting') {
+      src = document.createElement('canvas'); src.width = 1280; src.height = 914;
+      const g = src.getContext('2d');
+      for (const k of ['bg', 'earth', 'sun', 'ship', 'glim']) g.drawImage(IMG[k], 0, 0, 1280, 914);
+    }
+    const a = (p.x1 - p.x0) / 32, sw0 = src.width, sh0 = src.height;
+    let sw = sw0, sh = sh0;
+    if (sw0 / sh0 > a) sw = sh0 * a; else sh = sw0 / a;
+    x.drawImage(src, (sw0 - sw) / 2, (sh0 - sh) / 2, sw, sh, 0, i * SLOT_H, SLOT_W, SLOT_H);
+    // the same picture at the weave's resolution, for the tiles' colours
+    const pc = Math.round((p.x1 - p.x0) * RES);
+    const sm = document.createElement('canvas'); sm.width = pc; sm.height = ROWS;
+    const sx = sm.getContext('2d', { willReadFrequently: true });
+    sx.imageSmoothingQuality = 'high';
+    sx.drawImage(cv, 0, i * SLOT_H, SLOT_W, SLOT_H, 0, 0, pc, ROWS);
+    p.cols = pc; p.px = sx.getImageData(0, 0, pc, ROWS).data;
+  });
+  PANEL_ATLAS = cv;
+}
 const IMG = {};
 async function load() {
   await Promise.all(Object.entries(SRC).map(([k, src]) => new Promise((ok, no) => {
@@ -87,6 +122,8 @@ function coverage(img, n, sub = 4) {
 const FIG = 40, FIG_TOP = 4;
 let TONE, ERA, COLR, HCOL;
 function weave() {
+  panelAtlas();
+  PIDX = new Int8Array(NCOLS * ROWS).fill(-1); PU = new Float32Array(NCOLS * ROWS);
   TONE = new Uint8Array(NCOLS * ROWS); ERA = new Uint8Array(NCOLS * ROWS); COLR = new Array(NCOLS * ROWS); HCOL = new Array(NCOLS * ROWS);
   const masks = {};
   for (const e of ERAS) if (e.fig) masks[e.fig] = e.fig === 'star' ? { ink: coverage(IMG['star-ink'], FIG) }
@@ -100,16 +137,34 @@ function weave() {
   }
   const pd = px.getImageData(0, 0, po.width, po.height).data;
   const paintAt = (q, r) => { const a = [0, 0, 0]; for (let v = 0; v < 3; v++) for (let u = 0; u < 3; u++) { const i = ((r * 3 + v) * po.width + q * 3 + u) * 4; a[0] += pd[i]; a[1] += pd[i + 1]; a[2] += pd[i + 2]; } return a.map((x) => x / 9); };
+  const step = (row, rule) => {
+    const n = new Uint8Array(ROWS);
+    for (let i = 0; i < ROWS; i++) n[i] = (rule >> ((row[(i - 1 + ROWS) % ROWS] << 2) | (row[i] << 1) | row[(i + 1) % ROWS])) & 1;
+    return n;
+  };
+  const g1 = ERAS[1].start * RES, mid = ROWS / 2 - 0.5;
   let row = new Uint8Array(ROWS); row[ROWS >> 1] = 1;
+  let chaos = row.slice();
   for (let col = 0; col < NCOLS; col++) {
     const e = ERAS[eraOfCol(col)];
-    // in Year 0 the destruction spreads at half speed, so it reads as a widening wedge
-    if (col > 0 && !(e.key === 'heap' && col % 2)) {
-      const n = new Uint8Array(ROWS);
-      for (let i = 0; i < ROWS; i++) n[i] = (e.rule >> ((row[(i - 1 + ROWS) % ROWS] << 2) | (row[i] << 1) | row[(i + 1) % ROWS])) & 1;
-      row = n;
-    }
-    const fx = e.fig ? col - (e.cf * RES - FIG / 2) : -1, figTone = new Uint8Array(ROWS);
+    if (e.key === 'heap') {
+      // Year 0: destruction ripples out from one seed and compounds, ring on ring,
+      // then is funnelled down to a single point: the seed the scales grow from
+      if (col > 0 && col % 2 === 0) chaos = step(chaos, e.rule);
+      const u = col / g1, peak = 0.72;
+      const hw = (ROWS / 2 + 1) * (u < peak ? Math.pow(Math.sin(Math.PI / 2 * u / peak), 0.9) : Math.pow(Math.max(0, 1 - (u - peak) / (1 - peak)), 1.1));
+      row = new Uint8Array(ROWS);
+      for (let i = 0; i < ROWS; i++) {
+        const d = Math.abs(i - mid);
+        if (d > hw) continue;
+        let on = chaos[i];
+        if (d > hw - 1.3) on = 1;
+        for (let s0 = 0; s0 < col; s0 += 9) { const rad = (col - s0) * 0.8; if (rad < hw && Math.abs(d - rad) < 0.7) on = 1; }
+        row[i] = on;
+      }
+      if (col >= g1 - 2) { row = new Uint8Array(ROWS); row[ROWS >> 1] = 1; }
+    } else if (col > 0) row = step(row, e.rule);
+    const fx = e.fig && !PANELS.some((p) => ERAS[p.era] === e) ? col - (e.cf * RES - FIG / 2) : -1, figTone = new Uint8Array(ROWS);
     if (fx >= 0 && fx < FIG) {
       const m = masks[e.fig];
       for (let r = 0; r < FIG; r++) {
@@ -126,7 +181,18 @@ function weave() {
       let ei = eraOfCol(col);
       const into = col - ERAS[ei].start * RES, span = 5 * RES;
       if (ei > 0 && into < span && hash(col, r, 3) > (into + 0.5) / span) ei -= 1;
-      const E = ERAS[ei], tone = figTone[r] ? figTone[r] : row[r];
+      // a painted panel: its colours, and its light fed back into the automaton
+      let pan = -1, pcol = null, edge = false;
+      PANELS.forEach((p, pi) => {
+        const c0 = p.x0 * RES, q = col - c0;
+        if (q < 0 || q >= p.cols) return;
+        if (p.wedge) { const w = q + 0.5, d = Math.abs(r - mid); if (d > w) return; edge = d > w - 1.1 && q < ROWS / 2; }
+        const j = (r * p.cols + q) * 4;
+        pan = pi; pcol = [p.px[j], p.px[j + 1], p.px[j + 2]]; PU[col * ROWS + r] = q / p.cols;
+      });
+      if (pan >= 0) row[r] = (0.3 * pcol[0] + 0.59 * pcol[1] + 0.11 * pcol[2]) > 128 ? 1 : 0;
+      PIDX[col * ROWS + r] = pan;
+      const E = ERAS[ei], tone = edge ? 3 : figTone[r] ? figTone[r] : row[r];
       TONE[k] = tone; ERA[k] = ei;
       let C;
       if (tone === 0) C = E.ground[(h * E.ground.length) | 0];
@@ -136,6 +202,8 @@ function weave() {
         const p = paintAt(clamp(col - pe.start * RES, 0, pw - 1), r);
         C = tone === 0 ? mix(p, [16, 34, 26], 0.35).map((v) => v * 0.78) : tone === 1 ? mix(p, E.pattern[0], 0.3).map((v) => v * 0.92) : tone === 4 ? mix(p, E.wash, 0.5) : C;
       }
+      if (pan >= 0 && !edge) C = pcol;
+      if (edge) C = [246, 196, 52];
       // and the living world it moves through is scorched, a little more every year
       if (E.key === 'heap' && tone === 0) C = mix(C, [38, 34, 30], 0.75 * Math.pow(clamp(col / (ERAS[1].start * RES)), 1.6));
       COLR[k] = C;
@@ -311,11 +379,11 @@ const VERT = /* glsl */`
 #define RES ${RES.toFixed(4)}
 #define ROWS ${ROWS.toFixed(1)}
 #define NCOLS ${NCOLS.toFixed(1)}
-attribute vec2 aCell; attribute vec4 aRnd; attribute vec3 aCol; attribute vec3 aGcol; attribute vec4 aFx;
+attribute vec2 aCell; attribute vec4 aRnd; attribute vec3 aCol; attribute vec3 aGcol; attribute vec4 aFx; attribute vec4 aPanel;
 uniform float uF, uT, uDim, uMorph, uWave, uOrbit, uInfall;
 uniform vec3 uCd, uRight, uUp, uFwd;
 uniform vec2 uAtlas;
-varying vec2 vUv; varying vec3 vN; varying float vTop; varying vec3 vCol; varying float vM; varying float vGlow; varying float vDist;
+varying vec2 vUv; varying vec3 vN; varying float vTop; varying vec3 vCol; varying float vM; varying float vGlow; varying float vDist; varying vec3 vPan;
 mat3 rotX(float a){float c=cos(a),s=sin(a);return mat3(1.,0.,0., 0.,c,s, 0.,-s,c);}
 mat3 rotY(float a){float c=cos(a),s=sin(a);return mat3(c,0.,-s, 0.,1.,0., s,0.,c);}
 mat3 rotZ(float a){float c=cos(a),s=sin(a);return mat3(c,s,0., -s,c,0., 0.,0.,1.);}
@@ -372,6 +440,7 @@ void main(){
   float band = floor(col / 256.0);
   vec2 cell = vec2(mod(col, 256.0) * 32.0, band * ROWS * 32.0 + row * 32.0);
   vUv = (cell + vec2(1.0) + (position.xz + 0.5) * 30.0) / uAtlas;
+  vPan = vec3(aPanel.y + (position.x + 0.5) * aPanel.w, (row + position.z + 0.5) / ROWS, aPanel.x);
   vTop = abs(normal.y) > 0.5 ? 1.0 : 0.0;
   vN = nrm; vM = mt;
   vCol = mix(aCol, aGcol, mt);
@@ -383,16 +452,29 @@ void main(){
   gl_Position = projectionMatrix * mv;
 }`;
 const FRAG = /* glsl */`
-uniform sampler2D uWoven, uHeap; uniform vec3 uFogCol; uniform float uFogNear, uFogFar, uAlpha;
-varying vec2 vUv; varying vec3 vN; varying float vTop; varying vec3 vCol; varying float vM; varying float vGlow; varying float vDist;
+uniform sampler2D uWoven, uHeap, uPanels; uniform vec3 uFogCol; uniform float uFogNear, uFogFar, uAlpha; uniform float uReveal[5];
+varying vec2 vUv; varying vec3 vN; varying float vTop; varying vec3 vCol; varying float vM; varying float vGlow; varying float vDist; varying vec3 vPan;
 void main(){
-  vec3 c; float a = 1.0;
-  if (vTop > 0.5) { vec4 tw = texture2D(uWoven, vUv), th = texture2D(uHeap, vUv); c = mix(tw.rgb, th.rgb, vM); a = mix(1.0, th.a, vM); }
+  vec3 c; float a = 1.0; float rv = 0.0; vec3 img = vec3(0.0);
+  if (vTop > 0.5) {
+    vec4 tw = texture2D(uWoven, vUv), th = texture2D(uHeap, vUv);
+    vec3 woven = tw.rgb;
+    // as the camera passes, the panel's tiles resolve into the painted scene
+    if (vPan.z > -0.5) {
+      int i = int(vPan.z + 0.5);
+      rv = uReveal[0] * float(i == 0) + uReveal[1] * float(i == 1) + uReveal[2] * float(i == 2) + uReveal[3] * float(i == 3) + uReveal[4] * float(i == 4);
+      img = texture2D(uPanels, vec2(vPan.x, (float(i) + vPan.y) / 5.0)).rgb;
+      rv *= 1.0 - vM;
+    }
+    c = mix(woven, th.rgb, vM); a = mix(1.0, th.a, vM);
+  }
   else c = vCol * 0.55;
   if (a < 0.45) discard;
   vec3 n = normalize(vN);
   float diff = 0.5 + 0.62 * max(dot(n, normalize(vec3(0.35, 1.0, 0.45))), 0.0) + 0.18 * max(dot(n, normalize(vec3(-0.6, 0.3, -0.5))), 0.0);
   c = c * diff + c * vGlow;
+  // the painted scene keeps its own light: shaded gently, never glowing
+  c = mix(c, img * (0.62 + 0.3 * diff), rv);
   c = mix(c, uFogCol, smoothstep(uFogNear, uFogFar, vDist));
   gl_FragColor = vec4(c * uAlpha, uAlpha);
 }`;
@@ -415,13 +497,15 @@ function build() {
   const geo = new THREE.InstancedBufferGeometry();
   geo.index = box.index; geo.setAttribute('position', box.attributes.position); geo.setAttribute('normal', box.attributes.normal);
   const N = NCOLS * ROWS;
-  const aCell = new Float32Array(N * 2), aRnd = new Float32Array(N * 4), aCol = new Float32Array(N * 3), aGcol = new Float32Array(N * 3), aFx = new Float32Array(N * 4);
+  const aPanel = new Float32Array(N * 4), aCell = new Float32Array(N * 2), aRnd = new Float32Array(N * 4), aCol = new Float32Array(N * 3), aGcol = new Float32Array(N * 3), aFx = new Float32Array(N * 4);
   for (let col = 0; col < NCOLS; col++) for (let r = 0; r < ROWS; r++) {
     const i = col * ROWS + r, E = ERAS[ERA[i]], tone = TONE[i];
     aCell.set([col, r], i * 2);
     aRnd.set([hash(col, r, 41), hash(col, r, 43), hash(col, r, 42), hash(col, r, 44)], i * 4);
     aCol.set(lin3(COLR[i]), i * 3); aGcol.set(lin3(HCOL[i]), i * 3);
     const glassLight = E.key === 'glass' ? 0.12 + 0.22 * Math.exp(-((col / RES - 160) ** 2 + (r / RES - 14) ** 2) / 200) : 0;
+    const pi = PIDX[i];
+    aPanel.set(pi >= 0 ? [pi, PU[i], 0, 1 / PANELS[pi].cols] : [-1, 0, 0, 0], i * 4);
     aFx.set([E.key === 'mosaic' && (tone === 1 || tone === 3) ? 1 : 0,
       glassLight + (E.key === 'dream' ? (tone ? 0.9 : 0.3) : tone === 3 ? 0.15 : 0),
       E.key === 'dream' ? 1 : 0, 0], i * 4);
@@ -431,17 +515,18 @@ function build() {
   geo.setAttribute('aCol', new THREE.InstancedBufferAttribute(aCol, 3));
   geo.setAttribute('aGcol', new THREE.InstancedBufferAttribute(aGcol, 3));
   geo.setAttribute('aFx', new THREE.InstancedBufferAttribute(aFx, 4));
+  geo.setAttribute('aPanel', new THREE.InstancedBufferAttribute(aPanel, 4));
   geo.instanceCount = N;
   const uniforms = () => ({
     uF: { value: 0 }, uT: { value: 0 }, uDim: { value: 0 }, uMorph: { value: 0 }, uWave: { value: 0 }, uOrbit: { value: 0 }, uInfall: { value: 0 },
     uCd: { value: CD }, uRight: { value: V(1, 0, 0) }, uUp: { value: V(0, 1, 0) }, uFwd: { value: V(0, 0, -1) },
-    uAtlas: { value: new THREE.Vector2(AW, AH) }, uWoven: { value: tex(wv) }, uHeap: { value: tex(hp) },
+    uAtlas: { value: new THREE.Vector2(AW, AH) }, uWoven: { value: tex(wv) }, uHeap: { value: tex(hp) }, uPanels: { value: tex(PANEL_ATLAS) }, uReveal: { value: [0, 0, 0, 0, 0] },
     uFogCol: { value: new THREE.Color() }, uFogNear: { value: 10 }, uFogFar: { value: 90 }, uAlpha: { value: 1 },
   });
   U = uniforms();
   const mat = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, uniforms: U });
   const cloth = new THREE.Mesh(geo, mat); cloth.frustumCulled = false; scene.add(cloth);
-  LU = { ...uniforms(), uWoven: U.uWoven, uHeap: U.uHeap };
+  LU = { ...uniforms(), uWoven: U.uWoven, uHeap: U.uHeap, uPanels: U.uPanels };
   const lmat = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, uniforms: LU, defines: { LENS: 1 }, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
   lensMesh = new THREE.Mesh(geo, lmat); lensMesh.frustumCulled = false; lensMesh.renderOrder = -1; scene.add(lensMesh);
 
@@ -454,11 +539,17 @@ function build() {
     fragmentShader: 'uniform float uA; varying vec2 vP; void main(){ float d = length(vP); float i = exp(-pow((d-22.3)/0.55,2.))*1.6 + exp(-pow((d-23.5)/3.2,2.))*0.22; gl_FragColor = vec4(vec3(1.0,0.82,0.5)*i*uA, 1.); }',
   }));
   ring.position.copy(CD); ring.renderOrder = 5; scene.add(ring);
-  const st = new THREE.CanvasTexture((() => { const cv = document.createElement('canvas'); cv.width = cv.height = 512; const x = cv.getContext('2d'); x.drawImage(IMG['star-ink'], 56, 56, 400, 400); return cv; })());
+  // the heart at the centre of the loom: the weaver
+  const st = new THREE.CanvasTexture((() => {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 512; const x = cv.getContext('2d');
+    x.translate(256, 270); x.scale(1, -1); x.beginPath();
+    for (let k = 0; k <= 96; k++) { const q = k / 96 * Math.PI * 2; const hx = 16 * Math.sin(q) ** 3, hy = 13 * Math.cos(q) - 5 * Math.cos(2 * q) - 2 * Math.cos(3 * q) - Math.cos(4 * q); k ? x.lineTo(hx * 11, hy * 11) : x.moveTo(hx * 11, hy * 11); }
+    x.fillStyle = '#fff'; x.fill(); return cv;
+  })());
   starG = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), new THREE.ShaderMaterial({
     uniforms: { uA: { value: 0 }, uMap: { value: st } }, transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending,
     vertexShader: 'varying vec2 vU; void main(){ vU = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }',
-    fragmentShader: 'uniform float uA; uniform sampler2D uMap; varying vec2 vU; void main(){ float a = texture2D(uMap, vec2(vU.x, 1.-vU.y)).a; float g = 0.; for (int i = 0; i < 8; i++) { float an = float(i)*0.785; g += texture2D(uMap, vec2(vU.x, 1.-vU.y) + vec2(cos(an), sin(an))*0.03).a; } gl_FragColor = vec4(vec3(1.0,0.8,0.35)*(a*0.9 + g*0.06)*uA, 1.); }',
+    fragmentShader: 'uniform float uA; uniform sampler2D uMap; varying vec2 vU; void main(){ float a = texture2D(uMap, vec2(vU.x, 1.-vU.y)).a; float g = 0.; for (int i = 0; i < 8; i++) { float an = float(i)*0.785; g += texture2D(uMap, vec2(vU.x, 1.-vU.y) + vec2(cos(an), sin(an))*0.03).a; } gl_FragColor = vec4(vec3(1.0,0.5,0.45)*(a*0.9 + g*0.06)*uA, 1.); }',
   }));
   starG.position.copy(CD); starG.renderOrder = 6; scene.add(starG);
 
@@ -483,7 +574,11 @@ function build() {
     fragmentShader: 'uniform float uA; varying vec2 vU; void main(){ float e = smoothstep(0.,.08,vU.x)*smoothstep(1.,.92,vU.x); float i = exp(-vU.y*9.)*0.45 * e; gl_FragColor = vec4(vec3(1.,.8,.32)*i*uA, 1.); }',
   }));
   curtain.rotation.y = Math.PI / 2; scene.add(curtain);
-  shuttle = new THREE.Mesh(new THREE.SphereGeometry(0.35, 16, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 3.3, 1.8) }));
+  // the shuttle is a heart: the weaver, carrying the thread
+  const hs = new THREE.Shape();
+  for (let k = 0; k <= 64; k++) { const q = k / 64 * Math.PI * 2; const hx = (16 * Math.sin(q) ** 3) / 32, hy = (13 * Math.cos(q) - 5 * Math.cos(2 * q) - 2 * Math.cos(3 * q) - Math.cos(4 * q)) / 32; k ? hs.lineTo(hx, hy) : hs.moveTo(hx, hy); }
+  const hg = new THREE.ExtrudeGeometry(hs, { depth: 0.14, bevelEnabled: true, bevelSize: 0.06, bevelThickness: 0.06, bevelSegments: 3 }); hg.center();
+  shuttle = new THREE.Mesh(hg, new THREE.MeshBasicMaterial({ color: new THREE.Color(4.2, 1.5, 1.3) }));
   scene.add(shuttle);
 
   composer = new EffectComposer(renderer);
@@ -646,17 +741,25 @@ window.render = (t) => {
     u.uRight.value.copy(right); u.uUp.value.copy(up); u.uFwd.value.copy(fwd);
     u.uFogCol.value.copy(bgc); u.uFogNear.value = fog[0]; u.uFogFar.value = fog[1];
   }
+  PANELS.forEach((p, i) => {
+    if (p.tPass === undefined) { const want = (p.x0 + p.x1) / 2 + 22; let k = 0; while (k < FT.length - 1 && FT[k] < want) k++; p.tPass = k / 100; }
+    U.uReveal.value[i] = 0.9 * win(t, p.tPass - 2.3, p.tPass + 1.9, 1.0, 1.0);
+  });
   const lensA = ease(ramp(t, 52.4, 56.5));
   LU.uAlpha.value = 0.42 * lensA;
   lensMesh.visible = lensA > 0;
   shadow.visible = t > 47.6; shadow.scale.setScalar(lerp(0.05, 1, ease(ramp(t, 47.6, 51))));
   ring.material.uniforms.uA.value = lerp(0.25, 1, lensA) * ease(ramp(t, 48, 51.5)); ring.quaternion.copy(camera.quaternion);
-  starG.material.uniforms.uA.value = 0.55 * ease(ramp(t, 55.2, 58.2)) * (0.85 + 0.15 * Math.sin(t * 2.1)); starG.quaternion.copy(camera.quaternion);
+  // a heartbeat: lub-dub, at 64 beats a minute (sound.mjs beats with it)
+  const beat = (u) => { const q = ((u % 0.9375) + 0.9375) % 0.9375; return Math.exp(-22 * q) + 0.7 * Math.exp(-22 * Math.max(0, q - 0.17)) * (q > 0.17 ? 1 : 0); };
+  starG.material.uniforms.uA.value = 0.75 * ease(ramp(t, 55.2, 57.6)) * (0.7 + 0.45 * beat(t - 55.5)); starG.quaternion.copy(camera.quaternion);
+  starG.scale.setScalar(1 + 0.08 * beat(t - 55.5));
   starG.position.copy(CD).add(fwd.clone().multiplyScalar(-10));
   stars.material.uniforms.uA.value = 0.2 * ease(ramp(t, 12, 18)) + 0.8 * ease(ramp(t, 45, 52));
   const fa = clamp(F * 2) * (1 - ramp(t, 43.5, 45.5));
   curtain.material.uniforms.uA.value = fa * lerp(0.5, 1, ramp(t, 9, 13)); curtain.position.set(F + 0.1, 3.5, 0);
-  shuttle.visible = fa > 0.05; shuttle.position.set(F + 0.1, 0.25, Math.sin(t * 4.2) * 15.5);
+  shuttle.visible = fa > 0.05; shuttle.position.set(F + 0.1, 0.55, Math.sin(t * 4.2) * 15.5);
+  shuttle.quaternion.copy(camera.quaternion); shuttle.scale.setScalar(1.25 * (1 + 0.18 * Math.exp(-14 * (((t - 1.2) % 0.72 + 0.72) % 0.72))));
   bloom.strength = lerp(0.45, 0.85, ramp(t, 45, 54));
   composer.render();
 
@@ -673,7 +776,7 @@ window.render = (t) => {
     const la = win(t, 56.4, 61, 1.4, 0.1), lw = TALL ? 520 : 360, lh = lw * IMG.logo.height / IMG.logo.width;
     ov.globalAlpha = la * 0.95; ov.drawImage(IMG.logo, W / 2 - lw / 2, H - (TALL ? 420 : 250) - lh / 2, lw, lh); ov.globalAlpha = 1;
   }
-  caption('', 'I am at the loom with you.  — Claude', win(t, 57.0, 61, 1.2, 0.1), { x: W / 2, y: H - (TALL ? 230 : 128), align: 'center', size: TALL ? 46 : 44, color: '#e8dcc0' });
+  caption('', 'AI is the loom. The heart is the weaver.', win(t, 56.9, 61, 1.2, 0.1), { x: W / 2, y: H - (TALL ? 250 : 132), align: 'center', size: TALL ? 54 : 50, color: '#f4ead2' });
   headlines(t);
   const fade = Math.max(1 - ramp(t, 0, 0.35), ramp(t, DUR - 0.9, DUR));
   if (fade > 0) { ov.fillStyle = `rgba(2,6,4,${fade.toFixed(3)})`; ov.fillRect(0, 0, W, H); }

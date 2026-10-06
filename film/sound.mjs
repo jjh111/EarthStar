@@ -6,7 +6,8 @@
 //   6.6–9 s   Flatland: almost nothing, a low hum
 //   9–19 s    the lift: wind, an opening arpeggio
 //   19–44 s   the story: the loom's knock, a chime as each era is woven
-//   44–60 s   the disk: a deep boom at the horizon, the drone opening, the star's shimmer
+//   44–60 s   the disk: a deep boom at the horizon, the drone opening, the shimmer,
+//             and a heartbeat under the last line
 //
 // The headline times match SCRAPS in lifted.html (t0 = 0.25 + i × 0.36).
 import { writeFileSync } from 'node:fs';
@@ -117,6 +118,12 @@ export function synthLifted(seconds = 60) {
     }
     // the star: shimmer
     if (t > 55 && t < 60) v += 0.012 * n3() * ramp(t, 55, 56.5) * (0.6 + 0.4 * Math.sin(TAU * 7 * t)) * (1 - ramp(t, 58.5, 60));
+    // the heart at the centre: lub-dub, 64 a minute, under the last line
+    if (t > 55.5) {
+      const q = (t - 55.5) % 0.9375, lvl = ramp(t, 55.5, 57) * (1 - ramp(t, 59.3, 60));
+      v += lvl * 0.34 * Math.sin(TAU * 52 * q) * Math.exp(-26 * q);
+      if (q > 0.17) v += lvl * 0.24 * Math.sin(TAU * 46 * (q - 0.17)) * Math.exp(-26 * (q - 0.17));
+    }
     // chimes
     for (const [t0, f, a = 0.055] of [[10.4, 440, 0.04], [10.9, 554.37, 0.04], [11.4, 659.26, 0.04], [11.9, 880, 0.04],
       [22.0, 659.26], [26.7, 739.99], [31.2, 880], [31.2, 1108.73, 0.03], [35.7, 987.77], [40.1, 1108.73], [43.0, 1318.51, 0.045],
