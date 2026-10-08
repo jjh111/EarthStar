@@ -73,6 +73,14 @@ NASA directly from your browser, with a mirror on the `data` branch as a fallbac
   `platform/docs/sources.md` before touching any data source
 - Roadmap: `plans/VIEWER_NEXT_PLAN.md`; charter: `plans/VIEWER_PLATFORM_PLAN.md`
 
+## Field guide
+
+*Gomenata: a field guide to the adjacent life* (`field-guide/`) classifies the
+Gomens as a domain of life. It has five kingdoms, one per scale, and thirteen
+orders named for the mathematics of their bodies. It describes fifteen species
+on Blender-drawn plates, and every design rests on cited science. Build it
+with `node field-guide/build.mjs`; `field-guide/README.md` has the details.
+
 ## Films
 
 Three short art films are drawn in code from the painting and the Earth Star
