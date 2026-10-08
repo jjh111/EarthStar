@@ -12,7 +12,8 @@ canvas { display: block; width: 1920px; height: 1080px; }
 // each plate drawing itself the way the guide was made: pencil construction,
 // then the pen, then the wash blooming in, the key, the loupe, the tag.
 // render(t) draws the frame at time t, deterministically.
-import { ORDER, PLATE, STEP, TL } from './guide-timeline.mjs';
+import { ORDER, STEP, TL } from './guide-timeline.mjs';
+import { pigment, material } from '../field-guide/pigments.mjs';
 
 const W = 1920, H = 1080, c = document.getElementById('c'), ctx = c.getContext('2d');
 const PWb = 840, PHb = 1080;                // a page, in book units; the spine is x = 0
@@ -423,9 +424,10 @@ function drawSpecimen(id, box, t, opts = {}) {
         let s = 0;
         for (let gy = 0; gy < 100; gy += 2) for (let gx = 0; gx < 140; gx += 2) {
           const px = x + (gx + 0.5) / 140 * w, py = y + (gy + 0.5) / 100 * h;
-          if (Math.hypot(px - lx, py - ly) < D / 2 + 14) s += A[(gy * 140 + gx) * 4 + 3];
+          const al = A[(gy * 140 + gx) * 4 + 3];
+          if (al > 150 && Math.hypot(px - lx, py - ly) < D / 2 + 24) s += al;
         }
-        return s + 12 * Math.hypot(lx - dxp, ly - dyp);
+        return s + 4 * Math.hypot(lx - dxp, ly - dyp);
       };
       const [lx, ly] = cands.map((c) => [c, ov(c)]).sort((a, b) => a[1] - b[1])[0][0];
       const q = back(p);
@@ -446,10 +448,11 @@ function drawSpecimen(id, box, t, opts = {}) {
     const p = ramp(t, S('tag')[0] - 0.2, S('tag')[1]);
     m.swatches.forEach((sw, i) => {
       const q = clamp(p * 4 - i); if (q <= 0) return;
-      const sx = box.x + i * 150, sy = o.foot;
+      const sx = box.x + (i % 2) * 215, sy = o.foot + Math.floor(i / 2) * 66;
       ctx.save(); ctx.globalAlpha = 0.85 * q; ctx.fillStyle = `rgb(${sw.rgb.join(',')})`;
       blob(sx + 28, sy, 26, i * 2.1); ctx.fill(); ctx.globalAlpha = 0.25 * q; ctx.strokeStyle = 'rgba(40,25,10,0.8)'; ctx.lineWidth = 1.2; ctx.stroke(); ctx.restore();
-      write(sw.name.replace(/^(forest floor|gut wall|bank|riverbed|voronoi) /, '').replace(/ \d+$/, ''), sx + 60, sy + 8, 22, q, { italic: true, color: SEPIA });
+      write(pigment(sw.rgb), sx + 62, sy + 2, 23, q, { italic: true });
+      write(material(sw.name), sx + 62, sy + 24, 15, q, { color: SEPIA, caps: true, track: 2 });
     });
   }
   if (o.tag) {
@@ -515,6 +518,7 @@ function plateLeft(id, t) {
 
 // ── powers of ten: from proteins to the orbits ──
 let LANES;
+const DEC = 700;   // pixels a decade on the ruler
 function lanes() {
   const last = [-99, -99, -99];
   return [...TAX.species].sort((p, q) => p.size_m - q.size_m).map((sp) => {
@@ -559,9 +563,9 @@ function scaleScene(t) {
   }
   // each species at its mark on the ruler; neighbours of a like size stand in different rows
   for (const { id, e, lane } of LANES) {
-    const d = e - L, m = META[id], sp = TAX.species.find((q) => q.id === id), alpha = clamp(1.4 - Math.abs(d) / 1.5);
+    const d = e - L, m = META[id], sp = TAX.species.find((q) => q.id === id), alpha = clamp(1.5 - Math.abs(d) / 1.2);
     if (alpha <= 0 || !m || !m.bbox || !IMG[id]) continue;
-    const z = 1 + 0.2 * clamp(1 - Math.abs(d) / 0.3), bw = 320 * z, bh = 210 * z, bx = W / 2 + d * 560, by = 290 + lane * 250;
+    const z = 1 + 0.15 * clamp(1 - Math.abs(d) / 0.3), bw = 300 * z, bh = 196 * z, bx = W / 2 + d * DEC, by = 290 + lane * 250;
     const fw = Math.min(bw / (m.bbox[2] - m.bbox[0]), bh / ((m.bbox[3] - m.bbox[1]) * m.h / m.w)), fh = fw * m.h / m.w;
     ctx.save(); ctx.globalAlpha = alpha;
     ctx.drawImage(IMG[id], bx - (m.bbox[0] + m.bbox[2]) / 2 * fw, by - (m.bbox[1] + m.bbox[3]) / 2 * fh, fw, fh);
@@ -573,10 +577,10 @@ function scaleScene(t) {
   const y = H - 96;
   ctx.save(); ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
   const names = { '-9': '1 nm', '-6': '1 µm', '-3': '1 mm', '0': '1 m', '3': '1 km', '6': '1,000 km' };
-  for (let e = Math.floor(L - 4); e <= Math.ceil(L + 4); e++) {
-    const x = W / 2 + (e - L) * 560;
+  for (let e = Math.floor(L - 3); e <= Math.ceil(L + 3); e++) {
+    const x = W / 2 + (e - L) * DEC;
     ctx.beginPath(); ctx.moveTo(x, y - 14); ctx.lineTo(x, y + 14); ctx.stroke();
-    for (let k = 2; k < 10; k++) { const xx = x + Math.log10(k) * 560; ctx.beginPath(); ctx.moveTo(xx, y - 5); ctx.lineTo(xx, y + 5); ctx.stroke(); }
+    for (let k = 2; k < 10; k++) { const xx = x + Math.log10(k) * DEC; ctx.beginPath(); ctx.moveTo(xx, y - 5); ctx.lineTo(xx, y + 5); ctx.stroke(); }
     write(names[e] || `10${String(e).replace('-', '⁻').replace(/\d/g, (c) => '⁰¹²³⁴⁵⁶⁷⁸⁹'[c])} m`, x, y + 42, 24, 1, { align: 'center', italic: true, color: SEPIA });
   }
   ctx.fillStyle = OX; ctx.beginPath(); ctx.moveTo(W / 2, y - 10); ctx.lineTo(W / 2 - 10, y - 28); ctx.lineTo(W / 2 + 10, y - 28); ctx.closePath(); ctx.fill();

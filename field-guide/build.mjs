@@ -11,6 +11,7 @@ import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync } from 'no
 import sharp from 'sharp';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { pigment, material } from './pigments.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const T = JSON.parse(readFileSync(join(HERE, 'taxonomy.json'), 'utf8'));
@@ -253,10 +254,10 @@ function scaleChart() {
 }
 
 // ── a plate: the drawing, its callouts in ink, its scale bar ──
+// the colour notes: each main material's swatch, and the watercolour it would be laid in
 function pigments(meta) {
   if (!meta.swatches) return '';
-  const clean = (n) => n.replace(/^(forest floor|gut wall|bank|riverbed|voronoi) /, '').replace(/ \d+$/, '');
-  return `<p class="pigments"><span class="plbl">Pigments</span>${meta.swatches.map((w) => `<span class="chip" style="--c: rgb(${w.rgb.join(',')})"></span><i>${esc(clean(w.name))}</i>`).join('')}</p>`;
+  return `<p class="pigments"><span class="plbl">Pigments</span>${meta.swatches.map((w) => `<span class="pig"><span class="chip" style="--c: rgb(${w.rgb.join(',')})"></span><i>${esc(pigment(w.rgb))}</i><span class="mat">${esc(material(w.name))}</span></span>`).join('')}</p>`;
 }
 
 function plateFigure(s) {
@@ -493,6 +494,9 @@ svg .thin { stroke-width: .8; opacity: .7; }
 .plate-svg .tag .t1 { font-size: 20px; letter-spacing: 1px; } .plate-svg .tag .t2 { font-size: 24px; font-style: italic; font-family: var(--serif); } .plate-svg .tag .t3 { font-size: 16px; opacity: .8; }
 .pigments { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 10px; margin: 2px 0 6px; font-size: .9rem; color: var(--sepia); }
 .pigments .plbl { font-variant: small-caps; letter-spacing: .08em; margin-right: 4px; }
+.pigments .pig { display: inline-flex; align-items: center; gap: 6px; }
+.pigments .mat { font-size: .78rem; letter-spacing: .04em; opacity: .8; }
+.pigments .mat::before { content: '· '; }
 .pigments .chip { width: 30px; height: 18px; background: var(--c); border-radius: 46% 54% 38% 62% / 55% 40% 60% 45%; opacity: .88; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12), inset -3px -2px 6px rgba(0,0,0,.18); }
 .plate-svg .scalebar text { font-size: 28px; font-style: italic; }
 .plate-svg.narrow { display: none; }

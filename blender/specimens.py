@@ -281,11 +281,15 @@ def plate(key, spec):
     a, b = proj(c), proj(c + right * spec['unit'])
     meta = {'anchors': {k: proj(p) for k, p in spec['anchors'].items()}, 'scale_px': round(abs(b[0] - a[0]) * PW, 1),
             'w': PW, 'h': PH, 'bbox': bbox, 'swatches': swatches()}
-    # the detail: the same view, closer, through a loupe
+    # the detail: the same view, closer, through a loupe (or from its own angle,
+    # where something stands between the plate's camera and the detail)
     det = spec.get('detail')
     if det:
         at, r = Vector(det[0]), det[1]
         meta['detail'] = {'at': proj(at), 'r': round(r / spec['unit'], 3)}
+        if len(det) > 2:
+            az, el = math.radians(det[2][0]), math.radians(det[2][1])
+            d = Vector((math.sin(az) * math.cos(el), -math.cos(az) * math.cos(el), math.sin(el)))
         cam.location = at + d * (r / math.tan(math.atan(18 / LENS)))
         cam.rotation_euler = (at - cam.location).to_track_quat('-Z', 'Y').to_euler()
         cam.data.clip_start = r * 0.01
@@ -954,7 +958,7 @@ def circle():
     lo.location = (0, 0, 0.2)
     coll().objects.link(lo)
     return {'anchors': {'hands': hands[6], 'heart': Vector((0, 0, 0.5)), 'ring': pos[3] + Vector((0, 0, 1.25))},
-            'unit': 1.0, 'detail': (Vector((0, 0, 0.35)), 0.32), 'frame': {'view': (-18, 52)}, 'exposure': -0.2}
+            'unit': 1.0, 'detail': (Vector((0, 0, 0.45)), 0.3, (-18, 84)), 'frame': {'view': (-18, 52)}, 'exposure': -0.2}
 
 
 # ── X · the Menders ──
