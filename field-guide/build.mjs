@@ -7,7 +7,7 @@
 // Everything is drawn here or in Blender: the cladogram, the web of returns,
 // the scale of the Gomenata and the little diagrams of each order's
 // mathematics are generated as SVG, the same way every time.
-import { readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync } from 'node:fs';
 import sharp from 'sharp';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,10 +16,24 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const T = JSON.parse(readFileSync(join(HERE, 'taxonomy.json'), 'utf8'));
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 // the plates: Blender writes PNG masters (not committed); the page uses WebP with alpha
+// Each plate is two passes: the wash (with its shadow on the paper) and the
+// pen. The page uses them together; the film draws the pen on, then blooms
+// the wash in, so it uses them apart.
+const P = (n) => join(HERE, 'plates', n);
+const stale = (out, src) => !existsSync(out) || statSync(out).mtimeMs < statSync(src).mtimeMs;
+const webpOpts = { quality: 82, alphaQuality: 90, effort: 5 };
 for (const s of T.species) {
-  const png = join(HERE, 'plates', `${s.id}.png`), webp = join(HERE, 'plates', `${s.id}.webp`);
-  if (existsSync(png) && (!existsSync(webp) || statSync(webp).mtimeMs < statSync(png).mtimeMs)) {
-    await sharp(png).resize({ width: 1400 }).webp({ quality: 80, alphaQuality: 90, effort: 5 }).toFile(webp);
+  const wash = P(`${s.id}-wash.png`), lines = P(`${s.id}-lines.png`);
+  if (!existsSync(wash) || !existsSync(lines)) continue;
+  if (stale(P(`${s.id}.webp`), wash)) {
+    await sharp(wash).composite([{ input: lines }]).webp(webpOpts).toFile(P(`${s.id}.webp`));
+    await sharp(wash).webp(webpOpts).toFile(P(`${s.id}-wash.webp`));
+    await sharp(lines).webp({ ...webpOpts, quality: 90 }).toFile(P(`${s.id}-lines.webp`));
+  }
+  const iw = P(`${s.id}-inset-wash.png`), il = P(`${s.id}-inset-lines.png`);
+  if (existsSync(iw) && existsSync(il) && stale(P(`${s.id}-inset.webp`), iw)) {
+    const flat = await sharp(iw).composite([{ input: il }]).png().toBuffer();
+    await sharp(flat).resize(600, 600).webp(webpOpts).toFile(P(`${s.id}-inset.webp`));
   }
 }
 const kingdom = Object.fromEntries(T.kingdoms.map((k) => [k.id, k]));
@@ -239,6 +253,12 @@ function scaleChart() {
 }
 
 // ── a plate: the drawing, its callouts in ink, its scale bar ──
+function pigments(meta) {
+  if (!meta.swatches) return '';
+  const clean = (n) => n.replace(/^(forest floor|gut wall|bank|riverbed|voronoi) /, '').replace(/ \d+$/, '');
+  return `<p class="pigments"><span class="plbl">Pigments</span>${meta.swatches.map((w) => `<span class="chip" style="--c: rgb(${w.rgb.join(',')})"></span><i>${esc(clean(w.name))}</i>`).join('')}</p>`;
+}
+
 function plateFigure(s) {
   const metaPath = join(HERE, 'plates', `${s.id}.json`);
   if (!existsSync(metaPath) || !existsSync(join(HERE, 'plates', `${s.id}.webp`))) return `<p class="missing">Plate ${s.plate} is still being drawn.</p>`;
@@ -252,7 +272,7 @@ function plateFigure(s) {
     list.sort((a, b) => a.at[1] - b.at[1]);
     let last = -1e9;
     const ys = list.map((m) => { const y = Math.max(m.at[1] * PH, last + 112); last = y; return y; });
-    const over = Math.max(0, last - (PH - 40));
+    const over = Math.max(0, last - (side === 'right' ? PH - 230 : PH - 120));
     list.forEach((m, k) => {
       const ly = Math.max(40, ys[k] - over), ax = m.at[0] * PW, ay = m.at[1] * PH;
       const lx = side === 'left' ? -18 : PW + 18, ex = side === 'left' ? Math.min(ax - 30, 60) : Math.max(ax + 30, PW - 60);
@@ -266,19 +286,53 @@ function plateFigure(s) {
       nums += `<g class="num"><circle cx="${f1(ax)}" cy="${f1(ay)}" r="40"/><text x="${f1(ax)}" y="${f1(ay + 15)}" text-anchor="middle">${m.i}</text></g>`;
     });
   }
+  // graphite: the construction the drawing was built on, under the wash
+  const [bx0, by0, bx1, by1] = (meta.bbox || [0.1, 0.1, 0.9, 0.9]).map((v, i) => v * (i % 2 ? PH : PW));
+  const cx = (bx0 + bx1) / 2, cy = (by0 + by1) / 2, erx = (bx1 - bx0) * 0.56, ery = (by1 - by0) * 0.56;
+  const wobble = (pts) => 'M' + pts.map(([x, y]) => `${f1(x + (rnd() - 0.5) * 3)} ${f1(y + (rnd() - 0.5) * 3)}`).join(' L');
+  const ell = (rx, ry, rot) => wobble(Array.from({ length: 73 }, (_, k) => { const a = k / 72 * Math.PI * 2; const x = rx * Math.cos(a), y = ry * Math.sin(a); return [cx + x * Math.cos(rot) - y * Math.sin(rot), cy + x * Math.sin(rot) + y * Math.cos(rot)]; }));
+  let graphite = `<path d="${ell(erx, ery, -0.03)}"/><path d="${ell(erx * 1.03, ery * 0.97, 0.02)}"/>`;
+  graphite += `<path d="${wobble([[bx0 - 30, cy], [bx1 + 30, cy]])}"/><path d="${wobble([[cx, by0 - 30], [cx, by1 + 30]])}"/>`;
+  for (const x of [bx0, bx0 + (bx1 - bx0) / 3, bx0 + 2 * (bx1 - bx0) / 3, bx1]) graphite += `<path d="${wobble([[x, by1 + 14], [x, by1 + 34]])}"/>`;
+  for (const y of [by0, cy, by1]) graphite += `<path d="${wobble([[bx1 + 14, y], [bx1 + 34, y]])}"/>`;
+  // the loupe: the detail, magnified, in the corner the specimen leaves free
+  let loupe = '';
+  if (meta.detail && existsSync(P(`${s.id}-inset.webp`))) {
+    const D = 330, pad = 26;
+    const cands = [[pad + D / 2, pad + D / 2], [PW - pad - D / 2, pad + D / 2], [pad + D / 2, PH - 110 - D / 2], [PW - pad - D / 2, PH - pad - D / 2]];
+    const overlap = ([x, y]) => Math.max(0, Math.min(x + D / 2, bx1) - Math.max(x - D / 2, bx0)) * Math.max(0, Math.min(y + D / 2, by1) - Math.max(y - D / 2, by0));
+    const [lx, ly] = cands.sort((a, b) => overlap(a) - overlap(b) || Math.hypot(b[0] - cx, b[1] - cy) - Math.hypot(a[0] - cx, a[1] - cy))[0];
+    const dx = meta.detail.at[0] * PW, dy = meta.detail.at[1] * PH, dr = Math.max(26, meta.detail.r * meta.scale_px);
+    const mag = Math.max(2, Math.round(D / (2 * dr)));
+    const ang = Math.atan2(dy - ly, dx - lx), ex = lx + Math.cos(ang) * (D / 2 + 6), ey = ly + Math.sin(ang) * (D / 2 + 6);
+    const ox = dx - Math.cos(ang) * dr, oy = dy - Math.sin(ang) * dr;
+    loupe = `<g class="loupe"><clipPath id="clip-${s.id}"><circle cx="${f1(lx)}" cy="${f1(ly)}" r="${D / 2}"/></clipPath>
+      <circle cx="${f1(dx)}" cy="${f1(dy)}" r="${f1(dr)}" class="mark"/><path d="M${f1(ex)} ${f1(ey)} L${f1(ox)} ${f1(oy)}" class="lead"/>
+      <circle cx="${f1(lx)}" cy="${f1(ly)}" r="${D / 2}" class="glassbg"/>
+      <image href="plates/${s.id}-inset.webp" x="${f1(lx - D / 2)}" y="${f1(ly - D / 2)}" width="${D}" height="${D}" clip-path="url(#clip-${s.id})"/>
+      <circle cx="${f1(lx)}" cy="${f1(ly)}" r="${D / 2}" class="ring"/><circle cx="${f1(lx)}" cy="${f1(ly)}" r="${D / 2 - 9}" class="ring2"/>
+      <text x="${f1(lx)}" y="${f1(ly + D / 2 + 40)}" text-anchor="middle">× ${mag}</text></g>`;
+  }
+  // collage: the plate is taped in, and tagged
+  const tape = `<g class="tape"><rect x="-40" y="-18" width="200" height="54" transform="rotate(-38 60 9)"/><rect x="${PW - 160}" y="-18" width="200" height="54" transform="rotate(38 ${PW - 60} 9)"/></g>`;
+  const tag = `<g class="tag" transform="translate(${PW + 30} ${PH - 170}) rotate(-5)"><path d="M0 0 H272 L300 30 V100 L272 130 H0 Z"/><circle cx="276" cy="65" r="9" class="hole"/><path d="M285 65 C 330 40, 360 90, 410 60" class="string"/>
+    <text x="16" y="34" class="t1">Nº ${s.plate} · ${esc(kingdom[s.kingdom].name)}</text><text x="16" y="74" class="t2">${esc(s.binomial)}</text><text x="16" y="108" class="t3">coll. Earth Star, 2026</text></g>`;
   const sb = meta.scale_px;
   const scalebar = `<g class="scalebar"><line x1="60" y1="${PH - 40}" x2="${f1(60 + sb)}" y2="${PH - 40}"/><line x1="60" y1="${PH - 52}" x2="60" y2="${PH - 28}"/><line x1="${f1(60 + sb)}" y1="${PH - 52}" x2="${f1(60 + sb)}" y2="${PH - 28}"/><text x="${f1(60 + sb / 2)}" y="${PH - 60}" text-anchor="middle">${esc(s.scale)}</text></g>`;
   const legend = `<ol class="legend">${items.map((m) => `<li>${esc(m.label)}</li>`).join('')}</ol>`;
   return `<figure class="plate">
   <svg class="plate-svg wide" viewBox="${-M} 0 ${PW + 2 * M} ${PH}" role="img" aria-label="Plate ${s.plate}: ${esc(s.common)}, ${esc(s.binomial)}">
+    <g class="graphite">${graphite}</g>${tape}
     <image href="plates/${s.id}.webp" x="0" y="0" width="${PW}" height="${PH}"/>
-    <g class="leaders">${lines}</g><g class="labels">${labels}</g>${scalebar}
+    ${loupe}<g class="leaders">${lines}</g><g class="labels">${labels}</g>${scalebar}${tag}
   </svg>
   <svg class="plate-svg narrow" viewBox="0 0 ${PW} ${PH}" role="img" aria-label="Plate ${s.plate}: ${esc(s.common)}, ${esc(s.binomial)}">
+    <g class="graphite">${graphite}</g>
     <image href="plates/${s.id}.webp" x="0" y="0" width="${PW}" height="${PH}"/>
-    <g class="nums">${nums}</g>${scalebar}
+    ${loupe.replace(/clip-${s.id}/g, `clipn-${s.id}`)}<g class="nums">${nums}</g>${scalebar}
   </svg>
   ${legend}
+  ${pigments(meta)}
   <figcaption>Plate ${s.plate}. <i>${esc(s.binomial)}</i>, ${esc(s.common.replace(/^The /, 'the '))}.</figcaption>
 </figure>`;
 }
@@ -424,6 +478,22 @@ svg .thin { stroke-width: .8; opacity: .7; }
 .plate-svg .leaders path { stroke: var(--sepia); stroke-width: 1.6; }
 .plate-svg .leaders circle { fill: var(--sepia); }
 .plate-svg .scalebar line { stroke: var(--ink); stroke-width: 3; }
+.plate-svg .graphite path { stroke: #5e5a55; stroke-width: 2.2; opacity: .3; }
+.plate-svg .tape rect { fill: rgba(226, 210, 166, .62); stroke: rgba(150, 125, 80, .25); }
+.plate-svg .loupe .glassbg { fill: var(--paper); stroke: none; }
+.plate-svg .loupe .ring { stroke: var(--ink); stroke-width: 5; }
+.plate-svg .loupe .ring2 { stroke: var(--sepia); stroke-width: 1.5; opacity: .7; }
+.plate-svg .loupe .mark { stroke: var(--sepia); stroke-width: 2.5; stroke-dasharray: 8 7; }
+.plate-svg .loupe .lead { stroke: var(--sepia); stroke-width: 2; stroke-dasharray: 3 9; }
+.plate-svg .loupe text { font-size: 34px; font-style: italic; fill: var(--sepia); }
+.plate-svg .tag path { fill: #e8d9b0; stroke: #9c845a; stroke-width: 2; }
+.plate-svg .tag .hole { fill: var(--paper); stroke: #9c845a; stroke-width: 2; }
+.plate-svg .tag .string { fill: none; stroke: #8a6a3a; stroke-width: 2.5; }
+.plate-svg .tag text { font-family: 'Courier New', 'DejaVu Sans Mono', monospace; fill: #3a2a1a; }
+.plate-svg .tag .t1 { font-size: 20px; letter-spacing: 1px; } .plate-svg .tag .t2 { font-size: 24px; font-style: italic; font-family: var(--serif); } .plate-svg .tag .t3 { font-size: 16px; opacity: .8; }
+.pigments { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 10px; margin: 2px 0 6px; font-size: .9rem; color: var(--sepia); }
+.pigments .plbl { font-variant: small-caps; letter-spacing: .08em; margin-right: 4px; }
+.pigments .chip { width: 30px; height: 18px; background: var(--c); border-radius: 46% 54% 38% 62% / 55% 40% 60% 45%; opacity: .88; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12), inset -3px -2px 6px rgba(0,0,0,.18); }
 .plate-svg .scalebar text { font-size: 28px; font-style: italic; }
 .plate-svg.narrow { display: none; }
 .plate-svg .num circle { fill: var(--paper); stroke: var(--sepia); stroke-width: 3; }
@@ -530,4 +600,12 @@ svg .thin { stroke-width: .8; opacity: .7; }
 </html>
 `;
 writeFileSync(join(HERE, 'index.html'), html);
+
+// the diagrams as standalone SVG, for the film
+mkdirSync(join(HERE, 'figures'), { recursive: true });
+const SVG_STYLE = `<style>text{font-family:'Cormorant Garamond',serif;fill:#2a1d12}path,line,polyline,polygon,circle,ellipse{fill:none;stroke:#2a1d12;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}.fill{fill:#2a1d12;stroke:none}.paper{fill:#efe4c8}.thin{stroke-width:.8;opacity:.7}a{fill:inherit}.ret{stroke:#3d6e60}.w{fill:#8a2c1c;font-style:italic}.r{fill:#3d6e60;font-style:italic}.head{font-size:15px;fill:#6b4a2e;letter-spacing:.1em}.bin{font-style:italic}.cn{fill:#8a7458;font-size:16px}.ord{font-size:15px;fill:#6b4a2e;letter-spacing:.08em}.king{font-size:20px;letter-spacing:.1em}.dom{font-size:26px;letter-spacing:.12em}.scale,.tick{font-size:16px;font-style:italic;fill:#6b4a2e}.sp{font-size:17px}</style>`;
+const standalone = (svg) => svg.replace('<svg ', `<svg xmlns="http://www.w3.org/2000/svg" `).replace(/(<svg[^>]*>)/, `$1${SVG_STYLE}`).replace(/<\/?a[^>]*>/g, '');
+for (const o of T.orders) writeFileSync(join(HERE, 'figures', `${o.id}.svg`), standalone(pictogram(o.id)));
+writeFileSync(join(HERE, 'figures', 'cladogram.svg'), standalone(cladogram()));
+writeFileSync(join(HERE, 'figures', 'returns.svg'), standalone(returns()));
 console.log(`field-guide/index.html · ${T.species.length} species · ${refOrder.length} references`);

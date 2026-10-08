@@ -93,11 +93,15 @@ def multi_tube(name, segments, m, bevel_res=2):
 
 
 def ink_and_wash():
+    """One pen for every plate; the lines come out as their own pass, so the
+    film can draw them on before the wash blooms in."""
     scn = bpy.context.scene
     scn.render.use_freestyle = True
     scn.render.line_thickness_mode = 'ABSOLUTE'
     scn.render.line_thickness = 1.5
-    fs = scn.view_layers[0].freestyle_settings
+    vl = scn.view_layers[0]
+    fs = vl.freestyle_settings
+    fs.as_render_pass = True
     fs.crease_angle = math.radians(128)
     ls = fs.linesets[0]
     ls.select_silhouette = ls.select_border = ls.select_crease = True
@@ -120,19 +124,43 @@ def ink_and_wash():
     scn.render.film_transparent = True
 
 
-def light_and_frame(view=(-35, 22), lens=70, margin=1.12, center=None, radius=None):
-    """Soft north light from the upper left, a cool fill and a rim; a camera
-    placed to fit the specimen; returns the camera."""
+LENS = 85
+
+
+def light_and_frame(view=(-35, 24), lens=LENS, margin=1.12, center=None, radius=None, ground=True):
+    """The same studio for every specimen: north light from the upper left, a
+    cool fill, a rim, a paper-coloured sky, and the paper itself, which only
+    catches shadow. The camera is placed so the specimen fills the plate."""
     scn = bpy.context.scene
-    pts = []
+    bpy.context.view_layer.update()
     dg = bpy.context.evaluated_depsgraph_get()
+    pts = []
     for ob in scn.objects:
         if ob.type in ('MESH', 'CURVE') and not ob.get('no_frame'):
-            pts += [ob.matrix_world @ Vector(c) for c in ob.bound_box]
+            ev = ob.evaluated_get(dg)
+            if ob.type == 'CURVE':
+                # a filled 2D curve reports a box that is not where it is: use its vertices
+                me = ev.to_mesh()
+                vs = [ev.matrix_world @ v.co for v in me.vertices]
+                ev.to_mesh_clear()
+                if vs:
+                    lo_ = Vector((min(v.x for v in vs), min(v.y for v in vs), min(v.z for v in vs)))
+                    hi_ = Vector((max(v.x for v in vs), max(v.y for v in vs), max(v.z for v in vs)))
+                    pts += [Vector((x, y, z)) for x in (lo_.x, hi_.x) for y in (lo_.y, hi_.y) for z in (lo_.z, hi_.z)]
+            else:
+                pts += [ev.matrix_world @ Vector(c) for c in ev.bound_box]
     lo = Vector((min(p.x for p in pts), min(p.y for p in pts), min(p.z for p in pts)))
     hi = Vector((max(p.x for p in pts), max(p.y for p in pts), max(p.z for p in pts)))
     c = Vector(center) if center else (lo + hi) / 2
     R = radius or (hi - lo).length / 2
+    if ground:
+        bm = bmesh.new()
+        bmesh.ops.create_grid(bm, x_segments=1, y_segments=1, size=R * 8)
+        paper = mesh('paper', bm, mat('paper', (0.95, 0.9, 0.8), rough=0.9), smooth=False)
+        paper.location = (c.x, c.y, lo.z - R * 0.004)
+        paper.is_shadow_catcher = True
+        paper['no_frame'] = True
+        no_ink(paper)
     az, el = math.radians(view[0]), math.radians(view[1])
     d = Vector((math.sin(az) * math.cos(el), -math.cos(az) * math.cos(el), math.sin(el)))
     cd = bpy.data.cameras.new('camera')
@@ -158,7 +186,11 @@ def light_and_frame(view=(-35, 22), lens=70, margin=1.12, center=None, radius=No
         span = 2 * dist * math.tan(math.atan(18 / lens))
         aim += rx * ((x0 + x1) / 2 - 0.5) * span + ry * ((y0 + y1) / 2 - 0.5) * span * PH / PW
         dist *= fill
-    c = aim
+    cam.location = aim + d * dist
+    cam.rotation_euler = (aim - cam.location).to_track_quat('-Z', 'Y').to_euler()
+    bpy.context.view_layer.update()
+    q = [world_to_camera_view(scn, cam, p) for p in pts]
+    bbox = [round(min(v.x for v in q), 4), round(1 - max(v.y for v in q), 4), round(max(v.x for v in q), 4), round(1 - min(v.y for v in q), 4)]
     cd.clip_start, cd.clip_end = dist * 0.01, dist * 10
     def area(name, at, energy, color, size):
         ld = bpy.data.lights.new(name, 'AREA')
@@ -171,49 +203,96 @@ def light_and_frame(view=(-35, 22), lens=70, margin=1.12, center=None, radius=No
     area('key', tuple(-right * 3 + Vector((0, 0, 3.2)) + d * 2.2), 55, (1.0, 0.93, 0.82), 2.5)
     area('fill', tuple(right * 3.5 + d * 2.5 + Vector((0, 0, 0.6))), 14, (0.85, 0.92, 1.0), 4)
     area('rim', tuple(-d * 3 + Vector((0, 0, 2.5)) + right), 30, (1.0, 0.96, 0.9), 2)
-    world = bpy.data.worlds.new('paper')
+    world = bpy.data.worlds.new('paper sky')
     scn.world = world
     bg = V.nodes_of(world).nodes['Background']
     bg.inputs['Color'].default_value = (*G.lin((0.96, 0.92, 0.84)), 1)
     bg.inputs['Strength'].default_value = 0.4
-    return cam, c
+    return cam, aim, d, bbox
 
 
-def wash(size=3):
+def passes(key, wash_size=3):
+    """Wash (Kuwahara over the render, shadow and all) and lines (the pen) as
+    two transparent files: <key>-wash.png and <key>-lines.png."""
     scn = bpy.context.scene
-    tree = bpy.data.node_groups.new('wash', 'CompositorNodeTree')
-    tree.interface.new_socket('Image', in_out='OUTPUT', socket_type='NodeSocketColor')
+    tree = bpy.data.node_groups.get('passes') or bpy.data.node_groups.new('passes', 'CompositorNodeTree')
+    tree.nodes.clear()
+    if not tree.interface.items_tree:
+        tree.interface.new_socket('Image', in_out='OUTPUT', socket_type='NodeSocketColor')
     rl = tree.nodes.new('CompositorNodeRLayers')
     kw = tree.nodes.new('CompositorNodeKuwahara')
-    kw.inputs['Size'].default_value = size
-    out = tree.nodes.new('NodeGroupOutput')
+    kw.inputs['Size'].default_value = wash_size
     tree.links.new(rl.outputs['Image'], kw.inputs['Image'])
+    fo = tree.nodes.new('CompositorNodeOutputFile')
+    fo.directory = OUT + os.sep
+    fo.file_name = f'{key}-'
+    fo.format.media_type = 'IMAGE'
+    fo.format.file_format = 'PNG'
+    fo.format.color_mode = 'RGBA'
+    fo.file_output_items.new('RGBA', 'wash')
+    fo.file_output_items.new('RGBA', 'lines')
+    tree.links.new(kw.outputs['Image'], fo.inputs['wash'])
+    tree.links.new(rl.outputs['Freestyle'], fo.inputs['lines'])
+    out = tree.nodes.new('NodeGroupOutput')
     tree.links.new(kw.outputs['Image'], out.inputs[0])
     scn.compositing_node_group = tree
     scn.render.use_compositing = True
 
 
+def swatches(n=4):
+    """The plate's pigments: the materials that cover most of the specimen."""
+    weight = {}
+    for ob in bpy.context.scene.objects:
+        if ob.type not in ('MESH', 'CURVE') or ob.name == 'paper' or not ob.data.materials:
+            continue
+        dims = ob.dimensions
+        w = max(dims.x * dims.y + dims.y * dims.z + dims.x * dims.z, 1e-9)
+        m = ob.data.materials[0]
+        if m:
+            weight[m.name] = weight.get(m.name, 0) + w
+    out = []
+    for name in sorted(weight, key=lambda k: -weight[k]):
+        c = bpy.data.materials[name].diffuse_color
+        rgb = [min(255, int(round(pow(max(0.0, v), 1 / 2.2) * 255))) for v in c[:3]]
+        if all(sum(abs(a - b) for a, b in zip(rgb, o['rgb'])) > 40 for o in out):
+            out.append({'name': name, 'rgb': rgb})
+        if len(out) == n:
+            break
+    return out
+
+
 def plate(key, spec):
-    """Frame, light, render, and write the anchors and the scale bar."""
+    """Frame, light, render the passes and the detail inset, and write the
+    anchors, the outline, the scale bar and the pigments."""
     scn = bpy.context.scene
+    cam, c, d, bbox = light_and_frame(**spec.get('frame', {}))
     ink_and_wash()
-    cam, c = light_and_frame(**spec.get('frame', {}))
     G.render_settings(samples=int(os.environ.get('SSAMPLES', 64)), w=PW, h=PH)
     scn.view_settings.view_transform = 'AgX'
     scn.view_settings.look = 'AgX - Medium High Contrast'
     scn.view_settings.exposure = spec.get('exposure', 0.0)
-    scn.render.image_settings.file_format = 'PNG'
-    scn.render.image_settings.color_mode = 'RGBA'
-    wash(spec.get('wash', 3))
     os.makedirs(OUT, exist_ok=True)
-    scn.render.filepath = os.path.join(OUT, f'{key}.png')
-    bpy.ops.render.render(write_still=True)
+    passes(key, spec.get('wash', 3))
+    bpy.ops.render.render(write_still=False)
     def proj(p):
         v = world_to_camera_view(scn, cam, Vector(p))
         return [round(v.x, 4), round(1 - v.y, 4)]
     right = cam.matrix_world.to_3x3() @ Vector((1, 0, 0))
     a, b = proj(c), proj(c + right * spec['unit'])
-    meta = {'anchors': {k: proj(p) for k, p in spec['anchors'].items()}, 'scale_px': round(abs(b[0] - a[0]) * PW, 1), 'w': PW, 'h': PH}
+    meta = {'anchors': {k: proj(p) for k, p in spec['anchors'].items()}, 'scale_px': round(abs(b[0] - a[0]) * PW, 1),
+            'w': PW, 'h': PH, 'bbox': bbox, 'swatches': swatches()}
+    # the detail: the same view, closer, through a loupe
+    det = spec.get('detail')
+    if det:
+        at, r = Vector(det[0]), det[1]
+        meta['detail'] = {'at': proj(at), 'r': round(r / spec['unit'], 3)}
+        cam.location = at + d * (r / math.tan(math.atan(18 / LENS)))
+        cam.rotation_euler = (at - cam.location).to_track_quat('-Z', 'Y').to_euler()
+        cam.data.clip_start = r * 0.01
+        scn.render.resolution_x = scn.render.resolution_y = 800
+        scn.render.line_thickness = 2.0
+        passes(f'{key}-inset', spec.get('wash', 3))
+        bpy.ops.render.render(write_still=False)
     with open(os.path.join(OUT, f'{key}.json'), 'w') as f:
         json.dump(meta, f)
 
@@ -223,6 +302,8 @@ def fresh():
     for ls in list(bpy.data.linestyles):
         if ls.users == 0:
             bpy.data.linestyles.remove(ls)
+    for c in list(bpy.data.collections):
+        bpy.data.collections.remove(c)
 
 
 # ── fields and patterns ──
@@ -403,6 +484,20 @@ def leaf_mesh(name, length, width, m, at, rot, bend=0.1):
     return ob
 
 
+def cut_block(name, x0, x1, y0, y1, layers):
+    """A diorama cut from the ground: stacked layers [(name, colour, z_top, z_bottom)]."""
+    obs = []
+    for lname, c, zt, zb in layers:
+        bm = bmesh.new()
+        bmesh.ops.create_cube(bm, size=1.0)
+        for v in bm.verts:
+            v.co = Vector(((x0 + x1) / 2 + v.co.x * (x1 - x0), (y0 + y1) / 2 + v.co.y * (y1 - y0), (zt + zb) / 2 + v.co.z * (zt - zb)))
+        m = V.mottle(mat(f'{name} {lname}', c, rough=0.92), c, tuple(x * 0.78 for x in c), 10)
+        V.bump(m, scale=30, strength=0.35)
+        obs.append(mesh(f'{name} {lname}', bm, m, smooth=False))
+    return obs
+
+
 # ── I · the Clearers ──
 def clearers():
     fresh()
@@ -445,19 +540,16 @@ def clearers():
             pts.append(p.copy())
         tube(f'fibre {j}', pts, [0.008] * len(pts), fib[j], res=6)
     anchors['fibre'] = Vector((0.05, 0, 0.66))
-    return {'anchors': anchors, 'unit': 2.0, 'frame': {'view': (-30, 18)}}
+    return {'anchors': anchors, 'unit': 2.0, 'detail': (anchors['fibre'] + Vector((0, 0, -0.04)), 0.16), 'frame': {'view': (-32, 16)}}
 
 
 # ── II · the Unbinders ──
 def unbinders():
     fresh()
     rng = random.Random(2)
-    field = gray_scott(seed=2)
-    img = image_from('turing spots', field, lo=(0.86, 0.6, 0.55), hi=(0.4, 0.46, 0.22))
-    lining = textured('lining', (0.85, 0.6, 0.55), img, rough=0.5, sss=0.6)
-    grid_mesh('lining', 40, 28, lambda u, v: (u * 2.4 - 1.2, v * 1.6 - 0.8, 0.03 * math.sin(u * 9) * math.cos(v * 7)), lining)
-    # villi: the same spotting, written in three dimensions
-    vil = mat('villus', (0.86, 0.6, 0.55), rough=0.5, sss=0.6)
+    # a block of gut wall: lining, submucosa, muscle; the villi standing on top
+    cut_block('gut wall', -1.25, 1.25, -0.85, 0.85, [('mucosa', (0.86, 0.58, 0.54), 0.0, -0.1), ('submucosa', (0.93, 0.84, 0.74), -0.1, -0.32), ('muscularis', (0.62, 0.3, 0.26), -0.32, -0.5)])
+    vil = mat('villus', (0.88, 0.6, 0.55), rough=0.45, sss=0.6)
     nt = V.nodes_of(vil)
     bs = nt.nodes['Principled BSDF']
     tc = nt.nodes.new('ShaderNodeTexCoord')
@@ -465,128 +557,195 @@ def unbinders():
     vor.inputs['Scale'].default_value = 9
     nt.links.new(tc.outputs['Object'], vor.inputs['Vector'])
     mr = nt.nodes.new('ShaderNodeMapRange')
-    mr.inputs['From Min'].default_value, mr.inputs['From Max'].default_value = 0.18, 0.26
+    mr.inputs['From Min'].default_value, mr.inputs['From Max'].default_value = 0.17, 0.25
     mx = nt.nodes.new('ShaderNodeMix'); mx.data_type = 'RGBA'
-    mx.inputs[6].default_value = (*G.lin((0.4, 0.46, 0.22)), 1)
-    mx.inputs[7].default_value = (*G.lin((0.86, 0.6, 0.55)), 1)
+    mx.inputs[6].default_value = (*G.lin((0.42, 0.5, 0.24)), 1)
+    mx.inputs[7].default_value = (*G.lin((0.88, 0.6, 0.55)), 1)
     nt.links.new(vor.outputs['Distance'], mr.inputs['Value']); nt.links.new(mr.outputs['Result'], mx.inputs[0]); nt.links.new(mx.outputs[2], bs.inputs['Base Color'])
+    tips = []
     for i in range(9):
         for j in range(6):
-            x, y = -1.08 + i * 0.26 + (j % 2) * 0.13 + rng.uniform(-0.03, 0.03), -0.66 + j * 0.26 + rng.uniform(-0.03, 0.03)
+            x, y = -1.06 + i * 0.26 + (j % 2) * 0.13 + rng.uniform(-0.03, 0.03), -0.68 + j * 0.27 + rng.uniform(-0.03, 0.03)
             h = 0.5 + rng.uniform(-0.08, 0.08)
             bend = Vector((rng.uniform(-0.05, 0.05), rng.uniform(-0.05, 0.05), 0))
             tube(f'villus {i}.{j}', [Vector((x, y, 0)), Vector((x, y, h * 0.5)) + bend * 0.5, Vector((x, y, h)) + bend], [0.075, 0.07, 0.06], vil, res=8)
             sphere(f'tip {i}.{j}', 0.06, tuple(Vector((x, y, h)) + bend), m=vil, segs=16)
-    # the cell itself, enlarged and set apart
-    rod = mat('rod', (0.5, 0.58, 0.32), rough=0.45, sss=0.4)
-    cell = sphere('rod cell', 1.0, (1.55, -0.2, 0.75), (0.34, 0.11, 0.11), rod, segs=32)
-    cell['no_frame'] = False
+            tips.append(Vector((x, y, h)) + bend)
+    rod = mat('rod', (0.5, 0.6, 0.32), rough=0.45, sss=0.4)
+    sphere('rod cell', 1.0, (1.75, -0.35, 0.8), (0.34, 0.11, 0.11), rod, segs=32)
     brush = []
     for k in range(26):
         a = k / 26 * math.tau
-        p0 = Vector((1.86, -0.2 + 0.06 * math.cos(a), 0.75 + 0.06 * math.sin(a)))
+        p0 = Vector((2.07, -0.35 + 0.06 * math.cos(a), 0.8 + 0.06 * math.sin(a)))
         brush.append((tuple(p0), tuple(p0 + Vector((0.1 + 0.03 * rng.random(), 0.05 * math.cos(a), 0.05 * math.sin(a)))), 0.006, 0.002))
     no_ink(multi_tube('enzyme brush', brush, mat('brush', (0.85, 0.75, 0.4), rough=0.4)))
-    tube('enlargement', [(1.2, -0.2, 0.62), (0.75, 0.0, 0.42)], [0.004, 0.004], mat('pencil', (0.3, 0.25, 0.2)))
-    return {'anchors': {'villus': Vector((-0.82, -0.66, 0.3)), 'spots': Vector((0.3, -0.45, 0.02)), 'rod': Vector((1.5, -0.2, 0.85)), 'brush': Vector((1.95, -0.2, 0.75))},
-            'unit': 0.1, 'frame': {'view': (-20, 32)}}
+    tube('enlargement', [(1.4, -0.35, 0.7), (0.95, -0.2, 0.5)], [0.004, 0.004], mat('pencil', (0.3, 0.25, 0.2)))
+    t = tips[3 * 6 + 1]
+    return {'anchors': {'villus': tips[1] + Vector((0, -0.07, -0.2)), 'spots': t + Vector((0, -0.06, -0.08)), 'rod': Vector((1.7, -0.35, 0.9)), 'brush': Vector((2.16, -0.35, 0.8))},
+            'unit': 0.1, 'detail': (t + Vector((0, 0, -0.12)), 0.22), 'frame': {'view': (-24, 28)}}
 
 
 # ── III · the Lung-Sweepers ──
 def sweepers():
     fresh()
     rng = random.Random(3)
-    cellm = mat('cell', (0.88, 0.7, 0.68), rough=0.5, sss=0.5)
-    cil = mat('cilia', (0.95, 0.88, 0.8), rough=0.45, sss=0.3)
-    hookm = mat('hooked', G.GOLD, rough=0.35, metallic=0.6)
-    for i in range(6):
+    # columnar cells of the airway, cut so their nuclei show; the cilia on top
+    cellm = mat('airway cell', (0.9, 0.72, 0.7), rough=0.5, sss=0.5)
+    nucm = mat('nucleus', (0.45, 0.32, 0.5), rough=0.5, sss=0.3)
+    tops = []
+    for i in range(9):
         for j in range(4):
-            x, y = -1.25 + i * 0.5 + (j % 2) * 0.25, -0.6 + j * 0.42
-            sphere(f'cell {i}.{j}', 1.0, (x, y, 0.0), (0.26, 0.23, 0.12), cellm, segs=20)
+            x, y = -1.1 + i * 0.27 + (j % 2) * 0.135, -0.36 + j * 0.24
+            bm = bmesh.new()
+            bmesh.ops.create_cone(bm, cap_ends=True, segments=6, radius1=0.14, radius2=0.14, depth=0.62)
+            o = mesh(f'cell {i}.{j}', bm, cellm, smooth=False)
+            o.location = (x, y, -0.31)
+            sphere(f'dome {i}.{j}', 1.0, (x, y, 0.0), (0.135, 0.135, 0.05), cellm, segs=16)
+            if j == 0:
+                sphere(f'nucleus {i}', 1.0, (x, y - 0.1, -0.4), (0.06, 0.05, 0.09), nucm, segs=14)
+            tops.append(Vector((x, y, 0.04)))
     segs, hooks = [], []
-    for i in range(34):
-        for j in range(10):
-            x, y = -1.35 + i * 0.08, -0.72 + j * 0.15 + rng.uniform(-0.02, 0.02)
-            phase = x * 3.2
-            lean = math.sin(phase)
-            base = Vector((x, y, 0.08))
-            mid = base + Vector((0.12 * lean, 0, 0.3))
-            tip = base + Vector((0.3 * lean, 0, 0.5 - 0.15 * abs(lean)))
-            segs += [(tuple(base), tuple(mid), 0.016, 0.013), (tuple(mid), tuple(tip), 0.013, 0.006)]
-            if j == 4 and i % 7 == 3:
-                hooks.append((tip, lean))
-    no_ink(multi_tube('cilia', segs, cil))
-    for k, (tip, lean) in enumerate(hooks):
-        tube(f'hook {k}', [tip, tip + Vector((0.05, 0, 0.04)), tip + Vector((0.09, 0, 0.0))], [0.012, 0.01, 0.004], hookm)
+    for (x, y, z) in tops:
+        for k in range(14):
+            a = k / 14 * math.tau
+            bx, by = x + 0.07 * math.cos(a), y + 0.07 * math.sin(a)
+            lean = math.sin(bx * 3.4)
+            base = Vector((bx, by, z))
+            mid = base + Vector((0.1 * lean, 0, 0.22))
+            tip = base + Vector((0.24 * lean, 0, 0.36 - 0.1 * abs(lean)))
+            segs += [(tuple(base), tuple(mid), 0.012, 0.01), (tuple(mid), tuple(tip), 0.01, 0.005)]
+    no_ink(multi_tube('cilia', segs, mat('cilia', (0.96, 0.9, 0.82), rough=0.45, sss=0.3)))
+    hookm = mat('hooked cilium', G.GOLD, rough=0.35, metallic=0.5)
+    for k, (x, y, z) in enumerate(tops[5:30:6]):
+        lean = math.sin(x * 3.4)
+        tip = Vector((x + 0.24 * lean, y, z + 0.36))
+        tube(f'hooked {k}', [Vector((x, y, z)), Vector((x + 0.1 * lean, y, z + 0.24)), tip, tip + Vector((0.06, 0, 0.03)), tip + Vector((0.1, 0, -0.01))], [0.016, 0.014, 0.012, 0.009, 0.004], hookm)
+        hooks.append(tip)
     fibre = mat('fibre', (0.2, 0.42, 0.85), rough=0.4)
-    crest_x = -1.35 + (math.pi / 2) / 3.2 + 2 * math.pi / 3.2
-    pts = [(crest_x - 0.25 + 0.05 * k, 0.0 + 0.04 * math.sin(k), 0.55 + 0.06 * math.sin(k * 1.3)) for k in range(11)]
-    tube('folded fibre', pts, [0.014] * len(pts), fibre)
-    return {'anchors': {'cilia': Vector((-0.9, -0.5, 0.4)), 'crest': Vector((crest_x, -0.7, 0.55)), 'hook': hooks[1][0] if len(hooks) > 1 else hooks[0][0], 'fibre': Vector(pts[5])},
-            'unit': 1.0, 'frame': {'view': (-25, 24)}}
+    h0 = hooks[1]
+    pts = [h0 + Vector((-0.3 + 0.06 * k, 0.03 * math.sin(k * 1.4), 0.05 + 0.04 * math.sin(k))) for k in range(11)]
+    tube('folded fibre', pts, [0.016] * len(pts), fibre)
+    return {'anchors': {'cilia': tops[2] + Vector((0, 0, 0.25)), 'crest': tops[20] + Vector((0.1, 0, 0.36)), 'hook': hooks[1] + Vector((0.08, 0, 0.0)), 'fibre': pts[3]},
+            'unit': 1.0, 'detail': (h0 + Vector((0, 0, 0.02)), 0.22), 'frame': {'view': (-22, 22)}}
 
 
 # ── IV · the Shore-walkers ──
+def crab_body(M, rng, at=Vector((0, 0, 0)), carry=True):
+    """A crab drawn from life: a broad carapace with a toothed front edge, four
+    pairs of jointed walking legs splayed and planted, heavy chelae, eyes on
+    stalks. Faces +x."""
+    def shell_shape(v):
+        x, y, z = v
+        ang = math.atan2(y, x)
+        teeth = 0.045 * max(0, math.cos(ang)) * (0.5 + 0.5 * math.cos(9 * ang)) if abs(ang) < 1.3 else 0
+        k = 1 + teeth + 0.02 * math.sin(x * 21 + y * 17)
+        return Vector((x * k, y * k * (1 - 0.15 * max(0, -x)), z * (1.0 - 0.3 * max(0, x))))
+    sphere('carapace', 1.0, tuple(at + Vector((0, 0, 0.12))), (0.15, 0.2, 0.065), M['shell'], segs=48, shape=shell_shape)
+    sphere('underside', 1.0, tuple(at + Vector((0, 0, 0.095))), (0.13, 0.17, 0.035), M['belly'], segs=24)
+    sphere('slow furnace', 1.0, tuple(at + Vector((0, 0, 0.075))), (0.08, 0.11, 0.012), M['furnace'], segs=16)
+    for k in range(5):
+        bm = bmesh.new()
+        bmesh.ops.create_icosphere(bm, subdivisions=1, radius=0.013 + 0.005 * rng.random())
+        for v in bm.verts:
+            v.co.z *= 1.9
+        c = mesh(f'ridge crystal {k}', bm, M['crystal'], smooth=False)
+        c.location = at + Vector((-0.06 + k * 0.03, (rng.random() - 0.5) * 0.05, 0.18))
+        c.rotation_euler = (rng.random() * 0.5, rng.random() * 0.5, rng.random() * 3)
+    for s in (-1, 1):
+        tube(f'eyestalk {s}', [at + Vector((0.12, 0.03 * s, 0.14)), at + Vector((0.15, 0.04 * s, 0.17))], [0.008, 0.007], M['leg'])
+        sphere(f'eye {s}', 0.012, tuple(at + Vector((0.155, 0.042 * s, 0.178))), m=M['eye'], segs=12)
+    feet = []
+    for s in (-1, 1):
+        for i, (x0, sweep) in enumerate(((0.07, 0.45), (0.025, 0.12), (-0.025, -0.2), (-0.07, -0.55))):
+            out = Vector((sweep, s, 0)).normalized()
+            B = at + Vector((x0, 0.17 * s, 0.1))
+            K1 = B + out * 0.14 + Vector((0, 0, 0.075))
+            K2 = K1 + out * 0.075 + Vector((0, 0, 0.0))
+            K3 = K2 + out * 0.05 + Vector((0, 0, -0.085))
+            T = K3 + out * 0.02 + Vector((0, 0, -0.06))
+            T.z = at.z
+            for a_, b_, r0, r1, n_ in ((B, K1, 0.024, 0.021, 'merus'), (K1, K2, 0.019, 0.017, 'carpus'), (K2, K3, 0.016, 0.013, 'propodus'), (K3, T, 0.011, 0.002, 'dactyl')):
+                tube(f'leg {s}{i} {n_}', [a_, (a_ + b_) / 2 + Vector((0, 0, 0.004)), b_], [r0, (r0 + r1) / 2, r1], M['leg'])
+            for J in (K1, K2, K3):
+                sphere(f'joint {s}{i}', 0.017, tuple(J), m=M['leg'], segs=10)
+            feet.append(T)
+    claws = []
+    for s in (-1, 1):
+        B = at + Vector((0.12, 0.12 * s, 0.1))
+        K1 = at + Vector((0.2, 0.22 * s, 0.13))
+        K2 = at + Vector((0.27, 0.17 * s, 0.14))
+        tube(f'cheliped {s}', [B, K1, K2], [0.026, 0.024, 0.024], M['shell'])
+        sphere(f'cheliped joint {s}', 0.026, tuple(K1), m=M['shell'], segs=12)
+        palm_c = K2 + Vector((0.05, -0.02 * s, 0.0))
+        sphere(f'palm {s}', 1.0, tuple(palm_c), (0.065, 0.04, 0.035), M['shell'], segs=24)
+        for f, dz in (('fixed', -0.012), ('dactyl', 0.016)):
+            p0 = palm_c + Vector((0.05, -0.01 * s, dz))
+            tip = palm_c + Vector((0.12, -0.05 * s, dz * 0.6))
+            tube(f'{f} finger {s}', [p0, (p0 + tip) / 2 + Vector((0, 0, dz * 0.5)), tip], [0.016, 0.011, 0.003], M['claw_tip'])
+        claws.append(palm_c)
+    return feet, claws
+
+
 def shorewalkers():
     fresh()
     rng = random.Random(4)
     M = V.beach_mats()
     M['shell'] = voronoi_shell('voronoi carapace', (0.92, 0.52, 0.6), (0.98, 0.82, 0.38))
     M['leg'] = voronoi_shell('leg shell', (0.86, 0.5, 0.52), (0.95, 0.75, 0.4), scale=40, film=300.0)
-    root = V.crab('shore-walker', M, rng, (0, 0, 0), heading=math.radians(-20), size=1.0, claws='carry')
-    root.rotation_euler = (0, 0, math.radians(-20))
-    b = V.bottle('carried', M, rng, (0, 0, 0), rot=(0, 0, 0), scale=1.25)
-    hd = math.radians(-20)
-    fwd = Vector((math.cos(hd), math.sin(hd), 0))
-    side = Vector((-math.sin(hd), math.cos(hd), 0))
-    centre = fwd * 0.27 + Vector((0, 0, 0.13))
-    b.location = centre - side * 0.135
-    b.rotation_euler = side.to_track_quat('Z', 'X').to_euler()
-    R = Matrix.Rotation(hd, 4, 'Z')
-    return {'anchors': {'carapace': R @ Vector((-0.05, 0.1, 0.165)), 'plates': R @ Vector((-0.08, -0.08, 0.15)), 'ridge': R @ Vector((0.02, 0.0, 0.19)),
-                        'furnace': R @ Vector((0.0, 0.1, 0.085)), 'claw': R @ Vector((0.3, -0.12, 0.13)), 'bottle': centre + side * 0.05},
-            'unit': 0.1, 'frame': {'view': (-40, 26)}}
+    feet, claws = crab_body(M, rng)
+    b = V.bottle('carried', M, rng, (0, 0, 0), rot=(0, 0, 0), scale=1.3)
+    b.location = (0.36, -0.15, 0.14)
+    b.rotation_euler = (math.radians(-90), 0, 0)
+    return {'anchors': {'carapace': Vector((-0.08, 0.12, 0.16)), 'plates': Vector((-0.04, -0.1, 0.16)), 'ridge': Vector((0.0, 0.0, 0.2)),
+                        'furnace': Vector((-0.1, -0.13, 0.08)), 'claw': claws[0] + Vector((0.07, 0, 0.0)), 'bottle': Vector((0.36, 0.06, 0.14))},
+            'unit': 0.1, 'detail': (claws[1] + Vector((0.06, 0.0, 0.0)), 0.1), 'frame': {'view': (-48, 30)}}
 
 
 # ── V · the Gyroid Reeds ──
 def reeds():
     fresh()
     rng = random.Random(5)
+    # a cut of riverbank: mud below, water in front, the bank behind
+    cut_block('bank', -0.9, 0.9, -0.5, 0.5, [('topsoil', (0.42, 0.34, 0.24), 0.0, -0.12), ('silt', (0.55, 0.47, 0.36), -0.12, -0.45)])
+    waterm = mat('river water', (0.55, 0.72, 0.74), rough=0.08, trans=0.75)
+    bm = bmesh.new()
+    bmesh.ops.create_cube(bm, size=1.0)
+    for v in bm.verts:
+        v.co = Vector((v.co.x * 1.8, -0.75 + v.co.y * 0.5, -0.18 + v.co.z * 0.3))
+    mesh('river', bm, waterm, smooth=False)
+    cut_block('riverbed', -0.9, 0.9, -1.0, -0.5, [('mud', (0.35, 0.28, 0.2), -0.33, -0.45)])
+    rhizm = mat('rhizome', (0.8, 0.72, 0.55), rough=0.6, sss=0.3)
+    tube('rhizome', [(-0.85, -0.5, -0.2), (-0.4, -0.5, -0.24), (0.1, -0.5, -0.19), (0.6, -0.5, -0.23), (0.88, -0.5, -0.2)], [0.03] * 5, rhizm)
     stemm = mat('reed stem', (0.5, 0.6, 0.62), rough=0.55, sss=0.2)
-    bladem = mat('reed blade', (0.55, 0.62, 0.45), rough=0.6, sss=0.3)
+    bladem = mat('reed blade', (0.55, 0.62, 0.42), rough=0.6, sss=0.3)
     plumem = mat('plume', (0.86, 0.78, 0.62), rough=0.8, sss=0.3)
-    felt = mat('felt', (0.62, 0.6, 0.72), rough=0.95)
-    water = mat('water', (0.55, 0.68, 0.7), rough=0.15, trans=0.4)
+    felt = mat('felt pellet', (0.62, 0.6, 0.72), rough=0.95)
     anchors = {}
-    for k, (x, y, h) in enumerate(((0, 0, 1.6), (0.18, 0.12, 1.35), (-0.16, 0.1, 1.45), (0.08, -0.14, 1.1))):
+    for k, (x, y, h) in enumerate(((-0.45, -0.1, 1.6), (-0.1, 0.05, 1.4), (0.25, -0.15, 1.5), (0.55, 0.1, 1.15), (-0.7, 0.2, 1.2))):
         lean = Vector((rng.uniform(-0.08, 0.08), rng.uniform(-0.05, 0.05), 0))
         pts = [Vector((x, y, -0.1)), Vector((x, y, h * 0.4)) + lean * 0.3, Vector((x, y, h)) + lean]
-        tube(f'stem {k}', pts, [0.03, 0.026, 0.015], stemm)
+        tube(f'stem {k}', pts, [0.028, 0.024, 0.014], stemm)
         for n in range(3):
             node = pts[0].lerp(pts[2], 0.25 + 0.2 * n)
-            a = rng.uniform(0, math.tau)
-            leaf_mesh(f'blade {k}.{n}', 0.6, 0.045, bladem, node, (0, -1.1, a), bend=0.6)
+            leaf_mesh(f'blade {k}.{n}', 0.6, 0.045, bladem, node, (0, -1.1, rng.uniform(0, math.tau)), bend=0.6)
             if k < 3:
-                pel = sphere(f'pellet {k}.{n}', 0.035, tuple(node + Vector((0.035, 0, -0.02))), m=felt, segs=12, shape=lambda v: v * (1 + 0.15 * math.sin(v.x * 40) * math.sin(v.y * 37)))
+                sphere(f'pellet {k}.{n}', 0.04, tuple(node + Vector((0.04, 0, -0.02))), m=felt, segs=12, shape=lambda v: v * (1 + 0.15 * math.sin(v.x * 40) * math.sin(v.y * 37)))
                 if k == 0 and n == 1:
-                    anchors['pellet'] = node + Vector((0.04, 0, -0.02))
-        top = pts[2]
+                    anchors['pellet'] = node + Vector((0.05, 0, -0.02))
         segs = []
         for q in range(70):
-            d = Vector((rng.gauss(0, 0.6), rng.gauss(0, 0.6), 1.0)).normalized()
-            p0 = top - Vector((0, 0, rng.uniform(0, 0.25)))
-            segs.append((tuple(p0), tuple(p0 + d * rng.uniform(0.1, 0.22)), 0.004, 0.001))
+            dd = Vector((rng.gauss(0, 0.6), rng.gauss(0, 0.6), 1.0)).normalized()
+            p0 = pts[2] - Vector((0, 0, rng.uniform(0, 0.25)))
+            segs.append((tuple(p0), tuple(p0 + dd * rng.uniform(0.1, 0.22)), 0.004, 0.001))
         no_ink(multi_tube(f'plume {k}', segs, plumem, bevel_res=1))
         if k == 0:
             anchors['stem'] = pts[1]
-            anchors['plume'] = top + Vector((0, 0, 0.08))
-    # the section, enlarged: a block of the stem's living gyroid
-    gy = gyroid_block('gyroid', 0.22, 0.2, 0.42, mat('gyroid', (0.66, 0.74, 0.66), rough=0.45, sss=0.35), res=90, at=(0.75, -0.25, 0.9))
-    anchors['section'] = Vector((0.75, -0.47, 0.95))
-    tube('enlargement', [(0.04, 0, 0.9), (0.5, -0.2, 0.9)], [0.003, 0.003], mat('pencil', (0.3, 0.25, 0.2)))
-    ripples = grid_mesh('river', 20, 12, lambda u, v: (u * 1.8 - 0.9, v * 1.0 - 0.6, -0.02 + 0.006 * math.sin(u * 40)), water)
-    anchors['water'] = Vector((-0.6, -0.45, 0.0))
-    return {'anchors': anchors, 'unit': 0.1, 'frame': {'view': (-25, 12), 'lens': 60}}
+            anchors['plume'] = pts[2] + Vector((0, 0, 0.08))
+    gyroid_block('gyroid', 0.2, 0.18, 0.42, mat('living gyroid', (0.66, 0.74, 0.66), rough=0.45, sss=0.35), res=90, at=(1.35, -0.2, 0.95))
+    tube('enlargement', [(-0.08, 0.05, 0.95), (1.1, -0.15, 0.95)], [0.003, 0.003], mat('pencil', (0.3, 0.25, 0.2)))
+    anchors['section'] = Vector((1.35, -0.4, 0.95))
+    anchors['water'] = Vector((-0.6, -0.95, -0.1))
+    return {'anchors': anchors, 'unit': 0.1, 'detail': (anchors['pellet'], 0.12), 'frame': {'view': (-22, 16)}}
 
 
 # ── VI · the Mound-worms ──
@@ -644,14 +803,14 @@ def moundworms():
     for k in range(40):
         sphere(f'frass {k}', 0.01, (-0.68 + rng.gauss(0, 0.05), -0.05 + rng.gauss(0, 0.06), 0.012), m=frassm, segs=6)
     return {'anchors': {'worm': spine[5], 'setae': spine[8], 'burrow': path[37], 'foam': foam[0], 'frass': Vector((-0.7, -0.05, 0.01))},
-            'unit': 0.5, 'frame': {'view': (-22, 24)}}
+            'unit': 0.5, 'detail': (spine[-1] + Vector((0.03, 0, 0)), 0.12), 'frame': {'view': (-26, 24)}}
 
 
 # ── VII · the Sun-smelters ──
 def smelters():
     fresh()
     rng = random.Random(7)
-    shellm = V.mottle(mat('smelter shell', (0.62, 0.45, 0.28), rough=0.45, coat=0.5), (0.64, 0.47, 0.3), (0.44, 0.31, 0.2), 12)
+    shellm = voronoi_shell('smelter shell', (0.66, 0.5, 0.3), (0.8, 0.66, 0.4), seam=(0.36, 0.25, 0.15), scale=9, film=0.0)
     legm = mat('smelter leg', (0.5, 0.36, 0.24), rough=0.5)
     mirror = mat('dish', (0.95, 0.93, 0.88), metallic=0.85, rough=0.12, film=420.0)
     ceramic = mat('crop', (0.85, 0.8, 0.72), rough=0.7)
@@ -690,7 +849,7 @@ def smelters():
         o.scale = (0.07, 0.035, 0.025)
         o.location = (-0.42 - k * 0.14, -0.3, 0.025)
     return {'anchors': {'dish': Vector((0, 0, 0.3)) + T @ Vector((-0.2, -0.12, 0.09)), 'focus': focus, 'can': Vector((0.5, 0.0, 0.05)), 'ingot': Vector((-0.56, -0.3, 0.03)), 'legs': Vector((0.22, -0.4, 0.05))},
-            'unit': 0.2, 'frame': {'view': (-30, 38)}}
+            'unit': 0.2, 'detail': (focus, 0.09), 'frame': {'view': (-34, 36)}}
 
 
 # ── VIII · the Landfill Mats ──
@@ -737,51 +896,65 @@ def mats():
     big = max(peaks, key=lambda p: p[2]) if peaks else (0.5, 0.5, 1)
     bx, by = big[0] * S - S / 2, big[1] * S - S / 2
     return {'anchors': {'domes': Vector((bx, by, h(bx, by))), 'moss': Vector((bx + 0.1, by, h(bx + 0.1, by))), 'skin': Vector((-1.2, -1.2, 0.02)), 'cap': Vector((0.5, -1.5, -0.6))},
-            'unit': 1.0 / 3.0, 'frame': {'view': (-30, 34), 'lens': 60}}
+            'unit': 1.0 / 3.0, 'detail': (Vector((bx, by, h(bx, by))), 0.25), 'frame': {'view': (-30, 32)}}
 
 
 # ── IX · the Circle ──
-def figure(name, at, facing, height, cloth, skin, hands):
+def figure(name, at, facing, height, cloth, skin, hair, hands, robe=False):
+    """A person, simply but properly drawn: feet, legs, hips, chest, neck,
+    head and hair; arms that reach to the hands they hold."""
     up = Vector((0, 0, 1))
     f = Vector((math.cos(facing), math.sin(facing), 0))
     side = f.cross(up).normalized()
     s = height / 1.7
     b = Vector(at)
     for d in (-1, 1):
-        tube(f'{name} leg {d}', [b + side * 0.08 * d * s + f * 0.03 * s, b + side * 0.075 * d * s + up * 0.45 * s, b + side * 0.07 * d * s + up * 0.9 * s], [0.055 * s, 0.06 * s, 0.075 * s], cloth)
-    tube(f'{name} coat', [b + up * 0.55 * s, b + up * 0.9 * s, b + up * 1.2 * s, b + up * 1.42 * s, b + up * 1.5 * s], [0.17 * s, 0.16 * s, 0.14 * s, 0.15 * s, 0.07 * s], cloth)
-    sphere(f'{name} head', 0.1 * s, tuple(b + up * 1.62 * s), (0.9, 0.95, 1.1), skin, segs=20)
-    sh = [b + up * 1.4 * s + side * 0.16 * s * d for d in (-1, 1)]
-    for p, hnd in zip(sh, hands):
-        elbow = p.lerp(hnd, 0.5) - up * 0.14 * s
-        tube(f'{name} arm', [p, elbow, hnd], [0.05 * s, 0.045 * s, 0.035 * s], cloth)
+        ankle = b + side * 0.09 * d * s + up * 0.07 * s
+        knee = b + side * 0.085 * d * s + up * 0.48 * s + f * 0.01 * s
+        hip = b + side * 0.08 * d * s + up * 0.9 * s
+        tube(f'{name} leg {d}', [ankle, knee, hip], [0.045 * s, 0.055 * s, 0.075 * s], cloth)
+        sphere(f'{name} foot {d}', 1.0, tuple(b + side * 0.09 * d * s + f * 0.05 * s + up * 0.035 * s), (0.11 * s, 0.05 * s, 0.035 * s), mat('shoe', (0.2, 0.15, 0.12), rough=0.6), segs=12)
+    tube(f'{name} torso', [b + up * 0.86 * s, b + up * 1.05 * s, b + up * 1.28 * s, b + up * 1.44 * s], [0.15 * s, 0.13 * s, 0.155 * s, 0.13 * s], cloth)
+    if robe:
+        tube(f'{name} robe', [b + up * 0.25 * s, b + up * 0.6 * s, b + up * 1.0 * s], [0.22 * s, 0.19 * s, 0.15 * s], cloth)
+    tube(f'{name} neck', [b + up * 1.44 * s, b + up * 1.52 * s], [0.045 * s, 0.045 * s], skin)
+    sphere(f'{name} head', 0.1 * s, tuple(b + up * 1.63 * s), (0.92, 0.95, 1.12), skin, segs=24)
+    sphere(f'{name} hair', 0.106 * s, tuple(b + up * 1.66 * s - f * 0.02 * s), (0.95, 0.98, 1.0), hair, segs=24, shape=lambda v: Vector((v.x, v.y, max(v.z, -0.3))))
+    for p, hnd in zip([b + up * 1.4 * s + side * 0.18 * s * d for d in (-1, 1)], hands):
+        elbow = p.lerp(hnd, 0.5) - up * 0.15 * s + f * 0.03 * s
+        tube(f'{name} arm', [p, elbow, hnd], [0.048 * s, 0.04 * s, 0.032 * s], cloth)
+        sphere(f'{name} hand', 0.034 * s, tuple(hnd), m=skin, segs=12)
 
 
 def circle():
     fresh()
-    skin = mat('skin', (0.62, 0.44, 0.33), rough=0.55, sss=0.4)
-    cloths = [mat(f'cloth {i}', c, rough=0.85) for i, c in enumerate([(0.22, 0.27, 0.42), (0.6, 0.42, 0.2), (0.3, 0.4, 0.27), (0.55, 0.24, 0.18), (0.45, 0.42, 0.38)])]
+    skins = [mat(f'skin {i}', c, rough=0.55, sss=0.4) for i, c in enumerate([(0.62, 0.44, 0.33), (0.42, 0.28, 0.2), (0.78, 0.6, 0.48), (0.55, 0.38, 0.26)])]
+    hairs = [mat(f'hair {i}', c, rough=0.6) for i, c in enumerate([(0.12, 0.09, 0.07), (0.3, 0.2, 0.12), (0.6, 0.58, 0.55), (0.08, 0.07, 0.07)])]
+    cloths = [mat(f'cloth {i}', c, rough=0.85) for i, c in enumerate([(0.24, 0.3, 0.46), (0.62, 0.44, 0.22), (0.32, 0.43, 0.3), (0.58, 0.26, 0.2), (0.5, 0.46, 0.4)])]
     n, R = 8, 0.95
-    heights = [1.75, 1.6, 1.15, 1.8, 1.55, 1.0, 1.7, 1.62]
+    heights = [1.75, 1.15, 1.0, 1.8, 1.55, 1.7, 1.6, 1.62]
     pos = [Vector((R * math.cos(k / n * math.tau + 0.4), R * math.sin(k / n * math.tau + 0.4), 0)) for k in range(n)]
     hands = []
     for k in range(n):
         p, q = pos[k], pos[(k + 1) % n]
-        m_ = (p + q) / 2 * 1.06
-        m_.z = 0.9 * min(heights[k], heights[(k + 1) % n]) / 1.7
+        m_ = (p + q) / 2 * 1.08
+        m_.z = 0.88 * min(heights[k], heights[(k + 1) % n]) / 1.7
         hands.append(m_)
     for k in range(n):
-        figure(f'person {k}', pos[k], math.atan2(-pos[k].y, -pos[k].x), heights[k], cloths[k % len(cloths)], skin, (hands[k - 1], hands[k]))
+        figure(f'person {k}', pos[k], math.atan2(-pos[k].y, -pos[k].x), heights[k], cloths[k % len(cloths)], skins[k % 4], hairs[(k * 3) % 4], (hands[k - 1], hands[k]), robe=k in (1, 4, 6))
     glass = mat('lantern', (1.0, 0.82, 0.6), rough=0.15, trans=0.5, emit=(1.0, 0.6, 0.38), strength=3)
     V.lathe('lantern', [(0.0, 0.0), (0.09, 0.0), (0.11, 0.08), (0.1, 0.22), (0.06, 0.28), (0.0, 0.29)], glass, 24, (0, 0, 0))
-    pts = [(16 * math.sin(t) ** 3 * 0.004, (13 * math.cos(t) - 5 * math.cos(2 * t) - 2 * math.cos(3 * t) - math.cos(4 * t)) * 0.004) for t in [k / 48 * math.tau for k in range(48)]]
-    hr = G.flat_shape('heart', pts, 0.02, 0.012, mat('heart', (1, 0.5, 0.5), emit=(1.0, 0.45, 0.4), strength=12), coll(), None)
-    hr.location = (0, 0, 0.15)
-    ground = mat('ground', (0.78, 0.7, 0.55), rough=0.95)
-    g = grid_mesh('ground', 8, 8, lambda u, v: (u * 3 - 1.5, v * 3 - 1.5, -0.002), ground)
-    g['no_frame'] = True
-    return {'anchors': {'hands': hands[6], 'heart': Vector((0, 0, 0.15)), 'ring': pos[3] + Vector((0, 0, 1.2))},
-            'unit': 1.0, 'frame': {'view': (-20, 24)}, 'exposure': -0.4}
+    pts = [(16 * math.sin(t) ** 3 * 0.0065, (13 * math.cos(t) - 5 * math.cos(2 * t) - 2 * math.cos(3 * t) - math.cos(4 * t)) * 0.0065) for t in [k / 48 * math.tau for k in range(48)]]
+    hr = G.flat_shape('heart', pts, 0.025, 0.014, mat('heart', (1, 0.5, 0.5), emit=(1.0, 0.45, 0.4), strength=10), coll(), None)
+    hr.location = (0, 0, 0.5)
+    hr.rotation_euler = (math.radians(35), 0, math.radians(-18))
+    point_ = bpy.data.lights.new('lantern glow', 'POINT')
+    point_.energy, point_.color = 25, (1.0, 0.65, 0.42)
+    lo = bpy.data.objects.new('lantern glow', point_)
+    lo.location = (0, 0, 0.2)
+    coll().objects.link(lo)
+    return {'anchors': {'hands': hands[6], 'heart': Vector((0, 0, 0.5)), 'ring': pos[3] + Vector((0, 0, 1.25))},
+            'unit': 1.0, 'detail': (Vector((0, 0, 0.35)), 0.32), 'frame': {'view': (-18, 52)}, 'exposure': -0.2}
 
 
 # ── X · the Menders ──
@@ -830,7 +1003,7 @@ def menders():
         o.location = (-1.0, 0.45, z)
         o.rotation_euler = (0, 0, 0.3)
     return {'anchors': {'seam': seams[1][6], 'bowl': Vector((-0.6, -0.35, 0.4)), 'tools': Vector((0.9, -0.6, 0.07)), 'ledger': Vector((-1.0, 0.45, 0.08))},
-            'unit': 1.0, 'frame': {'view': (-15, 22)}}
+            'unit': 1.0, 'detail': (seams[1][6], 0.12), 'frame': {'view': (-15, 24)}}
 
 
 # ── XI · the Weavers ──
@@ -845,57 +1018,62 @@ def fermat(a, b, c):
 def weavers():
     fresh()
     rng = random.Random(11)
-    soilm = V.mottle(mat('soil', (0.5, 0.39, 0.27), rough=0.95), (0.5, 0.39, 0.27), (0.4, 0.31, 0.21), 7)
-    g = grid_mesh('ground line', 30, 6, lambda u, v: (u * 2.6 - 1.3, v * 0.5 - 0.25, 0.03 * math.sin(u * 9)), soilm)
-    g['no_frame'] = True
-    bark = V.mottle(mat('bark', (0.45, 0.33, 0.22), rough=0.8), (0.45, 0.33, 0.22), (0.32, 0.23, 0.15), 10)
+    # a cut of forest floor: two young trees, their roots on the cut face, and
+    # the Weaver's threads between them
+    cut_block('forest floor', -1.25, 1.25, -0.4, 0.4, [('leaf litter', (0.45, 0.36, 0.22), 0.0, -0.08), ('humus', (0.36, 0.27, 0.18), -0.08, -0.4), ('mineral soil', (0.62, 0.5, 0.36), -0.4, -1.1)])
+    bark = V.mottle(mat('bark', (0.42, 0.32, 0.22), rough=0.8), (0.42, 0.32, 0.22), (0.3, 0.22, 0.15), 10)
+    leafm = mat('leaves', (0.36, 0.52, 0.3), rough=0.6, sss=0.3)
+    face = -0.405
     terminals = []
-    for k, (x, n_) in enumerate(((-0.65, 5), (0.7, 5))):
-        tube(f'stump {k}', [(x, 0, -0.05), (x, 0, 0.35)], [0.15, 0.12], bark)
-        for j in range(n_):
-            a = -math.pi / 2 + (j - (n_ - 1) / 2) * 0.42
-            d = Vector((math.cos(a) * 0.65, rng.uniform(-0.25, 0.25), math.sin(a)))
-            o = Vector((x, 0, 0))
-            pts = [o, o + d * 0.3, o + d * 0.65 + Vector((0, 0, 0.03)), o + d * 1.0]
-            tube(f'root {k}.{j}', pts, [0.075, 0.045, 0.022, 0.004], bark)
-            terminals.append(pts[2])
-            terminals.append(pts[1].lerp(pts[2], 0.4))
-    T = terminals[:]
+    for k, x in enumerate((-0.65, 0.7)):
+        tube(f'trunk {k}', [(x, 0, -0.02), (x + 0.02, 0, 0.6), (x - 0.03, 0, 1.1)], [0.07, 0.06, 0.035], bark)
+        for q in range(14):
+            p = Vector((x + rng.gauss(0, 0.18), rng.gauss(0, 0.14), 1.05 + rng.gauss(0, 0.14)))
+            sphere(f'crown {k}.{q}', rng.uniform(0.09, 0.14), tuple(p), (1, 1, 0.75), leafm, segs=14)
+        for j in range(5):
+            a = -math.pi / 2 + (j - 2) * 0.42
+            d = Vector((math.cos(a) * 0.7, 0, math.sin(a)))
+            o = Vector((x, face + 0.02, -0.06))
+            pts = [o, o + d * 0.28, o + d * 0.6 + Vector((0, 0, 0.03)), o + d * 0.95]
+            tube(f'root {k}.{j}', pts, [0.06, 0.04, 0.022, 0.006], bark)
+            terminals += [pts[2], pts[1].lerp(pts[2], 0.5)]
+    T = [Vector((p.x, face, p.z)) for p in terminals]
     edges, inside = [], {0}
     while len(inside) < len(T):
         best = min(((i, j) for i in inside for j in range(len(T)) if j not in inside), key=lambda e: (T[e[0]] - T[e[1]]).length)
         edges.append(best)
         inside.add(best[1])
-    hyph = mat('hypha', (0.97, 0.95, 0.88), rough=0.4, sss=0.6)
-    goldb = mat('carried', (1.0, 0.8, 0.4), emit=(1.0, 0.75, 0.35), strength=3)
+    hyph = mat('hypha', (0.98, 0.96, 0.9), rough=0.4, sss=0.6, emit=(1.0, 0.95, 0.85), strength=0.3)
+    goldb = mat('carried light', (1.0, 0.8, 0.4), emit=(1.0, 0.75, 0.35), strength=4)
     adj = {}
-    for a, b in edges:
-        adj.setdefault(a, []).append(b)
-        adj.setdefault(b, []).append(a)
+    for a_, b_ in edges:
+        adj.setdefault(a_, []).append(b_)
+        adj.setdefault(b_, []).append(a_)
     segs, done, junctions = [], set(), []
     for v, ns in adj.items():
         if len(ns) >= 2:
-            a, b = ns[0], ns[1]
-            if (T[a] - T[v]).angle(T[b] - T[v]) < math.radians(120) and not ({(v, a), (v, b)} & done):
-                s_ = fermat(T[v], T[a], T[b])
-                for q in (v, a, b):
-                    segs.append((tuple(s_), tuple(T[q]), 0.018, 0.018))
-                done |= {(v, a), (a, v), (v, b), (b, v)}
+            a_, b_ = ns[0], ns[1]
+            if (T[a_] - T[v]).angle(T[b_] - T[v]) < math.radians(120) and not ({(v, a_), (v, b_)} & done):
+                s_ = fermat(T[v], T[a_], T[b_])
+                for q in (v, a_, b_):
+                    segs.append((tuple(s_), tuple(T[q]), 0.014, 0.014))
+                done |= {(v, a_), (a_, v), (v, b_), (b_, v)}
                 junctions.append(s_)
-    for a, b in edges:
-        if (a, b) not in done:
-            segs.append((tuple(T[a]), tuple(T[b]), 0.018, 0.018))
+    for a_, b_ in edges:
+        if (a_, b_) not in done:
+            segs.append((tuple(T[a_]), tuple(T[b_]), 0.014, 0.014))
     multi_tube('threads', segs, hyph)
     for k, (p0, p1, _, _) in enumerate(segs):
-        sphere(f'bead {k}', 0.03, tuple(Vector(p0).lerp(Vector(p1), 0.5)), m=goldb, segs=8)
+        sphere(f'bead {k}', 0.026, tuple(Vector(p0).lerp(Vector(p1), 0.5)), m=goldb, segs=8)
     for k, j in enumerate(junctions):
-        sphere(f'junction {k}', 0.026, tuple(j), m=hyph, segs=10)
-    star = [((0.12 if k % 2 == 0 else 0.05) * math.sin(k * math.pi / 5), (0.12 if k % 2 == 0 else 0.05) * math.cos(k * math.pi / 5)) for k in range(10)]
+        sphere(f'knot {k}', 0.03, tuple(j), m=hyph, segs=10)
+    star = [((0.1 if k % 2 == 0 else 0.042) * math.sin(k * math.pi / 5), (0.1 if k % 2 == 0 else 0.042) * math.cos(k * math.pi / 5)) for k in range(10)]
     st = G.flat_shape('star', star, 0.015, 0.008, mat('star', G.GOLD, emit=(1, 0.8, 0.4), strength=2), coll(), None)
-    st.location = (0.0, 0.0, 0.5)
+    st.location = (0.0, 0.0, 1.45)
+    knot = junctions[len(junctions) // 2] if junctions else T[0]
     p0, p1 = Vector(segs[0][0]), Vector(segs[0][1])
-    return {'anchors': {'knot': junctions[0] if junctions else p0, 'thread': p0.lerp(p1, 0.25), 'bead': p0.lerp(p1, 0.5), 'root': T[2], 'star': Vector((0, 0, 0.5))},
-            'unit': 0.5, 'frame': {'view': (-10, 6)}}
+    return {'anchors': {'knot': knot, 'thread': p0.lerp(p1, 0.25), 'bead': p0.lerp(p1, 0.5), 'root': T[4] + Vector((0, 0, 0.05)), 'star': Vector((0, 0, 1.45))},
+            'unit': 0.5, 'detail': (knot, 0.16), 'frame': {'view': (-16, 14)}}
 
 
 # ── XII · the Gold-finders ──
@@ -945,7 +1123,7 @@ def goldfinders():
     multi_tube('gold dendrite', segs, goldm, bevel_res=1)
     tip = max(tree, key=lambda k: k[1])
     return {'anchors': {'board': Vector((2.2, -1.5, 0.0)), 'dendrite': to3(tip), 'leacher': Vector((1.6, 0.35, 0.2)), 'precip': Vector((-0.4, 0.4, 0.03)), 'chip': Vector((1.6, 0.9, 0.18))},
-            'unit': 1.0, 'frame': {'view': (-15, 40)}}
+            'unit': 1.0, 'detail': (to3(tip) + Vector((0, -0.35, 0)), 0.45), 'frame': {'view': (-18, 40)}}
 
 
 # ── XIII · the Blue-sap Trees ──
@@ -983,7 +1161,7 @@ def bluesap():
     V.lathe('cup', [(0.0, 0.0), (0.07, 0.0), (0.08, 0.1), (0.075, 0.1), (0.065, 0.012), (0.0, 0.012)], mat('cup', (0.82, 0.77, 0.7), rough=0.6), 24, (0.24, -0.07, 0.0))
     sphere('sap in cup', 1.0, (0.24, -0.07, 0.08), (0.068, 0.068, 0.01), sapm, segs=20)
     return {'anchors': {'sap': drip[2], 'leaves': leaves[40], 'trunk': trunk[1] + Vector((-0.06, -0.05, -0.1)), 'tailings': Vector((-0.55, -0.4, 0.0))},
-            'unit': 0.5, 'frame': {'view': (-25, 12)}}
+            'unit': 0.5, 'detail': (drip[1], 0.12), 'frame': {'view': (-28, 12)}}
 
 
 # ── XIV · the Gleaners ──
@@ -1039,7 +1217,7 @@ def gleaners():
         d.location = (rng.uniform(-0.3, 0.3), rng.uniform(-0.3, 0.3), -1.05 + rng.uniform(-0.05, 0.15))
         d.rotation_euler = (rng.random() * 3, rng.random() * 3, rng.random() * 3)
     return {'anchors': {'pod': Vector((0.22, -0.18, 0.2)), 'wing': Vector((1.6, -0.25, 0.05)), 'vein': Vector((1.0, -0.2, 0.18)), 'net': Vector((0.55, -0.35, -0.95)), 'debris': Vector((0.1, 0.0, -1.0)), 'beacon': Vector((0, 0, 0.92))},
-            'unit': 1.0, 'frame': {'view': (-20, 18)}}
+            'unit': 1.0, 'detail': (Vector((0.0, 0.0, -1.0)), 0.35), 'frame': {'view': (-22, 14)}}
 
 
 # ── XV · the Snowmakers ──
@@ -1077,7 +1255,7 @@ def snowmakers():
     loose.location = (1.85, -0.3, 0.2)
     loose.rotation_euler = (math.radians(55), 0, math.radians(20))
     return {'anchors': {'sphere': Vector((-0.65, -0.6, 0.3)), 'plate': Vector((0.2, -0.92, 0.1)), 'rim': Vector((1.85 + 0.62, -0.3, 0.2)), 'cell': Vector((0.0, 0.0, 0.0))},
-            'unit': 1.0, 'frame': {'view': (-20, 20)}}
+            'unit': 1.0, 'detail': (Vector((1.85, -0.3, 0.2)), 0.42), 'frame': {'view': (-20, 18)}}
 
 
 SPECIES = {'clearers': clearers, 'unbinders': unbinders, 'sweepers': sweepers, 'shorewalkers': shorewalkers, 'reeds': reeds,

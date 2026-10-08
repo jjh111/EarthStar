@@ -51,8 +51,11 @@ low Earth orbit.
 |---|---|
 | `taxonomy.json` | The source: domain, kingdoms, orders, fifteen species accounts, and 51 references |
 | `build.mjs` | Writes `index.html`, including the cladogram, the web of returns, the size chart and the order diagrams, all generated as SVG |
-| `plates/<id>.png` | The specimen drawings, from `blender/specimens.py`: ink line (Freestyle) over a watercolour wash (Cycles with a light Kuwahara filter), on a transparent ground |
-| `plates/<id>.json` | Where each labelled feature projects onto its plate, and the scale bar in pixels. The callouts are placed from these. |
+| `plates/<id>.webp` | The specimen drawings, from `blender/specimens.py`: ink line (Freestyle) over a watercolour wash (Cycles with a light Kuwahara filter), on a transparent ground |
+| `plates/<id>-wash.webp`, `-lines.webp` | The two passes apart, so the film can lay the ink and the wash on one after the other |
+| `plates/<id>-inset.webp` | The loupe: the same rig, closer, on the detail named in `detail` |
+| `plates/<id>.json` | Where each labelled feature projects onto its plate, the scale bar in pixels, the specimen's bounding box, its four main pigments, and the detail the loupe looks at. The callouts are placed from these. |
+| `figures/*.svg` | The cladogram, the web of returns and the thirteen order diagrams, as standalone SVGs (the film draws them) |
 
 ## Building
 
@@ -61,4 +64,27 @@ python blender/specimens.py            # all fifteen plates (or name some), with
 node field-guide/build.mjs             # the page
 ```
 
-On four CPU cores, each plate takes about two minutes at 64 samples.
+`specimens.py` writes PNG passes (`<id>-wash.png`, `<id>-lines.png`, and the
+same for the inset); `build.mjs` turns them into the WebP files and leaves the
+PNGs out of git. On four CPU cores a plate and its inset take about three
+minutes at 64 samples.
+
+### One rig for every plate
+
+Every specimen is drawn by the same rig, so the fifteen read as one book:
+
+- **Framing.** An 85 mm lens. The camera is fitted to the specimen's evaluated
+  geometry, so curves and modifiers count, and each species names its best angle
+  (`view`) and the detail for the loupe.
+- **Light.** A key, a fill and a rim area light, and a soft paper sky. The
+  specimen casts its shadow on a shadow-catcher sheet.
+- **Media.** The Freestyle ink is one warm black with a little noise in its
+  weight. Hair-fine parts (cilia, roots) sit in a `no ink` collection so they
+  read as wash. The wash is Cycles through a Kuwahara filter.
+- **Dioramas.** Where a species lives in a medium, it stands on a cut block of
+  it: gut wall, a riverbank in section, a forest floor with roots on the cut
+  face.
+
+The page lays mixed media over each plate: a graphite construction ellipse and
+centre lines, tape at the corners, the loupe with its leader and
+magnification, a pigment row, and a specimen tag.

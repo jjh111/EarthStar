@@ -50,6 +50,7 @@ const FILMS = {
   loom: { page: 'loom.html', seconds: 48, out: 'earth-star-the-loom.mp4', title: 'Earth Star — the loom' },
   lifted: { page: 'lifted.html', seconds: 60, out: 'earth-star-the-loom-lifted.mp4', title: 'Earth Star — the loom, lifted', gl: true, wav: 'synthLifted' },
   'lifted-tall': { page: 'lifted.html?tall', seconds: 60, out: 'earth-star-the-loom-lifted-tall.mp4', title: 'Earth Star — the loom, lifted (tall)', gl: true, w: 1080, h: 1920, wav: 'synthLifted' },
+  guide: { page: 'guide.html', seconds: 114, out: 'earth-star-gomenata.mp4', title: 'Gomenata — a field guide to the adjacent life', wav: 'synthGuide' },
 };
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.png': 'image/png',

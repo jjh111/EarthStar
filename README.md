@@ -83,9 +83,10 @@ with `node field-guide/build.mjs`; `field-guide/README.md` has the details.
 
 ## Films
 
-Three short art films are drawn in code from the painting and the Earth Star
-script: *a seed*, *the loom* and *the loom, lifted*. Their sources, the
-renderer and the videos are in `film/`, and `film/README.md` describes them.
+Four short art films are drawn in code: *a seed*, *the loom* and *the loom,
+lifted* from the painting and the Earth Star script, and *Gomenata*, the field
+guide on a desk with its plates drawing themselves. Their sources, the renderer
+and the videos are in `film/`, and `film/README.md` describes them.
 
 ## Links
 
