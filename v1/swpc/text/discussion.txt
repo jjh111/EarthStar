@@ -1,0 +1,73 @@
+:Product: Forecast Discussion
+:Issued: 2026 Oct 10 1230 UTC
+# Prepared by the U.S. Dept. of Commerce, NOAA, Space Weather Prediction Center
+#
+Solar Activity
+
+.24 hr Summary...
+Solar activity was at moderate levels. Region 4547 (N15, L=089) produced
+an M1.3 flare (R1-Minor radio blackouts) at 09/1409 UTC. This region has
+been off the visible disk for well over 24 hours, so the associated CME,
+first visible in LASCO C2 at 09/1436 UTC, is not anticipated to have an
+impact at Earth. The region produced a C4.2 at 10/0813 UTC that GOES
+SUVI imagery suggests is also associated with an eruption, though no
+complementary structure has been observed in coronagraph imagery due to
+a data gap; this eruption is also anticipated to have no Earth impact
+due the farsided location of the source region.
+
+Region 4549 (N09W54, Eki/beta-delta) added multiple C-class flares, the
+largest being a C7.9 at 10/0438 UTC. This region exhibited decay in its
+trailer spots, but continued to experience growth in its leading
+cluster. Region 4545 (N17W60, Cro/beta) continued to decay with no
+activity noted during the period. Region 4548 (S13W26, Hsx/alpha)
+remained stable and inactive, while Region 4552 (N22W34, Bxo/beta) began
+to simplify. Region 4551 (S14E61, Eki/beta) continued to move into view
+and produced a few small C-flares.
+
+.Forecast...
+Solar activity is expected to be at low levels (90%) with M-class flares
+(R1-R2, Minor-Moderate) likely (55%) through 12 Oct, primarily due to
+the flaring potential of Region 4549.
+
+Energetic Particle
+
+.24 hr Summary...
+The greater than 2 MeV electron flux was at moderate levels. The greater
+than 10 MeV proton flux remained slightly elevated above background
+levels but still well below the alert threshold.
+
+.Forecast...
+The greater than 2 MeV electron flux is expected to reach normal to
+moderate levels through 11 Oct before increasing to high levels on 12
+Oct. There is a slight chance (10%) for a greater than 10 MeV proton
+event exceeding the 10 pfu (S1-Minor) threshold through 12 Oct.
+
+Solar Wind
+
+.24 hr Summary...
+Solar wind parameters were disturbed this reporting period, likely a
+combination of weak glancing transient and negative polarity coronal
+hole high speed stream influences. After 10/0200 UTC, solar wind speed
+increased from an average of 375 km/s to an average of 410 km/s. Total
+field strength ranged from 2 to 11 nT, with a Bz component consistently
+weakly southward after approximately 09/1620 UTC, with a short-lived max
+deflection of -7 nT at 10/0622 UTC. The phi angle slowly oscillated
+between sectors over the course of the reporting period.
+
+.Forecast...
+Additional enhancements are likely on 10 Oct as a negative polarity
+coronal hole high speed stream continues to move into a geoeffective
+position. Stronger disturbances are anticipated on 11 Oct due to CMEs
+that left the Sun on 07-09 Oct.
+
+Geospace
+
+.24 hr Summary...
+The geomagnetic field was quiet to unsettled.
+
+.Forecast...
+Unsettled to active conditions are expected, with isolated G1 (Minor)
+storm levels likely, through 10 Oct as a negative polarity coronal hole
+high speed stream becomes geoeffective. G1-G2 conditions are again
+anticipated on 11 Oct due to persistent CH HSS effects combined with
+additional CME arrivals that left the Sun on 07-09 Oct.
