@@ -853,7 +853,7 @@ def smelters():
         o.scale = (0.07, 0.035, 0.025)
         o.location = (-0.42 - k * 0.14, -0.3, 0.025)
     return {'anchors': {'dish': Vector((0, 0, 0.3)) + T @ Vector((-0.2, -0.12, 0.09)), 'focus': focus, 'can': Vector((0.5, 0.0, 0.05)), 'ingot': Vector((-0.56, -0.3, 0.03)), 'legs': Vector((0.22, -0.4, 0.05))},
-            'unit': 0.2, 'detail': (focus, 0.09), 'frame': {'view': (-34, 36)}}
+            'unit': 0.2, 'detail': (focus, 0.09), 'frame': {'view': (-30, 44)}}
 
 
 # ── VIII · the Landfill Mats ──
@@ -904,30 +904,74 @@ def mats():
 
 
 # ── IX · the Circle ──
-def figure(name, at, facing, height, cloth, skin, hair, hands, robe=False):
-    """A person, simply but properly drawn: feet, legs, hips, chest, neck,
-    head and hair; arms that reach to the hands they hold."""
+def loft(name, base, side, front, up, sections, m, segs=24, fold=None, subsurf=1):
+    """A closed body swept through elliptical sections [(height, half-width,
+    half-depth), …] up an axis: torsos, robes, heads. `fold(angle, k)` ripples
+    the outline, the way cloth hangs."""
+    bm = bmesh.new()
+    rings = []
+    for k, (z, rx, ry) in enumerate(sections):
+        ring = []
+        for i in range(segs):
+            a = i / segs * math.tau
+            r = 1 + (fold(a, k) if fold else 0)
+            ring.append(bm.verts.new(base + up * z + side * (math.cos(a) * rx * r) + front * (math.sin(a) * ry * r)))
+        rings.append(ring)
+    for k in range(len(rings) - 1):
+        for i in range(segs):
+            bm.faces.new((rings[k][i], rings[k][(i + 1) % segs], rings[k + 1][(i + 1) % segs], rings[k + 1][i]))
+    bm.faces.new(list(reversed(rings[0])))
+    bm.faces.new(rings[-1])
+    return mesh(name, bm, m, smooth=True, subsurf=subsurf)
+
+
+def figure(name, at, facing, height, cloth, skin, hair, hands, robe=False, style=None):
+    """A person: shoes, legs, a tunic (or a robe to the ground) that hangs in
+    folds, a torso with shoulders, arms bent at the elbow to the hands they
+    hold, a neck, a head with a nose and ears, and one of four ways of wearing
+    hair."""
     up = Vector((0, 0, 1))
     f = Vector((math.cos(facing), math.sin(facing), 0))
     side = f.cross(up).normalized()
     s = height / 1.7
     b = Vector(at)
+    seed = sum(map(ord, name))
+    style = seed % 4 if style is None else style
+    shoe = mat('shoe', (0.18, 0.13, 0.1), rough=0.55, coat=0.2)
     for d in (-1, 1):
-        ankle = b + side * 0.09 * d * s + up * 0.07 * s
-        knee = b + side * 0.085 * d * s + up * 0.48 * s + f * 0.01 * s
+        ankle = b + side * 0.085 * d * s + up * 0.08 * s
+        knee = b + side * 0.08 * d * s + up * 0.49 * s + f * 0.015 * s
         hip = b + side * 0.08 * d * s + up * 0.9 * s
-        tube(f'{name} leg {d}', [ankle, knee, hip], [0.045 * s, 0.055 * s, 0.075 * s], cloth)
-        sphere(f'{name} foot {d}', 1.0, tuple(b + side * 0.09 * d * s + f * 0.05 * s + up * 0.035 * s), (0.11 * s, 0.05 * s, 0.035 * s), mat('shoe', (0.2, 0.15, 0.12), rough=0.6), segs=12)
-    tube(f'{name} torso', [b + up * 0.86 * s, b + up * 1.05 * s, b + up * 1.28 * s, b + up * 1.44 * s], [0.15 * s, 0.13 * s, 0.155 * s, 0.13 * s], cloth)
+        tube(f'{name} leg {d}', [ankle, knee, hip], [0.042 * s, 0.052 * s, 0.07 * s], cloth)
+        sphere(f'{name} shoe {d}', 1.0, tuple(b + side * 0.085 * d * s + f * 0.045 * s + up * 0.035 * s), (0.12 * s, 0.05 * s, 0.038 * s), shoe, segs=16)
+    folds = lambda a, k: 0.05 * math.sin(9 * a + seed) * (k / 3) + 0.02 * math.sin(5 * a - seed)
     if robe:
-        tube(f'{name} robe', [b + up * 0.25 * s, b + up * 0.6 * s, b + up * 1.0 * s], [0.22 * s, 0.19 * s, 0.15 * s], cloth)
-    tube(f'{name} neck', [b + up * 1.44 * s, b + up * 1.52 * s], [0.045 * s, 0.045 * s], skin)
-    sphere(f'{name} head', 0.1 * s, tuple(b + up * 1.63 * s), (0.92, 0.95, 1.12), skin, segs=24)
-    sphere(f'{name} hair', 0.106 * s, tuple(b + up * 1.66 * s - f * 0.02 * s), (0.95, 0.98, 1.0), hair, segs=24, shape=lambda v: Vector((v.x, v.y, max(v.z, -0.3))))
-    for p, hnd in zip([b + up * 1.4 * s + side * 0.18 * s * d for d in (-1, 1)], hands):
-        elbow = p.lerp(hnd, 0.5) - up * 0.15 * s + f * 0.03 * s
-        tube(f'{name} arm', [p, elbow, hnd], [0.048 * s, 0.04 * s, 0.032 * s], cloth)
-        sphere(f'{name} hand', 0.034 * s, tuple(hnd), m=skin, segs=12)
+        loft(f'{name} robe', b, side, f, up, [(1.02 * s, 0.155 * s, 0.11 * s), (0.75 * s, 0.2 * s, 0.155 * s), (0.4 * s, 0.24 * s, 0.19 * s), (0.06 * s, 0.27 * s, 0.22 * s)], cloth, fold=folds)
+    else:
+        loft(f'{name} tunic', b, side, f, up, [(1.02 * s, 0.155 * s, 0.11 * s), (0.82 * s, 0.185 * s, 0.14 * s), (0.62 * s, 0.205 * s, 0.155 * s)], cloth, fold=folds)
+    loft(f'{name} torso', b, side, f, up, [(0.88 * s, 0.15 * s, 0.1 * s), (1.02 * s, 0.14 * s, 0.095 * s), (1.2 * s, 0.16 * s, 0.11 * s), (1.36 * s, 0.185 * s, 0.11 * s), (1.43 * s, 0.15 * s, 0.09 * s), (1.47 * s, 0.06 * s, 0.055 * s)], cloth)
+    tube(f'{name} neck', [b + up * 1.43 * s, b + up * 1.55 * s], [0.043 * s, 0.04 * s], skin)
+    hc = b + up * 1.65 * s
+    loft(f'{name} head', hc - up * 0.11 * s, side, f, up, [(0.0, 0.035 * s, 0.035 * s), (0.04 * s, 0.07 * s, 0.075 * s), (0.11 * s, 0.085 * s, 0.095 * s), (0.18 * s, 0.075 * s, 0.085 * s), (0.215 * s, 0.035 * s, 0.04 * s)], skin, segs=20)
+    sphere(f'{name} nose', 1.0, tuple(hc + f * 0.092 * s - up * 0.005 * s), (0.014 * s, 0.014 * s, 0.022 * s), skin, segs=10)
+    for d in (-1, 1):
+        sphere(f'{name} ear {d}', 1.0, tuple(hc + side * 0.085 * d * s - f * 0.005 * s), (0.008 * s, 0.018 * s, 0.026 * s), skin, segs=10)
+    clip = lambda v: Vector((v.x, v.y, max(v.z, -0.25)))
+    hm = cloth if style == 3 else hair
+    sphere(f'{name} hair', 0.1 * s, tuple(hc + up * 0.035 * s - f * 0.018 * s), (0.97, 1.0, 0.98), hm, segs=24, shape=clip)
+    if style == 1:
+        sphere(f'{name} bun', 0.042 * s, tuple(hc + up * 0.09 * s - f * 0.1 * s), m=hair, segs=16)
+    elif style == 2:
+        loft(f'{name} long hair', hc - f * 0.07 * s, side, f, up, [(-0.24 * s, 0.075 * s, 0.025 * s), (-0.1 * s, 0.085 * s, 0.035 * s), (0.04 * s, 0.09 * s, 0.04 * s)], hair, segs=16)
+    elif style == 3:
+        sphere(f'{name} knot', 0.03 * s, tuple(hc - f * 0.1 * s - up * 0.02 * s), m=cloth, segs=12)
+    for d, hnd in zip((-1, 1), hands):
+        sh = b + up * 1.39 * s + side * 0.175 * d * s
+        sphere(f'{name} shoulder {d}', 0.058 * s, tuple(sh), m=cloth, segs=14)
+        hnd = Vector(hnd)
+        elbow = sh.lerp(hnd, 0.48) - up * 0.13 * s + side * 0.03 * d * s
+        tube(f'{name} arm {d}', [sh, elbow, hnd - (hnd - elbow).normalized() * 0.035 * s], [0.046 * s, 0.04 * s, 0.032 * s], cloth)
+        sphere(f'{name} hand {d}', 1.0, tuple(hnd), (0.038 * s, 0.03 * s, 0.045 * s), skin, segs=12)
 
 
 def circle():
@@ -1220,8 +1264,8 @@ def gleaners():
         d.scale = (rng.uniform(0.06, 0.2), rng.uniform(0.04, 0.12), rng.uniform(0.01, 0.1))
         d.location = (rng.uniform(-0.3, 0.3), rng.uniform(-0.3, 0.3), -1.05 + rng.uniform(-0.05, 0.15))
         d.rotation_euler = (rng.random() * 3, rng.random() * 3, rng.random() * 3)
-    return {'anchors': {'pod': Vector((0.22, -0.18, 0.2)), 'wing': Vector((1.6, -0.25, 0.05)), 'vein': Vector((1.0, -0.2, 0.18)), 'net': Vector((0.55, -0.35, -0.95)), 'debris': Vector((0.1, 0.0, -1.0)), 'beacon': Vector((0, 0, 0.92))},
-            'unit': 1.0, 'detail': (Vector((0.0, 0.0, -1.0)), 0.35), 'frame': {'view': (-22, 14)}}
+    return {'anchors': {'pod': Vector((0.22, 0.18, 0.2)), 'wing': Vector((1.6, 0.2, 0.05)), 'vein': Vector((1.0, 0.15, 0.18)), 'net': Vector((0.55, 0.35, -0.95)), 'debris': Vector((0.1, 0.0, -1.0)), 'beacon': Vector((0, 0, 0.92))},
+            'unit': 1.0, 'detail': (Vector((0.0, 0.0, -1.0)), 0.35), 'frame': {'view': (158, 30)}}
 
 
 # ── XV · the Snowmakers ──

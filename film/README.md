@@ -56,6 +56,13 @@ generations.
 
 The lensing is an artistic approximation, not a simulation.
 
+The picture is graded like the Blender scenes. AgX tone-maps it, so highlights
+roll off instead of clipping. The tiles take a warm key and a cool sky fill, a
+rim against the light, and a glint that depends on their craft: glass and
+faience shine, and wool does not. A last pass adds a breath of colour fringing
+toward the edges and fine grain. The painted panels are the vignettes from
+`../blender/vignettes.py`.
+
 *Lifted*'s clock is `lifted-timeline.mjs`, which the picture and the score
 share: the accelerating beat and the headline times, the front of the weave, the
 moment each vision rises, and the camera. The camera is a set of channels keyed
