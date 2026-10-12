@@ -35,7 +35,7 @@ HEROES = {
     'shorewalkers': dict(build=S.shorewalkers, view=(52, 34), lens=85, box=(0.06, 0.16, 0.94, 0.8)),
     'circle': dict(build=S.circle, view=(-18, 34), lens=60, box=(0.1, 0.12, 0.9, 0.84)),
     'weavers': dict(build=S.weavers, view=(-22, 16), lens=60, box=(0.08, 0.12, 0.92, 0.86)),
-    'gleaners': dict(build=S.gleaners, view=(165, 38), lens=70, box=(0.06, 0.12, 0.94, 0.86), floating=True),
+    'gleaners': dict(build=S.gleaners, view=(128, 30), lens=60, box=(0.02, 0.14, 0.98, 0.86), floating=True),
 }
 
 

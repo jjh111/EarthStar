@@ -1265,7 +1265,7 @@ def gleaners():
         d.location = (rng.uniform(-0.3, 0.3), rng.uniform(-0.3, 0.3), -1.05 + rng.uniform(-0.05, 0.15))
         d.rotation_euler = (rng.random() * 3, rng.random() * 3, rng.random() * 3)
     return {'anchors': {'pod': Vector((0.22, 0.18, 0.2)), 'wing': Vector((1.6, 0.2, 0.05)), 'vein': Vector((1.0, 0.15, 0.18)), 'net': Vector((0.55, 0.35, -0.95)), 'debris': Vector((0.1, 0.0, -1.0)), 'beacon': Vector((0, 0, 0.92))},
-            'unit': 1.0, 'detail': (Vector((0.0, 0.0, -1.0)), 0.35), 'frame': {'view': (158, 30)}}
+            'unit': 1.0, 'detail': (Vector((0.0, 0.0, -1.0)), 0.35), 'frame': {'view': (128, 30)}}
 
 
 # ── XV · the Snowmakers ──
