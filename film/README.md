@@ -38,14 +38,31 @@ generations.
 
 *Lifted* films the same weave in four movements:
 
-1. **Flatland.** Doom headlines slam in as torn newsprint, then collapse into slivers on the horizon. The camera sits in the plane of jagged trash, so you see only edges.
+1. **Flatland.** Doom headlines slam in as torn newsprint, faster and harder as
+   the beat quickens from 96 to 192 a minute. The frame closes in and shakes,
+   then the tape stops and the headlines collapse into slivers on the horizon. The
+   camera sits in the plane of jagged trash, so you see only edges.
 2. **The lift.** A new dimension arrives, and the camera drifts up like a leaf.
-3. **The story.** The camera tracks the front, with a different angle for each era.
+3. **The story.** The camera tracks the front, with a different angle for each
+   era. As it passes each painted panel, a vision rises behind it: that era's
+   Gomen as the field guide drew it (`../field-guide/plates/`), assembled tile by
+   tile out of the weave in the era's own craft. The Clearers come in gold-ground
+   mosaic, the Shore-walkers in wool, the Circle in stained glass, the Weavers in
+   faience, and the Gleaners in paint. Each vision then falls back into the weave.
 4. **The disk.** The whole timeline curls into a spiral accretion disk. The dream
-   falls inward, a lensed halo forms, and the Earth Star glimmers inside the
-   event horizon.
+   falls inward, a lensed halo forms, and at the centre of the black hole the
+   Earth Star's sigil glows and beats like a heart. The sigil is the clover ankh,
+   the "t" of STAR in the logo, lifted out by `sigil.mjs` into `clover-ankh.png`.
 
 The lensing is an artistic approximation, not a simulation.
+
+*Lifted*'s clock is `lifted-timeline.mjs`, which the picture and the score
+share: the accelerating beat and the headline times, the front of the weave, the
+moment each vision rises, and the camera. The camera is a set of channels keyed
+in time and then smoothed with a Gaussian: what it looks at, its bearing, its
+height and its distance. It stays on the near side of the weave and never looks
+straight down, so it cannot flip. It turns at most about 0.8° a frame, during the
+lift.
 
 ## Gomenata
 
@@ -98,9 +115,12 @@ takes two settings from the environment:
 The scores for *a seed* and *the loom* are synthesised by ffmpeg's `aevalsrc`: an
 open-fifth drone on A, the loom's knock, and chimes at each turn. *Lifted* has its
 own score, written sample by sample in `sound.mjs` (`node film/sound.mjs out.wav`).
-It opens with a breaking-news cue: a D-minor pulse, brass stabs, a clock, and a
-paper slap on every headline. The tape stops into Flatland. Wind carries the lift,
-a deep boom marks the horizon, and the star shimmers.
+It opens with a breaking-news cue that builds: a D-minor pulse that quickens and
+climbs a semitone each bar, brass stabs, a clock on every beat, a paper slap on
+every headline, a riser, and a timpani roll. The tape stops, slowing the beat as it
+falls, into Flatland. Wind carries the lift, and tesserae clatter as each vision
+rises and falls back. A deep boom marks the horizon, the star shimmers, and the
+sigil beats.
 
 *Lifted* needs WebGL. Without a GPU it falls back to SwiftShader, at about
 1.2 s a frame, or roughly 37 minutes for the film.

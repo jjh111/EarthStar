@@ -2,17 +2,22 @@
 // into a WAV. They are deterministic: noise comes from a seeded generator.
 //
 // "the loom, lifted":
-//   0–6.6 s   breaking news: a D-minor pulse, bass, brass stabs, a ticking clock,
-//             a paper slap on every headline, a timpani roll, then the tape stops
+//   0–6.6 s   breaking news: a D-minor pulse that quickens from 96 to 192 beats a
+//             minute and climbs a semitone a bar, bass, brass stabs, a clock on
+//             every beat, a paper slap on every headline, a riser and a timpani
+//             roll building to the collapse, then the tape stops (and slows)
 //   6.6–9 s   Flatland: almost nothing, a low hum
 //   9–19 s    the lift: wind, an opening arpeggio
-//   19–44 s   the story: the loom's knock, a chime as each era is woven
+//   19–44 s   the story: the loom's knock, a chime as each era is woven, and the
+//             clatter of tesserae as each era's vision rises and falls back
 //   44–60 s   the disk: a deep boom at the horizon, the drone opening, the shimmer,
 //             and a heartbeat under the last line
 //
-// The headline times match SCRAPS in lifted.html (t0 = 0.25 + i × 0.36).
+// The beat, the headlines and the visions come from lifted-timeline.mjs, which
+// the picture reads too.
 import { writeFileSync } from 'node:fs';
 import { TL, STEP, TURNS } from './guide-timeline.mjs';
+import { STOP as L_STOP, SILENCE as L_SILENCE, HEADLINE_T, STABS as L_STABS, ROLL, beatAt, timeOfBeat, VISIONS } from './lifted-timeline.mjs';
 
 const SR = 48000;
 const TAU = Math.PI * 2;
@@ -36,52 +41,70 @@ export function synthLifted(seconds = 60) {
   const noise = rng(7), n2 = rng(11), n3 = rng(23);
   const paperLP = lp(3200), paperHP = lp(500), whooshLP = lp(4000), windLP = lp(800), windLP2 = lp(800), windLP3 = lp(800), rumbleLP = lp(120), tickLP = lp(5000);
 
-  // ── breaking news ──
-  const BEAT = 60 / 128, SIX = BEAT / 4;
+  // ── breaking news: the beat quickens (lifted-timeline.mjs), each bar a semitone higher ──
   const OST = [12, 12, 19, 12, 15, 12, 17, 12, 12, 12, 19, 12, 20, 19, 17, 15]; // D4 pulse over D minor
-  const SCRAP = Array.from({ length: 14 }, (_, i) => 0.25 + i * 0.36);
-  const STABS = [0, 3, 6, 10, 13].map((i) => SCRAP[i]);
-  const STOP = 5.3, SILENCE = 6.65;
-  let phO = 0, phB = 0;
+  const STOP = L_STOP, SILENCE = L_SILENCE, SCRAP = HEADLINE_T, STABS = L_STABS.map((i) => HEADLINE_T[i]);
+  const keyAt = (b) => Math.min(3, Math.floor(b / 4));
+  const riserLo = lp(300), riserHi = lp(150);
+  let phO = 0, phB = 0, phR1 = 0, phR2 = 0, rollPh = 0, tape = 0;
+
+  // the visions: tesserae clattering up out of the weave, and back down into it
+  const fx = new Float32Array(N), fr = rng(31);
+  const click = (t0, f, a, d) => { const n0 = Math.round(t0 * SR), n1 = Math.min(N, n0 + Math.round(d * 6 * SR)); for (let n = Math.max(0, n0); n < n1; n++) { const u = (n - n0) / SR; fx[n] += a * Math.sin(TAU * f * u) * Math.exp(-u / d) * Math.min(1, u / 0.0015); } };
+  for (const v of VISIONS) for (const [w, up] of [[v.up, true], [v.down, false]]) {
+    for (let i = 0; i < (up ? 170 : 110); i++) {
+      const q = (fr() + 1) / 2, tt = w[0] + (w[1] - w[0]) * (up ? Math.pow(q, 0.8) : q);
+      click(tt, (up ? 2200 + 3200 * q : 4600 - 2800 * q) * (0.9 + 0.2 * (fr() + 1) / 2), 0.011 + 0.008 * (fr() + 1) / 2, 0.018 + 0.03 * (fr() + 1) / 2);
+    }
+  }
 
   for (let n = 0; n < N; n++) {
     const t = n / SR;
-    let v = 0;
+    let v = fx[n];
 
     if (t < SILENCE + 0.3) {
-      // the tape stops: pitch and level slide away together
+      // the tape stops: pitch, level and the beat itself slide away together
       const p = 1 - 0.78 * ease(ramp(t, STOP, SILENCE)), lvl = 1 - ramp(t, STOP + 0.4, SILENCE);
-      const k = Math.floor(t / SIX), tau = t - k * SIX;
-      phO += TAU * hz(OST[k % 16]) * p / SR;
-      v += 0.075 * square(phO) * Math.exp(-14 * tau) * lvl * ramp(t, 0.05, 0.3);
-      const b = Math.floor(t / BEAT), tb = t - b * BEAT;
-      phB += TAU * hz(-12) * p / SR;
-      v += 0.13 * saw(phB) * Math.exp(-5 * tb) * lvl;
-      // brass stabs on the worst headlines: D minor, saw, a fast swell and a fall
+      tape = t < STOP ? t : tape + p / SR;
+      const b = beatAt(tape), key = keyAt(b), build = Math.pow(ramp(t, 0, STOP), 1.5), swell = 0.55 + 0.45 * build;
+      const k = Math.floor(b * 4), tau = tape - timeOfBeat(k / 4);
+      phO += TAU * hz(OST[k % 16] + key) * p / SR;
+      v += 0.075 * square(phO) * Math.exp(-14 * tau) * lvl * ramp(t, 0.05, 0.3) * swell;
+      const tb = tape - timeOfBeat(Math.floor(b));
+      phB += TAU * hz(-12 + key) * p / SR;
+      v += 0.13 * saw(phB) * Math.exp(-5 * tb) * lvl * swell;
+      // brass stabs on the worst headlines: D minor, saw, a fast swell and a fall, in the key of their bar
       for (const s0 of STABS) {
         const u = t - s0;
         if (u < 0 || u > 1.2) continue;
-        const env = Math.min(1, u / 0.015) * Math.exp(-3.2 * u) * lvl;
-        for (const semi of [0, 3, 7, 12]) v += 0.032 * saw(TAU * hz(semi) * p * u) * env;
+        const env = Math.min(1, u / 0.015) * Math.exp(-3.2 * u) * lvl * swell, kk = keyAt(beatAt(s0));
+        for (const semi of [0, 3, 7, 12]) v += 0.032 * saw(TAU * hz(semi + kk) * p * u) * env;
       }
-      // the clock
-      if (t < STOP) {
-        const tt = t % 0.5;
-        if (tt < 0.012) v += 0.11 * tickLP(noise()) * Math.exp(-500 * tt) + 0.05 * Math.sin(TAU * 2100 * tt) * Math.exp(-400 * tt);
+      // the clock, on every beat, quickening with it
+      if (t < STOP && tb < 0.012) v += (0.08 + 0.07 * build) * tickLP(noise()) * Math.exp(-500 * tb) + 0.05 * Math.sin(TAU * 2100 * tb) * Math.exp(-400 * tb);
+      // the riser: noise opening upward and two tones gliding up two octaves, all the way to the stop
+      if (t > 1.6 && t < STOP + 0.04) {
+        const u = ramp(t, 1.6, STOP), c = 300 + 6500 * u * u, x = n3();
+        v += 0.16 * u * u * (riserLo(x, c) - riserHi(x, c * 0.4)) * 3;
+        phR1 += TAU * 146.83 * Math.pow(2, 2 * u) / SR; phR2 += TAU * 220 * Math.pow(2, 2 * u) * 1.004 / SR;
+        v += 0.028 * u * u * u * (Math.sin(phR1) + 0.7 * Math.sin(phR2));
       }
-      // a timpani roll, building to the collapse
-      if (t > 4.15 && t < STOP) {
-        const rr = (t - 4.15) % 0.065;
-        v += 0.18 * ramp(t, 4.15, STOP) * Math.sin(TAU * (68 - 120 * rr) * rr) * Math.exp(-30 * rr);
+      // a timpani roll, its strokes quickening, building to the collapse
+      if (t > ROLL && t < STOP) {
+        const u = ramp(t, ROLL, STOP), rate = 13 + 17 * u;
+        rollPh += rate / SR;
+        const rr = (rollPh % 1) / rate;
+        v += 0.2 * Math.pow(u, 1.2) * Math.sin(TAU * (68 - 120 * rr) * rr) * Math.exp(-30 * rr);
       }
     }
-    // every headline lands: a slap of paper and a thump
+    // every headline lands: a slap of paper and a thump, harder as it builds
     for (const s0 of SCRAP) {
       const u = t - s0;
       if (u < 0 || u > 0.25) continue;
       const x = noise();
       const l = paperLP(x), paper = l - paperHP(l);
-      v += 0.42 * paper * Math.exp(-38 * u) + 0.22 * Math.sin(TAU * (120 - 220 * u) * u) * Math.exp(-28 * u);
+      const hard = 0.75 + 0.35 * ramp(s0, 0, STOP);
+      v += hard * (0.42 * paper * Math.exp(-38 * u) + 0.22 * Math.sin(TAU * (120 - 220 * u) * u) * Math.exp(-28 * u));
     }
     // the collapse: a big hit, then everything sucked down into the plane
     if (t > STOP && t < STOP + 2.2) {
@@ -120,7 +143,7 @@ export function synthLifted(seconds = 60) {
     }
     // the star: shimmer
     if (t > 55 && t < 60) v += 0.012 * n3() * ramp(t, 55, 56.5) * (0.6 + 0.4 * Math.sin(TAU * 7 * t)) * (1 - ramp(t, 58.5, 60));
-    // the heart at the centre: lub-dub, 64 a minute, under the last line
+    // the sigil at the centre beats like a heart: lub-dub, 64 a minute, under the last line
     if (t > 55.5) {
       const q = (t - 55.5) % 0.9375, lvl = ramp(t, 55.5, 57) * (1 - ramp(t, 59.3, 60));
       v += lvl * 0.34 * Math.sin(TAU * 52 * q) * Math.exp(-26 * q);

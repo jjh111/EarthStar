@@ -20,9 +20,10 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { DUR, STOP, HEADLINE_T, beatAt, Fof, PANEL_X, PASS, visionAt, cameraAt, CD as CDA } from './lifted-timeline.mjs';
 
 const TALL = new URLSearchParams(location.search).has('tall');
-const W = TALL ? 1080 : 1920, H = TALL ? 1920 : 1080, DUR = 60, AC = 32, BANDC = 256;
+const W = TALL ? 1080 : 1920, H = TALL ? 1920 : 1080, AC = 32, BANDC = 256;
 // the weave's resolution: RES cells per world unit (the camera and the eras are in world units)
 const RES = 1.5, ROWS = 48, NCOLS = 495;
 const SERIF = '"Cormorant Garamond", "FreeSerif", serif', SANS = '"DM Sans", "FreeSans", sans-serif';
@@ -31,7 +32,6 @@ const ramp = (t, a, b) => clamp((t - a) / (b - a));
 const ease = (x) => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
 const win = (t, a, b, fi = 0.8, fo = 0.8) => Math.min(ease(ramp(t, a, a + fi)), 1 - ease(ramp(t, b - fo, b)));
 const lerp = (a, b, x) => a + (b - a) * x;
-const sstep = (a, b, x) => { const u = clamp((x - a) / (b - a)); return u * u * (3 - 2 * u); };
 function hash(a, b, s = 0) {
   let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263) + Math.imul(s | 0, 1442695041)) | 0;
   h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16; return (h >>> 0) / 4294967296;
@@ -61,17 +61,17 @@ const GARBAGE = { ground: [[58, 58, 54], [77, 74, 68], [43, 46, 44], [70, 62, 52
 const eraOfCol = (col) => { let e = 0; for (let i = 0; i < ERAS.length; i++) if (col >= ERAS[i].start * RES) e = i; return e; };
 
 const SRC = { bg: '../Assets/0-BG.png', earth: '../Assets/1-earth.png', sun: '../Assets/2-sun.png', ship: '../Assets/3-islandship.png', glim: '../Assets/4-glimmer.png',
-  logo: '../Assets/EarthStar Logo JH 2025 w.png', 'star-ink': '../assets/img/glyphs/star.svg' };
+  logo: '../Assets/EarthStar Logo JH 2025 w.png', 'star-ink': '../assets/img/glyphs/star.svg', ankh: 'clover-ankh.png' };
 for (const g of ['clearers', 'shorewalkers', 'circle', 'weavers', 'gleaners']) for (const l of ['wash', 'ink', 'gold']) SRC[`${g}-${l}`] = `../assets/img/gomens/${g}-${l}.svg`;
 for (const v of ['blood', 'shore', 'circle', 'roots']) SRC[`vig-${v}`] = `vignettes/${v}.jpg`;
+// the visions: each era's Gomen as the field guide (Gomenata) drew it, risen out of the weave in the era's craft
+const VIS = [{ era: 1, id: 'clearers' }, { era: 2, id: 'shorewalkers' }, { era: 3, id: 'circle' }, { era: 4, id: 'weavers' }, { era: 5, id: 'gleaners' }];
+for (const v of VIS) SRC[`plate-${v.id}`] = `../field-guide/plates/${v.id}.webp`;
+const PLATE = {};
 // the painted scenes (blender/vignettes.py), woven into each Gomen's era; the Gleaners' is the painting itself
 const PANELS = [
-  { era: 1, img: 'vig-blood', x0: 40, x1: 84, wedge: true },
-  { era: 2, img: 'vig-shore', x0: 90, x1: 132 },
-  { era: 3, img: 'vig-circle', x0: 140, x1: 182 },
-  { era: 4, img: 'vig-roots', x0: 190, x1: 232 },
-  { era: 5, img: 'painting', x0: 236, x1: 286 },
-];
+  { era: 1, img: 'vig-blood', wedge: true }, { era: 2, img: 'vig-shore' }, { era: 3, img: 'vig-circle' }, { era: 4, img: 'vig-roots' }, { era: 5, img: 'painting' },
+].map((p, i) => ({ ...p, x0: PANEL_X[i][0], x1: PANEL_X[i][1], tPass: PASS[i] }));
 const SLOT_W = 1024, SLOT_H = 720;
 let PANEL_ATLAS, PIDX, PU;
 function panelAtlas() {
@@ -100,6 +100,7 @@ function panelAtlas() {
 }
 const IMG = {};
 async function load() {
+  await Promise.all(VIS.map(async (v) => { PLATE[v.id] = await (await fetch(`../field-guide/plates/${v.id}.json`)).json(); }));
   await Promise.all(Object.entries(SRC).map(([k, src]) => new Promise((ok, no) => {
     const i = new Image(); i.onload = () => { IMG[k] = i; ok(); }; i.onerror = () => no(new Error(src)); i.src = src;
   })));
@@ -304,75 +305,102 @@ function atlases() {
   return { wv, hp, AW, AH };
 }
 
-// ── the timeline ──
-const KEYS = [[0, 0], [1, 0], [9, 20], [19, 50], [23.5, 96], [28, 146], [32.5, 196], [37, 246], [41.5, 296], [44.5, 318], [60, 319]];
-const lin = (t) => { for (let i = 1; i < KEYS.length; i++) if (t <= KEYS[i][0]) return lerp(KEYS[i - 1][1], KEYS[i][1], ramp(t, KEYS[i - 1][0], KEYS[i][0])); return KEYS[KEYS.length - 1][1]; };
-const FT = (() => { const out = new Float32Array(DUR * 100 + 1), sg = 0.6; for (let i = 0; i <= DUR * 100; i++) { const t = i / 100; let s = 0, w = 0; for (let d = -180; d <= 180; d += 3) { const u = d / 100, g = Math.exp(-(u * u) / (2 * sg * sg)); s += lin(clamp(t + u, 0, DUR)) * g; w += g; } out[i] = s / w; } return out; })();
-const Fof = (t) => FT[clamp(Math.round(t * 100), 0, DUR * 100)];
+// ── the visions: an arched icon of tiles per era, the specimen over the era's ground ──
+const VROWS = 44, VS = 0.5;   // tiles in an icon's height, and a tile's size (a little finer than the weave's)
+function visionIcon(v, vi) {
+  const E = ERAS[v.era], m = PLATE[v.id], im = IMG[`plate-${v.id}`], [b0, b1, b2, b3] = m.bbox, pad = 0.03;
+  const sx = (b0 - pad) * im.width, sy = (b1 - pad) * im.height, sw = (b2 - b0 + 2 * pad) * im.width, sh = (b3 - b1 + 2 * pad) * im.height;
+  const cols = clamp(Math.round((VROWS - 6) * sw / sh) + 4, 40, 84), rows = VROWS, arch = Math.round(Math.min(cols / 2, rows * 0.3));
+  const inside = (q, r) => {
+    if (q < 0 || r < 0 || q >= cols || r >= rows) return false;
+    if (r >= arch) return true;
+    const y = (arch - r - 0.5) / arch, hw = cols / 2 * Math.sqrt(Math.max(0, 1 - y * y));
+    return Math.abs(q + 0.5 - cols / 2) < hw;
+  };
+  // the specimen, fitted into the icon above a sill, sampled cell by cell
+  const fit = Math.min((cols - 4) / sw, (rows - 5) / sh), fw = sw * fit, fh = sh * fit;
+  const cv = document.createElement('canvas'); cv.width = cols; cv.height = rows;
+  const x = cv.getContext('2d', { willReadFrequently: true }); x.imageSmoothingQuality = 'high';
+  x.drawImage(im, sx, sy, sw, sh, (cols - fw) / 2, rows - 3 - fh, fw, fh);
+  const fig = x.getImageData(0, 0, cols, rows).data;
+  // the ground: gold for the mosaic, the era's own colours otherwise; the painting itself for the Gleaners
+  let paint = null;
+  if (E.key === 'paint') {
+    const pc = document.createElement('canvas'); pc.width = cols; pc.height = rows; const g = pc.getContext('2d', { willReadFrequently: true });
+    for (const k of ['bg', 'earth', 'sun', 'ship', 'glim']) { const ii = IMG[k], sc = Math.max(cols / ii.width, rows / ii.height); g.drawImage(ii, (cols - ii.width * sc) / 2, (rows - ii.height * sc) / 2, ii.width * sc, ii.height * sc); }
+    paint = g.getImageData(0, 0, cols, rows).data;
+  }
+  const GOLDGROUND = [[214, 168, 58], [196, 150, 48], [226, 184, 76], [182, 136, 44]];
+  const cells = [];
+  const at = document.createElement('canvas'); at.width = cols * AC; at.height = rows * AC;
+  g2 = at.getContext('2d'); g2.fillStyle = '#0a1611'; g2.fillRect(0, 0, at.width, at.height);
+  for (let r = 0; r < rows; r++) for (let q = 0; q < cols; q++) {
+    if (!inside(q, r)) continue;
+    const j = (r * cols + q) * 4, a = fig[j + 3] / 255, h = hash(q, r, 900 + vi), col = 2000 + vi * 100 + q;
+    const edge = !inside(q - 1, r) || !inside(q + 1, r) || !inside(q, r - 1) || !inside(q, r + 1);
+    let bg = E.key === 'mosaic' ? GOLDGROUND[(h * 4) | 0] : E.key === 'paint' ? [paint[j] * 0.8, paint[j + 1] * 0.8, paint[j + 2] * 0.8] : E.ground[(h * E.ground.length) | 0];
+    if (E.key === 'glass') bg = mix(bg, [20, 26, 70], 0.35);
+    // the specimen, a little richer than the plate, so it holds against the ground
+    const pc = [fig[j], fig[j + 1], fig[j + 2]], lum = 0.3 * pc[0] + 0.59 * pc[1] + 0.11 * pc[2], sat = pc.map((c) => clamp(lum + (c - lum) * 1.35, 0, 255));
+    let C = edge ? E.gold : mix(bg, sat, a);
+    if (!edge && r >= rows - 2) C = mix(E.gold, [60, 40, 20], 0.35);   // the sill
+    const k = 0.88 + 0.24 * h, [cx, cy] = [q * AC, r * AC];
+    switch (E.key) {
+      case 'mosaic': mosaicT(cx, cy, AC, C, k, col, r); break;
+      case 'wool': woolT(cx, cy, AC, C, k); break;
+      case 'glass': glassT(cx, cy, AC, C, k * (edge ? 1 : 1.1)); break;
+      case 'faience': faienceT(cx, cy, AC, C, k); break;
+      default: paintT(cx, cy, AC, C, k, h, col, r);
+    }
+    cells.push(q, r);
+  }
+  return { cols, rows, cells: new Float32Array(cells), atlas: at };
+}
+const VIS_VERT = /* glsl */`
+attribute vec2 aCell; attribute vec4 aRnd;
+uniform float uP, uLean, uS; uniform vec3 uBase; uniform vec2 uGrid, uFloor, uAtlas;
+varying vec2 vUv; varying vec3 vN; varying float vTop; varying float vDist; varying float vFly;
+mat3 rotAxis(vec3 a, float g){ a = normalize(a); float c = cos(g), s = sin(g), k = 1.0 - c;
+  return mat3(c + a.x*a.x*k, a.y*a.x*k + a.z*s, a.z*a.x*k - a.y*s, a.x*a.y*k - a.z*s, c + a.y*a.y*k, a.z*a.y*k + a.x*s, a.x*a.z*k + a.y*s, a.y*a.z*k - a.x*s, c + a.z*a.z*k); }
+void main(){
+  float q = aCell.x, r = aCell.y;
+  // the icon stands at the far edge of the weave, leaning back toward the sky
+  vec3 R = vec3(1.0, 0.0, 0.0), Up = vec3(0.0, cos(uLean), -sin(uLean)), N = vec3(0.0, sin(uLean), cos(uLean));
+  vec3 rest = uBase + R * ((q + 0.5 - uGrid.x * 0.5) * uS) + Up * ((uGrid.y - r - 0.5) * uS);
+  // each tile rises from its own place in the panel below, the lowest first
+  vec3 from = vec3(mix(uFloor.x, uFloor.y, (q + 0.5) / uGrid.x), 0.06, mix(-15.0, 15.0, (r + 0.5) / uGrid.y));
+  float delay = 0.45 * aRnd.x + 0.35 * (1.0 - r / uGrid.y);
+  float e = clamp((uP * 1.4 - delay) / 0.6, 0.0, 1.0), ee = e * e * (3.0 - 2.0 * e);
+  vec3 p = mix(from, rest, ee);
+  float arc = sin(3.14159 * ee);
+  p.y += arc * (3.0 + 6.0 * aRnd.y);
+  p += vec3(aRnd.z - 0.5, 0.0, aRnd.w - 0.5) * arc * 7.0;
+  mat3 B = mat3(R, N, -Up);
+  mat3 S = rotAxis(vec3(aRnd.y - 0.5, aRnd.z - 0.5, aRnd.w - 0.5) + 0.01, (1.0 - ee) * (3.0 + 6.0 * aRnd.z));
+  vec3 lp = position * vec3(0.94 * uS, 0.16 * uS, 0.94 * uS) * smoothstep(0.0, 0.12, e);
+  vec3 world = p + S * (B * lp);
+  vN = S * (B * normal);
+  vTop = normal.y > 0.5 ? 1.0 : 0.0;
+  vUv = (vec2(q, r) * 32.0 + vec2(1.0) + (position.xz + 0.5) * 30.0) / uAtlas;
+  vFly = arc;
+  vec4 mv = modelViewMatrix * vec4(world, 1.0); vDist = length(mv.xyz);
+  gl_Position = projectionMatrix * mv;
+}`;
+const VIS_FRAG = /* glsl */`
+uniform sampler2D uMap; uniform vec3 uFogCol, uGold; uniform float uFogNear, uFogFar, uGlow;
+varying vec2 vUv; varying vec3 vN; varying float vTop; varying float vDist; varying float vFly;
+void main(){
+  vec3 c = texture2D(uMap, vUv).rgb * (vTop > 0.5 ? 1.0 : 0.5);
+  vec3 n = normalize(vN);
+  float diff = 0.55 + 0.6 * max(dot(n, normalize(vec3(0.35, 1.0, 0.45))), 0.0) + 0.2 * max(dot(n, normalize(vec3(-0.6, 0.3, -0.5))), 0.0);
+  c = c * diff * (1.0 + uGlow) + uGold * vFly * 0.35;
+  c = mix(c, uFogCol, smoothstep(uFogNear, uFogFar, vDist));
+  gl_FragColor = vec4(c, 1.0);
+}`;
 
-// ── the camera: a leaf, then a witness, then a pilgrim ──
+// ── the camera (its path, smoothed, is in lifted-timeline.mjs) ──
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
-const CD = V(165, 0, 0);
-const OFF = [V(-10, 34, 26), V(6, 13, 30), V(0.01, 48, 3), V(-18, 13, -27), V(-6, 30, 22), V(12, 22, 27)];
-const CFS = [28, 60, 110, 160, 210, 260, 304];
-function storyPose(t) {
-  const tx = Fof(t) - 22;
-  let off = OFF[0].clone();
-  for (let i = 1; i < CFS.length - 1; i++) { const w = sstep(CFS[i] + 6, CFS[i + 1] - 6, tx); if (tx > CFS[i]) off = OFF[i - 1].clone().lerp(OFF[i], w); }
-  if (tx > CFS[1] && tx <= CFS[2]) off = OFF[0].clone().lerp(OFF[1], sstep(CFS[1] + 6, CFS[2] - 6, tx));
-  const tgt = V(tx, 0, 0);
-  return { pos: tgt.clone().add(off), tgt, roll: tx > 150 && tx < 185 ? Math.sin((tx - 150) / 35 * Math.PI) * 0.25 : 0 };
-}
-function hermite(keys, t) {
-  let i = 0; while (i < keys.length - 2 && t > keys[i + 1].t) i++;
-  const k0 = keys[Math.max(0, i - 1)], k1 = keys[i], k2 = keys[i + 1], k3 = keys[Math.min(keys.length - 1, i + 2)];
-  const u = clamp((t - k1.t) / (k2.t - k1.t)), dt = k2.t - k1.t;
-  const h00 = 2 * u ** 3 - 3 * u ** 2 + 1, h10 = u ** 3 - 2 * u ** 2 + u, h01 = -2 * u ** 3 + 3 * u ** 2, h11 = u ** 3 - u ** 2;
-  const tan = (a, b, c, key) => { const span = (c.t - a.t) || 1; return typeof b[key] === 'number' ? (c[key] - a[key]) / span * dt : c[key].clone().sub(a[key]).multiplyScalar(dt / span); };
-  const out = {};
-  for (const key of ['pos', 'tgt', 'roll']) {
-    const m1 = tan(k0, k1, k2, key), m2 = tan(k1, k2, k3, key);
-    if (typeof k1[key] === 'number') out[key] = h00 * k1[key] + h10 * m1 + h01 * k2[key] + h11 * m2;
-    else out[key] = k1[key].clone().multiplyScalar(h00).add(m1.multiplyScalar(h10)).add(k2[key].clone().multiplyScalar(h01)).add(m2.multiplyScalar(h11));
-  }
-  return out;
-}
-let LIFT, END;
-function buildPaths() {
-  const s19 = storyPose(19), s44 = storyPose(44);
-  LIFT = [
-    { t: 0, pos: V(30, 0.14, 3), tgt: V(0, 0.12, -1), roll: 0 },
-    { t: 9, pos: V(41, 0.16, -2), tgt: V(8, 0.1, 2), roll: 0 },
-    { t: 11, pos: V(40, 3.2, 6), tgt: V(14, 1, -3), roll: 0.45 },
-    { t: 13, pos: V(30, 11, -10), tgt: V(16, -1, 4), roll: -0.8 },
-    { t: 15, pos: V(14, 22, 14), tgt: V(24, 0, -3), roll: 0.7 },
-    { t: 17, pos: V(13, 31, 22), tgt: V(27, 0, 1), roll: -0.22 },
-    { t: 19, pos: s19.pos, tgt: s19.tgt, roll: 0 },
-    { t: 20, pos: storyPose(20).pos, tgt: storyPose(20).tgt, roll: 0 },
-  ];
-  END = [
-    { t: 43, pos: storyPose(43).pos, tgt: storyPose(43).tgt, roll: 0 },
-    { t: 44, pos: s44.pos, tgt: s44.tgt, roll: 0 },
-    { t: 48.5, pos: CD.clone().add(V(70, 150, 150)), tgt: CD.clone(), roll: 0.1 },
-    { t: 52, pos: CD.clone().add(V(0, 72, 215)), tgt: CD.clone(), roll: 0 },
-    { t: 55.5, pos: CD.clone().add(V(0, 13, 196)), tgt: CD.clone().add(V(0, 3, 0)), roll: 0 },
-    { t: 60, pos: CD.clone().add(V(0, 10, 178)), tgt: CD.clone().add(V(0, 5, 0)), roll: 0 },
-  ];
-}
-function cameraAt(t) {
-  let p;
-  if (t < 19) p = hermite(LIFT, t);
-  else if (t < 44) p = storyPose(t);
-  else p = hermite(END, t);
-  // the leaf in the breeze
-  const env = win(t, 9.3, 18.8, 1.2, 2.6);
-  if (env > 0) {
-    const fwd = p.tgt.clone().sub(p.pos).normalize(), right = fwd.clone().cross(V(0, 1, 0)).normalize(), up = right.clone().cross(fwd);
-    p.pos.add(right.multiplyScalar(Math.sin(t * 2.3) * 2.4 * env)).add(up.multiplyScalar(Math.sin(t * 1.6 + 1) * 1.3 * env));
-    p.roll += Math.sin(t * 1.9) * 0.32 * env;
-  }
-  return p;
-}
+const CD = V(...CDA);
 
 // ── shaders ──
 const VERT = /* glsl */`
@@ -487,7 +515,7 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(TALL ? 74 : 50, W / H, 0.05, 5000);
 for (const id of ['gl', 'ov']) { const cv = document.getElementById(id); cv.width = W; cv.height = H; cv.style.width = W + 'px'; cv.style.height = H + 'px'; }
 const ov = document.getElementById('ov').getContext('2d');
-let U, LU, lensMesh, composer, bloom, ring, starG, stars, curtain, shuttle, shadow;
+let U, LU, lensMesh, composer, bloom, ring, starG, stars, curtain, shuttle, shadow, visions = [];
 const lin3 = (c) => c.map((v) => Math.pow(v / 255, 2.2));
 
 function build() {
@@ -539,17 +567,13 @@ function build() {
     fragmentShader: 'uniform float uA; varying vec2 vP; void main(){ float d = length(vP); float i = exp(-pow((d-22.3)/0.55,2.))*1.6 + exp(-pow((d-23.5)/3.2,2.))*0.22; gl_FragColor = vec4(vec3(1.0,0.82,0.5)*i*uA, 1.); }',
   }));
   ring.position.copy(CD); ring.renderOrder = 5; scene.add(ring);
-  // the heart at the centre of the loom: the weaver
-  const st = new THREE.CanvasTexture((() => {
-    const cv = document.createElement('canvas'); cv.width = cv.height = 512; const x = cv.getContext('2d');
-    x.translate(256, 270); x.scale(1, -1); x.beginPath();
-    for (let k = 0; k <= 96; k++) { const q = k / 96 * Math.PI * 2; const hx = 16 * Math.sin(q) ** 3, hy = 13 * Math.cos(q) - 5 * Math.cos(2 * q) - 2 * Math.cos(3 * q) - Math.cos(4 * q); k ? x.lineTo(hx * 11, hy * 11) : x.moveTo(hx * 11, hy * 11); }
-    x.fillStyle = '#fff'; x.fill(); return cv;
-  })());
-  starG = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), new THREE.ShaderMaterial({
+  // at the centre of the black hole, the Earth Star's sigil: the clover ankh, the "t" of the logo
+  const st = new THREE.Texture(IMG.ankh); st.needsUpdate = true; st.colorSpace = THREE.SRGBColorSpace;
+  const ah = 31, aw = ah * IMG.ankh.width / IMG.ankh.height;
+  starG = new THREE.Mesh(new THREE.PlaneGeometry(aw, ah), new THREE.ShaderMaterial({
     uniforms: { uA: { value: 0 }, uMap: { value: st } }, transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending,
     vertexShader: 'varying vec2 vU; void main(){ vU = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }',
-    fragmentShader: 'uniform float uA; uniform sampler2D uMap; varying vec2 vU; void main(){ float a = texture2D(uMap, vec2(vU.x, 1.-vU.y)).a; float g = 0.; for (int i = 0; i < 8; i++) { float an = float(i)*0.785; g += texture2D(uMap, vec2(vU.x, 1.-vU.y) + vec2(cos(an), sin(an))*0.03).a; } gl_FragColor = vec4(vec3(1.0,0.5,0.45)*(a*0.9 + g*0.06)*uA, 1.); }',
+    fragmentShader: 'uniform float uA; uniform sampler2D uMap; varying vec2 vU; void main(){ float a = texture2D(uMap, vU).a; float g = 0.; for (int i = 0; i < 12; i++) { float an = float(i)*0.5236; g += texture2D(uMap, vU + vec2(cos(an)*0.045, sin(an)*0.03)).a; } gl_FragColor = vec4((vec3(1.0,0.86,0.55)*a*0.95 + vec3(1.0,0.62,0.32)*g*0.05)*uA, 1.); }',
   }));
   starG.position.copy(CD); starG.renderOrder = 6; scene.add(starG);
 
@@ -581,12 +605,39 @@ function build() {
   shuttle = new THREE.Mesh(hg, new THREE.MeshBasicMaterial({ color: new THREE.Color(4.2, 1.5, 1.3) }));
   scene.add(shuttle);
 
+  // the visions, one per era with a Gomen, each with a halo behind it
+  const LEAN = 0.26;
+  VIS.forEach((v, vi) => {
+    const ic = visionIcon(v, vi), n = ic.cells.length / 2, E = ERAS[v.era], p = PANELS[vi], cx = (p.x0 + p.x1) / 2;
+    const vg = new THREE.InstancedBufferGeometry();
+    vg.index = box.index; vg.setAttribute('position', box.attributes.position); vg.setAttribute('normal', box.attributes.normal);
+    vg.setAttribute('aCell', new THREE.InstancedBufferAttribute(ic.cells, 2));
+    vg.setAttribute('aRnd', new THREE.InstancedBufferAttribute(Float32Array.from({ length: n * 4 }, (_, i) => hash(i >> 2, i & 3, 3000 + vi)), 4));
+    vg.instanceCount = n;
+    const base = V(cx, 0.4, -20);
+    const vu = {
+      uP: { value: 0 }, uLean: { value: LEAN }, uS: { value: VS }, uBase: { value: base }, uGrid: { value: new THREE.Vector2(ic.cols, ic.rows) },
+      uFloor: { value: new THREE.Vector2(p.x0, p.x1) }, uAtlas: { value: new THREE.Vector2(ic.cols * AC, ic.rows * AC) }, uMap: { value: tex(ic.atlas) },
+      uFogCol: U.uFogCol, uFogNear: U.uFogNear, uFogFar: U.uFogFar, uGold: { value: new THREE.Vector3(...lin3(E.gold)) },
+      uGlow: { value: E.key === 'glass' ? 0.55 : E.key === 'mosaic' ? 0.12 : 0 },
+    };
+    const mesh = new THREE.Mesh(vg, new THREE.ShaderMaterial({ vertexShader: VIS_VERT, fragmentShader: VIS_FRAG, uniforms: vu }));
+    mesh.frustumCulled = false; scene.add(mesh);
+    const hw = ic.cols * VS, hh = ic.rows * VS, mid = V(0, Math.cos(LEAN), -Math.sin(LEAN)).multiplyScalar(hh * 0.55).add(base);
+    const halo = new THREE.Mesh(new THREE.PlaneGeometry(hw * 2.2, hh * 1.9), new THREE.ShaderMaterial({
+      uniforms: { uA: { value: 0 }, uC: { value: new THREE.Vector3(...lin3(E.gold)) } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      vertexShader: 'varying vec2 vU; void main(){ vU = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }',
+      fragmentShader: 'uniform float uA; uniform vec3 uC; varying vec2 vU; void main(){ vec2 d = (vU - 0.5) * vec2(1.0, 1.15); float r = length(d), i = exp(-r * r * 22.0) * (1.0 - smoothstep(0.24, 0.5, r)); gl_FragColor = vec4(uC * i * uA, 1.); }',
+    }));
+    halo.position.copy(mid).add(V(0, Math.sin(LEAN), Math.cos(LEAN)).multiplyScalar(-1.5)); halo.rotation.x = -LEAN; halo.renderOrder = -1; scene.add(halo);
+    visions.push({ mesh, halo, u: vu });
+  });
+
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
   bloom = new UnrealBloomPass(new THREE.Vector2(W, H), 0.5, 0.35, 0.8);
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
-  buildPaths();
 }
 
 // ── words: big, outlined, on a soft plate so they read over anything ──
@@ -655,7 +706,7 @@ const SCRAPS = HEADLINES.map(([str, kind, w], i) => {
   const cols = TALL ? 2 : 4, rows = TALL ? 7 : 4, slot = (i * 5) % (cols * rows);
   const gx = (slot % cols + 0.5 + (hash(i, 1, 501) - 0.5) * 0.5) / cols;
   const gy = 0.06 + 0.88 * (Math.floor(slot / cols) + 0.5 + (hash(i, 2, 501) - 0.5) * 0.4) / rows;
-  return { str, kind, w, i, x: gx * W, y: gy * H, a: (hash(i, 3, 501) - 0.5) * 0.5, t0: 0.25 + i * 0.36, size: (TALL ? 62 : 74) * w };
+  return { str, kind, w, i, x: gx * W, y: gy * H, a: (hash(i, 3, 501) - 0.5) * 0.5, t0: HEADLINE_T[i], size: (TALL ? 62 : 74) * w };
 });
 function tornPath(ctx, w, h, i) {
   const pts = [], step = 22;
@@ -669,12 +720,18 @@ function tornPath(ctx, w, h, i) {
   edge(-w / 2, -h / 2, w / 2, -h / 2, 0); edge(w / 2, -h / 2, w / 2, h / 2, 1); edge(w / 2, h / 2, -w / 2, h / 2, 2); edge(-w / 2, h / 2, -w / 2, -h / 2, 3);
   ctx.beginPath(); pts.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath();
 }
+// the build: the beat quickens (lifted-timeline.mjs), the headlines come faster and
+// land harder, the frame shakes and closes in, then the tape stops and it all lies down
 function headlines(t) {
-  const ctx = ov, horizon = H * 0.5;
+  const ctx = ov, horizon = H * 0.5, build = Math.pow(clamp(t / STOP), 2);
+  const beatPulse = t < STOP ? Math.exp(-6 * (beatAt(t) % 1)) : 0;
+  // the frame closes in on the noise as it builds, and lets go when it flattens
+  const push = 1 + 0.1 * build * (1 - ease(ramp(t, STOP, STOP + 1.1)));
+  ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(push, push); ctx.translate(-W / 2, -H / 2);
   for (const sc of SCRAPS) {
     if (t < sc.t0) continue;
-    const slam = ease(ramp(t, sc.t0, sc.t0 + 0.16));
-    const tc = 5.3 + sc.i * 0.07, flat = ease(ramp(t, tc, tc + 1.35));
+    const slam = ease(ramp(t, sc.t0, sc.t0 + lerp(0.18, 0.08, sc.i / 13)));
+    const tc = STOP + sc.i * 0.07, flat = ease(ramp(t, tc, tc + 1.35));
     if (flat >= 1) continue;
     ctx.save();
     const font = sc.kind === 'serif' ? `700 ${sc.size}px ${NEWS}` : `700 ${sc.size}px ${TAB}`;
@@ -682,7 +739,7 @@ function headlines(t) {
     const tw = Math.min(ctx.measureText(sc.str).width * 0.82, W * (TALL ? 0.84 : 0.6));
     const cond = Math.min(0.82, (W * (TALL ? 0.84 : 0.6)) / ctx.measureText(sc.str).width);
     const w = tw + sc.size * 0.9, h = sc.size * (sc.kind === 'serif' ? 2.3 : 1.55);
-    const shake = (1 - flat) * (t < 5.3 ? 3 : 0);
+    const shake = (1 - flat) * (t < STOP ? 1.5 + 7 * build + 4 * beatPulse * build : 0);
     const sx = clamp(sc.x, w * 0.55 + 20, W - w * 0.55 - 20);
     const x = lerp(sx, sx * 0.6 + W * 0.2, flat) + Math.sin(t * 37 + sc.i * 3) * shake;
     const y = lerp(sc.y, horizon + (sc.i % 5 - 2) * 3, flat) + Math.cos(t * 41 + sc.i) * shake;
@@ -708,18 +765,31 @@ function headlines(t) {
     ctx.restore();
     ctx.restore();
   }
-  // the noise behind them: a dull flicker, gone once they are flattened
-  const fl = (1 - ease(ramp(t, 5.4, 7.0))) * clamp(t * 3);
-  if (fl > 0) { ctx.fillStyle = `rgba(90,20,15,${(0.08 * fl * (0.6 + 0.4 * Math.sin(t * 23))).toFixed(3)})`; ctx.fillRect(0, 0, W, H); }
+  ctx.restore();
+  // each landing flashes, harder as it builds
+  for (const sc of SCRAPS) { const u = t - sc.t0; if (u >= 0 && u < 0.4) { ctx.fillStyle = `rgba(255,236,214,${(0.05 + 0.13 * sc.i / 13) * Math.exp(-u * 16)})`; ctx.fillRect(0, 0, W, H); } }
+  // the noise behind them: a red pulse on every beat, gone once they are flattened
+  const fl = (1 - ease(ramp(t, STOP + 0.1, STOP + 1.7))) * clamp(t * 3);
+  if (fl > 0) { ctx.fillStyle = `rgba(110,18,12,${(fl * (0.05 + 0.16 * build * (0.4 + 0.6 * beatPulse))).toFixed(3)})`; ctx.fillRect(0, 0, W, H); }
+  // and the edges darken in, then open again
+  const close = build * (1 - ease(ramp(t, STOP, STOP + 1.2)));
+  if (close > 0) {
+    const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.hypot(W, H) * 0.55);
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, `rgba(0,0,0,${(0.55 * close).toFixed(3)})`); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
 }
 
 window.render = (t) => {
   const F = Fof(t);
-  const p = cameraAt(t);
+  const c = cameraAt(t), p = { pos: V(...c.pos), tgt: V(...c.tgt), roll: c.roll };
   if (TALL) {
-    // the tall frame is narrow: stand further back once we have left the plane
-    const back = t < 9 ? 1 : t < 44 ? lerp(1, 1.3, ease(ramp(t, 9, 18))) : lerp(1.3, 1.55, ease(ramp(t, 44, 52)));
-    p.pos.sub(p.tgt).multiplyScalar(back).add(p.tgt);
+    // the tall frame is narrow and deep: in the story, look down a little more steeply and
+    // stand a little closer, so the weave fills the lower half; at the disk, stand further back
+    const story = ease(ramp(t, 15, 20)) * (1 - ease(ramp(t, 43, 47)));
+    const back = t < 44 ? lerp(1, 0.9, story) : lerp(0.9, 1.55, ease(ramp(t, 44, 52)));
+    const rel = p.pos.clone().sub(p.tgt), r = rel.length() * back;
+    const el = Math.min(1.2, Math.asin(rel.y / rel.length()) + 0.2 * story), az = Math.atan2(rel.z, rel.x);
+    p.pos.copy(p.tgt).add(V(Math.cos(el) * Math.cos(az), Math.sin(el), Math.cos(el) * Math.sin(az)).multiplyScalar(r));
   }
   camera.position.copy(p.pos);
   camera.up.set(0, 1, 0); camera.lookAt(p.tgt);
@@ -741,10 +811,7 @@ window.render = (t) => {
     u.uRight.value.copy(right); u.uUp.value.copy(up); u.uFwd.value.copy(fwd);
     u.uFogCol.value.copy(bgc); u.uFogNear.value = fog[0]; u.uFogFar.value = fog[1];
   }
-  PANELS.forEach((p, i) => {
-    if (p.tPass === undefined) { const want = (p.x0 + p.x1) / 2 + 22; let k = 0; while (k < FT.length - 1 && FT[k] < want) k++; p.tPass = k / 100; }
-    U.uReveal.value[i] = 0.9 * win(t, p.tPass - 2.3, p.tPass + 1.9, 1.0, 1.0);
-  });
+  PANELS.forEach((p, i) => { U.uReveal.value[i] = 0.9 * win(t, p.tPass - 2.3, p.tPass + 1.9, 1.0, 1.0); });
   const lensA = ease(ramp(t, 52.4, 56.5));
   LU.uAlpha.value = 0.42 * lensA;
   lensMesh.visible = lensA > 0;
@@ -760,6 +827,11 @@ window.render = (t) => {
   curtain.material.uniforms.uA.value = fa * lerp(0.5, 1, ramp(t, 9, 13)); curtain.position.set(F + 0.1, 3.5, 0);
   shuttle.visible = fa > 0.05; shuttle.position.set(F + 0.1, 0.55, Math.sin(t * 4.2) * 15.5);
   shuttle.quaternion.copy(camera.quaternion); shuttle.scale.setScalar(1.25 * (1 + 0.18 * Math.exp(-14 * (((t - 1.2) % 0.72 + 0.72) % 0.72))));
+  visions.forEach((v, k) => {
+    const p = visionAt(k, t);
+    v.u.uP.value = p; v.mesh.visible = p > 0.001;
+    v.halo.material.uniforms.uA.value = 0.3 * Math.pow(p, 1.5); v.halo.visible = p > 0.001;
+  });
   bloom.strength = lerp(0.45, 0.85, ramp(t, 45, 54));
   composer.render();
 
