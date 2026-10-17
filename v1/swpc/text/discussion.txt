@@ -1,0 +1,65 @@
+:Product: Forecast Discussion
+:Issued: 2026 Oct 17 1230 UTC
+# Prepared by the U.S. Dept. of Commerce, NOAA, Space Weather Prediction Center
+#
+Solar Activity
+
+.24 hr Summary...
+Solar activity reached moderate levels. Region 4551 (S15W25,
+Eki/beta-gamma-delta) produced an impulsive M1.3/1n flare (R1-Minor) at
+16/1542 UTC, the strongest of the period. This region along with Region
+4557 (N17E07, Dai/beta) produced most of the C-class X-ray activity
+observed in the past 24 hours. These two regions exhibited minor growth
+and development among their spots, with the former developing relatively
+small mixed polarity spots inside its large, leading penumbra. Region
+4555 (S07W78, Axx/alpha) appeared to be in decay as it began its transit
+of the western limb.
+
+A notable CME was first observed by LASCO C2 coronagraph imagery at
+approximately 17/0236 UTC. This event originated from prominence
+eruption just on or behind the eastern limb, as evidenced by GOES SUVI
+304 imagery beginning near 17/0125 UTC, and is thus not Earth-directed.
+
+.Forecast...
+Solar activity is expected to be at low levels through 19 Oct, with a
+slight chance (20%) for M-class flares (R1-R2, Minor-Moderate) due
+mainly to the flare potential of Region 4551.
+
+Energetic Particle
+
+.24 hr Summary...
+The greater than 2 MeV electron flux reached high levels with a peak
+flux of 1,470 pfu at 16/1450 UTC. The greater than 10 MeV proton flux
+was at background levels.
+
+.Forecast...
+The greater than 2 MeV electron flux is expected be at normal to
+moderate levels through 19 Oct with a chance for brief periods of high
+levels. No S1 (Minor) solar radiation storms are expected through 19
+Oct.
+
+Solar Wind
+
+.24 hr Summary...
+Solar wind parameters were slightly elevated under diminishing HSS
+activity. Total field (Bt) maintained near 4-6 nT, with a variable Bz
+(north-south) component that was near neutral or northward. Solar wind
+speeds underwent a steady decrease, ending the reporting period near 420
+km/s. The phi angle was predominantly negative while undertaking several
+excursions into a positive orientation.
+
+.Forecast...
+Solar wind conditions are expected to trend towards nominal levels as
+influences from a negative polarity CH HSS slowly wanes, with a return
+to near-background/ambient levels by 18 Oct. Nominal conditions are
+expected to then persist through 19 Oct.
+
+Geospace
+
+.24 hr Summary...
+The geomagnetic field was at quiet to active levels.
+
+.Forecast...
+Mostly quiet conditions with isolated unsettled periods are expected on
+17 Oct under diminishing CH HSS effects. Quiet conditions are expected
+to prevail on 18 Oct and continue through 19 Oct.
