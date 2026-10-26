@@ -148,8 +148,8 @@ button { font: inherit; color: inherit; }
 @media (max-width: 480px) { .section-sub { flex-basis: 100%; font-size: 1.2em; } }
 
 /* Small uppercase labels, shared */
-.subtitle, .sky-label, .wf-links a, .wf-viewer, .wf-menu, .chip, .archive-card::before,
-.archive-footer-dir, .thread-label, .coherence-meter-label {
+.subtitle, .sky-label, .wf-links a, .wf-viewer, .wf-menu, .chip, .archive-card-kicker,
+.prov-kind, .thread-label, .coherence-meter-label {
   font-family: var(--sans); text-transform: uppercase; letter-spacing: 0.2em;
 }
 
@@ -699,70 +699,140 @@ h1 {
 .ideas-legend { margin-top: 14px; font-size: 0.84em; color: var(--ink-3); display: flex; flex-wrap: wrap; gap: 6px 18px; }
 .legend-item { white-space: nowrap; }
 
-/* ── Archive ── */
-/* auto-fit: on the wide column the few cards share the row instead of leaving empty tracks */
-.archive-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(196px, 1fr)); gap: var(--gutter); }
+/* ── Archive ──
+   A catalogue: one document per row. The kind of document stands above its
+   title, the description reads beside it, and the tags (words search finds,
+   not controls) close the row. The title is the card's link; its ::after
+   covers the card, so the whole card opens the document and the focus ring
+   goes round all of it. */
+.archive-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .archive-card {
-  position: relative; padding: 20px 18px 18px; cursor: pointer;
+  position: relative; padding: 14px 16px;
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
   transition: border-color 0.15s;
 }
-.archive-card:hover, .archive-card:focus-visible { border-color: var(--line-2); }
-.archive-card::before {
-  content: attr(data-category); position: absolute; top: 12px; right: 14px;
-  font-size: 0.66em; letter-spacing: 0.2em; color: var(--ink-3);
+.archive-card:hover, .archive-card:focus-within { border-color: var(--line-2); }
+.archive-card-kicker { font-size: 0.66em; font-weight: 500; color: var(--ink-3); line-height: 1.4; margin-bottom: 4px; }
+.archive-card-title { font-family: var(--serif); font-size: 1.3em; font-weight: 500; letter-spacing: 0.02em; color: var(--ink); line-height: 1.25; margin-bottom: 6px; }
+.archive-card-title a { color: inherit; text-decoration: none; }
+.archive-card-title a::after { content: ''; position: absolute; inset: 0; border-radius: var(--radius); }
+.archive-card:hover .archive-card-title a { text-decoration: underline 1px var(--gold); text-underline-offset: 4px; }
+.archive-card-title a:focus-visible { outline: none; }
+.archive-card-title a:focus-visible::after { outline: 2px solid var(--gold); outline-offset: 3px; }
+.archive-card-desc { font-size: 0.96em; color: var(--ink-2); line-height: 1.6; max-width: 62ch; }
+.archive-card-tags { font-family: var(--mono); font-size: 0.78em; color: var(--ink-3); letter-spacing: 0.04em; line-height: 1.5; margin-top: 8px; }
+@media (min-width: 600px) {
+  .archive-card {
+    display: grid; grid-template-columns: minmax(16rem, 1fr) minmax(0, 2.2fr) minmax(0, 1fr);
+    grid-template-rows: auto 1fr; /* a long description lengthens the title's row, never the kicker's */
+    column-gap: 28px; align-items: start; padding: 16px 18px;
+  }
+  .archive-card-kicker { grid-column: 1; grid-row: 1; }
+  .archive-card-title { grid-column: 1; grid-row: 2; margin: 0; }
+  .archive-card-desc { grid-column: 2; grid-row: 1 / span 2; }
+  .archive-card-tags { grid-column: 3; grid-row: 1 / span 2; margin: 0; text-align: right; }
 }
-.archive-card-title { font-family: var(--serif); font-size: 1.3em; font-weight: 500; letter-spacing: 0.02em; color: var(--ink); margin: 0 48px 8px 0; line-height: 1.25; text-wrap: balance; }
-.archive-card-desc { font-size: 0.96em; color: var(--ink-2); line-height: 1.6; margin-bottom: 14px; }
-.archive-card-tags { display: flex; flex-wrap: wrap; gap: 6px; }
-.archive-tag { font-family: var(--mono); font-size: 0.78em; padding: 3px 7px; border: 1px solid var(--line); border-radius: var(--radius); color: var(--ink-2); letter-spacing: 0.04em; }
+/* tablets: two columns, the tags under the description */
+@media (min-width: 600px) and (max-width: 900px) {
+  .archive-card { grid-template-columns: minmax(11rem, 1fr) minmax(0, 2fr); grid-template-rows: auto 1fr auto; }
+  .archive-card-tags { grid-column: 2; grid-row: 3; margin-top: 8px; text-align: left; }
+}
 .archive-empty { grid-column: 1 / -1; text-align: center; padding: 60px 20px; color: var(--ink-3); font-style: italic; }
 
-/* Reading panel */
+/* Reading panel: a sheet from the right on wide screens, the whole screen on
+   phones and short landscape screens. One 48 px row of chrome; the way to the
+   next document is at the foot of the text, not a bar held over it. */
 .archive-panel-overlay {
   display: none; position: fixed; inset: 0; background: var(--scrim); z-index: 9998;
   backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
 }
 .archive-panel-overlay.open { display: block; }
 .archive-panel {
-  display: none; position: fixed; top: 0; right: 0; width: 55%; max-width: 720px; height: 100vh;
+  display: none; position: fixed; top: 0; right: 0; width: 55%; max-width: 720px; height: 100vh; height: 100dvh;
   background: var(--bg); border-left: 1px solid var(--line); z-index: 9999; flex-direction: column;
 }
 .archive-panel.open { display: flex; }
-@media (max-width: 768px) { .archive-panel { width: 95%; max-width: none; } }
-.archive-panel-header { padding: 14px 24px; border-bottom: 1px solid var(--line); background: var(--bg); }
-.archive-panel-nav { display: flex; align-items: center; gap: 10px; }
-.archive-nav-btn, .archive-panel-close {
-  display: flex; align-items: center; justify-content: center; min-width: 38px; height: 38px;
-  border: 1px solid var(--line); border-radius: var(--radius); background: transparent; color: var(--ink-2);
-  cursor: pointer; padding: 0 10px; line-height: 1; transition: border-color 0.15s, color 0.15s;
+/* wide screens: a wider sheet, its contents a rail beside the text */
+@media (min-width: 1700px) { .archive-panel { width: min(960px, 50vw); max-width: none; } }
+@media (max-width: 767px), (max-height: 500px) { .archive-panel { width: 100%; max-width: none; border-left: 0; } }
+.archive-panel-header {
+  display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+  border-bottom: 1px solid var(--line); background: var(--bg);
 }
-.archive-panel-close { font-size: 1.4em; }
+.archive-nav-btn, .archive-panel-close {
+  flex: none; display: flex; align-items: center; justify-content: center; gap: 6px; min-width: 36px; height: 36px;
+  border: 1px solid var(--line); border-radius: var(--radius); background: transparent; color: var(--ink-2);
+  cursor: pointer; padding: 0 9px; line-height: 1; transition: border-color 0.15s, color 0.15s;
+}
+.archive-panel-close, #archiveBtnPrev, #archiveBtnNext { font-size: 1.4em; padding: 0; }
 .archive-nav-btn:hover:not(:disabled), .archive-panel-close:hover { border-color: var(--ink); color: var(--ink); }
 .archive-nav-btn:disabled { opacity: 0.3; cursor: default; }
+.archive-copy { font-size: 0.8em; letter-spacing: 0.04em; padding: 0; }
+.archive-copy.is-copied { border-color: var(--gold); color: var(--gold-2); }
 .archive-breadcrumbs { flex: 1; display: flex; align-items: center; gap: 6px; font-size: 0.9em; min-width: 0; overflow: hidden; }
 .archive-crumb { color: var(--ink-2); white-space: nowrap; }
-.archive-crumb-root { cursor: pointer; }
+.archive-crumb-root { flex: none; background: none; border: 0; padding: 0; font-size: inherit; cursor: pointer; }
 .archive-crumb-root:hover { color: var(--ink); text-decoration: underline; }
 .archive-crumb-sep { color: var(--ink-3); font-size: 0.85em; }
-.archive-crumb-title { color: var(--ink); font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.archive-crumb-title { min-width: 0; color: var(--ink); font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+/* The title has the row to itself until the sheet is wide enough (and the
+   screen tall enough) for the way back to the Archive and the category, which
+   the provenance bar names anyway; Copy link keeps its word only where it fits.
+   The sheet's width decides, not the screen's: at 768 it is a 422 px sheet. */
+.archive-panel { container: reader / inline-size; }
+.archive-crumb-root, .archive-crumb-cat, .archive-crumb-sep { display: none; }
+.archive-copy-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@container reader (min-width: 600px) {
+  .archive-copy { padding: 0 9px; }
+  .archive-copy-word { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
+}
+@media (min-height: 600px) {
+  @container reader (min-width: 600px) { .archive-crumb-root, .archive-crumb-cat, .archive-crumb-sep { display: inline; } }
+}
 .archive-panel-body { flex: 1; overflow-y: auto; padding: 34px 32px 44px; }
+/* the text takes focus only from script, so that the keys scroll it: no ring */
+.archive-panel-body:focus { outline: none; }
 @media (max-width: 600px) { .archive-panel-body { padding: 24px 18px 36px; } }
-.archive-panel-footer { display: flex; border-top: 1px solid var(--line); background: var(--bg); }
-.archive-footer-nav { flex: 1; padding: 14px 20px; cursor: pointer; font-size: 0.85em; color: var(--ink-2); display: flex; flex-direction: column; transition: background 0.15s; }
-.archive-footer-nav:hover:not([disabled]) { background: var(--bg-2); color: var(--ink); }
-.archive-footer-nav[disabled] { opacity: 0.3; cursor: default; pointer-events: none; }
-.archive-footer-nav.next { text-align: right; align-items: flex-end; border-left: 1px solid var(--line); }
-.archive-footer-dir { font-size: 0.78em; letter-spacing: 0.1em; color: var(--ink-3); }
-.archive-footer-name { color: var(--ink); margin-top: 2px; }
+
+/* Contents: folded at the head of the text, or a rail beside it on wide screens */
+.archive-toc { max-width: 64ch; margin-bottom: 22px; padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--radius); font-size: 0.92em; }
+.archive-toc summary { cursor: pointer; color: var(--ink-2); font-weight: 600; letter-spacing: 0.06em; }
+/* (no counters: most of these headings carry their own numbers) */
+.archive-toc ol { list-style: none; margin: 8px 0 2px; }
+.archive-toc li { margin: 3px 0; line-height: 1.45; padding-left: 1em; text-indent: -1em; }
+.archive-toc a { color: var(--ink); text-decoration: none; }
+.archive-toc a:hover { text-decoration: underline 1px var(--gold); text-underline-offset: 3px; }
+@media (min-width: 1700px) and (min-height: 501px) {
+  .archive-panel-body.has-toc { display: grid; grid-template-columns: minmax(9rem, 1fr) minmax(0, 64ch); column-gap: 36px; align-items: start; }
+  .has-toc > .archive-provenance { grid-column: 1 / -1; }
+  .has-toc > .archive-toc { grid-column: 1; position: sticky; top: 0; max-height: calc(100dvh - 120px); overflow-y: auto; margin: 0; padding: 0; border: 0; font-size: 0.86em; }
+  .has-toc > .archive-toc summary { margin-bottom: 4px; font-size: 0.86em; text-transform: uppercase; letter-spacing: 0.16em; list-style: none; }
+  .has-toc > .archive-toc summary::-webkit-details-marker { display: none; }
+  .has-toc > .archive-md, .has-toc > .archive-end { grid-column: 2; }
+}
+.archive-md [tabindex="-1"]:focus { outline: none; }
+
+/* The way on, at the foot of the text */
+.archive-end { max-width: 64ch; display: flex; flex-wrap: wrap; gap: 10px; margin-top: 34px; padding-top: 18px; border-top: 1px solid var(--line); }
+.archive-end-btn {
+  flex: 1 1 14em; min-height: 44px; padding: 10px 14px; text-align: left; cursor: pointer;
+  background: transparent; border: 1px solid var(--line); border-radius: var(--radius); color: var(--ink-2); font-size: 0.9em; line-height: 1.4;
+  transition: border-color 0.15s, color 0.15s;
+}
+.archive-end-btn.next { text-align: right; }
+.archive-end-btn:hover { border-color: var(--ink); color: var(--ink); }
+.archive-end-name { color: var(--ink); font-weight: 600; }
 
 .archive-provenance {
   display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline;
   padding: 10px 14px; margin-bottom: 22px;
   background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius);
 }
+.prov-kind { flex-basis: 100%; font-size: 0.66em; font-weight: 500; color: var(--ink-3); line-height: 1.4; }
 .prov-status { font-size: 0.84em; font-weight: 600; letter-spacing: 0.06em; color: var(--ink); }
 .prov-meta { font-size: 0.82em; color: var(--ink-2); letter-spacing: 0.04em; }
+.prov-agents { flex-basis: 100%; font-size: 0.82em; color: var(--ink-2); letter-spacing: 0.02em; }
+.prov-agents a { font-family: var(--mono); color: var(--ink); text-decoration: underline 1px var(--gold); text-underline-offset: 3px; white-space: nowrap; }
 .archive-loading { color: var(--ink-3); text-align: center; padding: 40px 0; }
 
 /* Markdown */
@@ -777,9 +847,10 @@ h1 {
 .archive-md em { font-style: italic; }
 .archive-md a { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--gold); }
 .archive-md a:hover { text-decoration-thickness: 2px; }
-.archive-md code { font-family: var(--mono); font-size: 0.9em; background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 1px 5px; }
+/* a long path or URL in running text breaks rather than widen the reader on a phone */
+.archive-md code { font-family: var(--mono); font-size: 0.9em; background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 1px 5px; overflow-wrap: anywhere; }
 .archive-md pre { display: block; padding: 16px 20px; margin: 14px 0; background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); font-family: var(--mono); font-size: 0.85em; line-height: 1.6; white-space: pre; overflow-x: auto; }
-.archive-md pre code { background: none; border: none; padding: 0; font-size: inherit; }
+.archive-md pre code { background: none; border: none; padding: 0; font-size: inherit; overflow-wrap: normal; }
 .archive-md ul, .archive-md ol { margin: 0 0 14px 24px; }
 .archive-md li { margin-bottom: 6px; }
 .archive-md li::marker { color: var(--gold); }
@@ -970,8 +1041,8 @@ footer > p { margin-top: 4px; }
   body.panel-open > :not(.archive-panel) { display: none !important; }
   body.panel-open { background: #fff; }
   body.panel-open .archive-panel { display: flex !important; position: static; width: 100%; max-width: none; height: auto; background: #fff; color: #111; border: none; }
-  body.panel-open .archive-panel-header, body.panel-open .archive-panel-footer { display: none !important; }
-  body.panel-open .archive-panel-body { overflow: visible; color: #111; }
+  body.panel-open .archive-panel-header, body.panel-open .archive-toc, body.panel-open .archive-end { display: none !important; }
+  body.panel-open .archive-panel-body { display: block; padding: 0; overflow: visible; color: #111; }
   body.panel-open .archive-md, body.panel-open .archive-md p, body.panel-open .archive-md li,
   body.panel-open .archive-md h1, body.panel-open .archive-md h2, body.panel-open .archive-md h3, body.panel-open .archive-md h4,
   body.panel-open .archive-md th, body.panel-open .archive-md td { color: #111 !important; }

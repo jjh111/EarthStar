@@ -261,28 +261,22 @@
 
 <div class="archive-panel-overlay" id="archivePanelOverlay"></div>
 
+<!-- The reader. One row of chrome: close, where you are, then Copy link and
+     previous / next. The way back to the Archive and the category show only
+     where there is room; the provenance bar under it names the kind of document.
+     The text itself takes the focus, so the keys scroll it. -->
 <div class="archive-panel" id="archivePanel" role="dialog" aria-modal="true" aria-labelledby="archiveDocTitle">
   <div class="archive-panel-header">
-    <div class="archive-panel-nav">
-      <button class="archive-nav-btn" id="archiveBtnPrev" disabled title="Previous document" aria-label="Previous document">&#8592;</button>
-      <button class="archive-nav-btn" id="archiveBtnNext" disabled title="Next document" aria-label="Next document">&#8594;</button>
-      <div class="archive-breadcrumbs" id="archiveBreadcrumbs">
-        <span class="archive-crumb archive-crumb-root">The Archive</span>
-      </div>
-      <button class="archive-panel-close" id="archivePanelClose" title="Close (Esc)" aria-label="Close document">&times;</button>
+    <button type="button" class="archive-panel-close" id="archivePanelClose" title="Close (Esc)" aria-label="Close document">&times;</button>
+    <div class="archive-breadcrumbs" id="archiveBreadcrumbs">
+      <span class="archive-crumb archive-crumb-title" id="archiveDocTitle">The Archive</span>
     </div>
+    <button type="button" class="archive-nav-btn archive-copy" id="archiveCopyLink" title="Copy a link to this place in the document"><span aria-hidden="true">⧉</span><span class="archive-copy-word">Copy link</span></button>
+    <button type="button" class="archive-nav-btn" id="archiveBtnPrev" disabled title="Previous document ([)" aria-label="Previous document">&#8249;</button>
+    <button type="button" class="archive-nav-btn" id="archiveBtnNext" disabled title="Next document (])" aria-label="Next document">&#8250;</button>
+    <span class="visually-hidden" id="archiveStatus" aria-live="polite"></span>
   </div>
-  <div class="archive-panel-body" id="archivePanelBody"></div>
-  <div class="archive-panel-footer" id="archivePanelFooter">
-    <div class="archive-footer-nav prev" id="archiveFooterPrev" role="button" tabindex="0">
-      <span class="archive-footer-dir">&#8592; Previous</span>
-      <span class="archive-footer-name" id="archivePrevName"></span>
-    </div>
-    <div class="archive-footer-nav next" id="archiveFooterNext" role="button" tabindex="0">
-      <span class="archive-footer-dir">Next &#8594;</span>
-      <span class="archive-footer-name" id="archiveNextName"></span>
-    </div>
-  </div>
+  <div class="archive-panel-body" id="archivePanelBody" tabindex="-1" role="document" aria-labelledby="archiveDocTitle"></div>
 </div>
 
     <footer id="garden" data-thread="Garden">

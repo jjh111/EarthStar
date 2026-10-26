@@ -33,8 +33,10 @@ export function initSearch() {
     }
   });
 
+  // (not while the archive reader is open: the page behind it is inert)
   document.addEventListener('keydown', (e) => {
     if (e.key !== '/' || e.target.closest('input, textarea, select, [contenteditable]')) return;
+    if (document.body.classList.contains('panel-open')) return;
     e.preventDefault();
     input.focus();
     input.select();

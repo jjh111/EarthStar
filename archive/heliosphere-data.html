@@ -1,3 +1,4 @@
+<details class="archive-toc"><summary>Contents</summary><ol><li><a href="#doc/heliosphere-data/when-to-load">When to load</a></li><li><a href="#doc/heliosphere-data/the-tiering-rule-accuracy-charter-made-operational">The tiering rule (Accuracy Charter, made operational)</a></li><li><a href="#doc/heliosphere-data/key-facts-that-override-prior-knowledge-verified-2026-09-06-08">Key facts that override prior knowledge (verified 2026-09-06/08)</a></li><li><a href="#doc/heliosphere-data/how-to-fetch-responsibly">How to fetch responsibly</a></li><li><a href="#doc/heliosphere-data/parsing-checklist">Parsing checklist</a></li><li><a href="#doc/heliosphere-data/contract-pointer">Contract pointer</a></li><li><a href="#doc/heliosphere-data/register-note">Register note</a></li></ol></details>
 <h1>Heliosphere Data — the verified catalog</h1>
 <p>This skill is the human-readable twin of <code>plans/DATA_CONTRACT.md</code>: what the upstream feeds
 <strong>actually</strong> return (fetched live, samples verbatim), and the formulas the platform
@@ -12,7 +13,7 @@ observed latency, tier, gotchas. Ends with the list of <strong>contract change r
 spiral, DONKI cone/ETA, GOES flare classes, Kp ↔ G-scale: formula, citation, unit-test
 values (IGRF cross-checked against the BGS calculator to ≤ 1 nT).</li>
 </ul>
-<h2>When to load</h2>
+<h2 id="doc/heliosphere-data/when-to-load">When to load</h2>
 <ul>
 <li>Any space-weather / geomagnetic / heliophysics <strong>data</strong> task: fetching, parsing, caching,
 charting, alerting, mirroring, unit-testing.</li>
@@ -25,7 +26,7 @@ skill&#39;s ledger: every value here already has a source and a fetch time).</li
 <p>Do <strong>not</strong> load for terrestrial weather, climate, astrology, or astronomy questions with
 no data/model component. The Earth Star framework (<code>earth-star</code> skill) is <em>not</em> implied by
 this skill — load it only when the user wants the Star-scale framing.</p>
-<h2>The tiering rule (Accuracy Charter, made operational)</h2>
+<h2 id="doc/heliosphere-data/the-tiering-rule-accuracy-charter-made-operational">The tiering rule (Accuracy Charter, made operational)</h2>
 <p>Every value belongs to exactly one tier, and the tier travels with it:</p>
 <table>
 <thead>
@@ -57,7 +58,7 @@ W m⁻², Kp, R_E); model names cited where the value is shown; Ambient never im
 Measured. NOAA&#39;s own products (scales, OVATION, Enlil) are <strong>Modeled·NOAA</strong> even though
 NOAA is authoritative — they are forecasts, not readings. DONKI is a <em>NASA research
 product</em>, and its own disclaimer says so; label it.</p>
-<h2>Key facts that override prior knowledge (verified 2026-09-06/08)</h2>
+<h2 id="doc/heliosphere-data/key-facts-that-override-prior-knowledge-verified-2026-09-06-08">Key facts that override prior knowledge (verified 2026-09-06/08)</h2>
 <ul>
 <li>SWPC <code>products/solar-wind/*.json</code> is <strong>gone (404)</strong>. Real-time wind is
 <code>json/rtsw/rtsw_mag_1m.json</code> / <code>rtsw_wind_1m.json</code>: objects, newest-first, three
@@ -78,7 +79,7 @@ minute (<code>…T13:58Z</code>); alerts use <code>&quot;YYYY-MM-DD HH:MM:SS.mmm
 packed without separators in Kyoto fixed-width text, all-<code>null</code> days when INTERMAGNET
 embargoes a station (<code>embargo_applied: true</code>).</li>
 </ul>
-<h2>How to fetch responsibly</h2>
+<h2 id="doc/heliosphere-data/how-to-fetch-responsibly">How to fetch responsibly</h2>
 <ol>
 <li><strong>Cache to the cadence.</strong> SWPC sets <code>cache-control: max-age=60</code>; poll 1-min products
 no faster than every 60 s, and only while the tab is visible. 5-min products (OVATION)
@@ -100,7 +101,7 @@ have a latency, and a latency-less value cannot be shown honestly.</li>
 <li><strong>Use system TLS.</strong> Anaconda&#39;s <code>curl</code> bundle rejected <code>ssd.jpl.nasa.gov</code> (&quot;self signed
 certificate in certificate chain&quot;); <code>/usr/bin/curl</code> and browsers accept it.</li>
 </ol>
-<h2>Parsing checklist</h2>
+<h2 id="doc/heliosphere-data/parsing-checklist">Parsing checklist</h2>
 <ul>
 <li>Reverse newest-first arrays (<code>rtsw_*</code>, <code>alerts</code>, <code>solar_regions</code>, <code>enlil_time_series</code>) to
 oldest→newest for the contract.</li>
@@ -116,13 +117,13 @@ oldest→newest for the contract.</li>
 <li>Horizons: the ephemeris is plain text inside <code>result</code> between <code>$$SOE</code>/<code>$$EOE</code>, ecliptic
 J2000, AU — rotate to HEE yourself.</li>
 </ul>
-<h2>Contract pointer</h2>
+<h2 id="doc/heliosphere-data/contract-pointer">Contract pointer</h2>
 <p>The platform&#39;s interface is <code>plans/DATA_CONTRACT.md</code> (Director-owned). Code against the
 envelope (<code>source, source_url, tier, model, fetched_at, data_time, latency_s, stale_after_s, units, data</code>), never against a transport. Where this catalog and the
 contract disagree, <strong>the catalog reports reality and the contract is what needs a change
 request</strong> — the current list is at the end of <code>references/sources.md</code>. Never edit the
 contract from a data task; open a <code>contract: …</code> PR or put the request in your PR body.</p>
-<h2>Register note</h2>
+<h2 id="doc/heliosphere-data/register-note">Register note</h2>
 <p>Space-weather numbers are seductive: they look precise and arrive every minute. Treat a
 latency of 5 min as part of the value. A propagated arrival time is a model. A forecast Kp
 is not a Kp. &quot;The shield compresses to 6.9 R_E&quot; is Shue 1998 given Dp = 10 nPa and Bz =

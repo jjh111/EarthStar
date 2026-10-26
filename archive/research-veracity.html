@@ -1,10 +1,11 @@
+<details class="archive-toc"><summary>Contents</summary><ol><li><a href="#doc/research-veracity/when-this-applies">When this applies</a></li><li><a href="#doc/research-veracity/1-the-claim-taxonomy">1. The Claim Taxonomy</a></li><li><a href="#doc/research-veracity/2-the-source-ladder">2. The Source Ladder</a></li><li><a href="#doc/research-veracity/3-the-verification-loop">3. The Verification Loop</a></li><li><a href="#doc/research-veracity/4-numbers-discipline">4. Numbers Discipline</a></li><li><a href="#doc/research-veracity/5-attribution">5. Attribution</a></li><li><a href="#doc/research-veracity/6-register-discipline-in-mixed-documents">6. Register Discipline in Mixed Documents</a></li><li><a href="#doc/research-veracity/7-failure-modes-to-watch-for">7. Failure Modes to Watch For</a></li><li><a href="#doc/research-veracity/quick-checklist-run-at-emit-time">Quick Checklist (run at emit time)</a></li><li><a href="#doc/research-veracity/companion-references">Companion references</a></li></ol></details>
 <h1>Research Veracity &amp; Provenance Protocol</h1>
 <p><strong>Truth-tending is tending.</strong> Unverified claims are informational waste; this protocol
 metabolizes them. It is framework-agnostic: it works for a grant application, a policy
 memo, a data-journalism piece, a technical README, or a due-diligence report. It was born
 inside the Earth Star framework (whose Earth-Star-specific rules live in
 <code>references/research_veracity.md</code>), but nothing below requires that framework.</p>
-<h2>When this applies</h2>
+<h2 id="doc/research-veracity/when-this-applies">When this applies</h2>
 <p>Any deliverable a skeptical reader will check: research, analysis, policy, journalism,
 grant and funding applications, technical documentation, market or scientific due
 diligence, data-backed reports, and <strong>any request to verify, source, cite, or fact-check
@@ -12,7 +13,7 @@ an existing draft</strong>. If the output contains a number, a date, a historica
 &quot;studies show,&quot; this protocol runs. It is part of writing, not a follow-up.</p>
 <p>It does not apply to fiction, casual conversation, or opinion that makes no factual claim
 — though even there, a stray statistic pulls it back in.</p>
-<h2>1. The Claim Taxonomy</h2>
+<h2 id="doc/research-veracity/1-the-claim-taxonomy">1. The Claim Taxonomy</h2>
 <p>Every factual assertion carries exactly one class. Tag inline while drafting (or in a
 working copy) — the tags can be stripped before delivery, but the <em>knowledge of which is
 which</em> must survive.</p>
@@ -59,7 +60,7 @@ which</em> must survive.</p>
 <p><strong>The register rule, stated once and hard:</strong> <em>certainty is a stance, not evidence.</em> If
 removing a visionary sentence weakens an argument&#39;s <em>validity</em> (not its beauty), the
 argument was broken. Vision stays; vision is never a citation.</p>
-<h2>2. The Source Ladder</h2>
+<h2 id="doc/research-veracity/2-the-source-ladder">2. The Source Ladder</h2>
 <p>Prefer higher rungs; <strong>record the rung you actually reached</strong>, not the one you wish you had:</p>
 <ol>
 <li><strong>Primary</strong> — the original measurement, dataset, statute text, filing, firsthand account</li>
@@ -71,7 +72,7 @@ argument was broken. Vision stays; vision is never a citation.</p>
 </ol>
 <p>A load-bearing claim resting on rung 5–6 is <strong>flagged, not asserted</strong>. A claim you
 &quot;remember&quot; is rung 6 until you find it again.</p>
-<h2>3. The Verification Loop</h2>
+<h2 id="doc/research-veracity/3-the-verification-loop">3. The Verification Loop</h2>
 <pre><code>1. DRAFT with claims tagged
    Write freely, in whatever voice the piece needs. Tag every factual assertion
    [E]/[H]/[D]/[P]/[M] as you go.
@@ -97,7 +98,7 @@ argument was broken. Vision stays; vision is never a citation.</p>
    Ship with citations; keep the ledger. It is the provenance record the next
    reader, agent, or auditor inherits.
 </code></pre>
-<h3>Claim Ledger Format</h3>
+<h3 id="doc/research-veracity/claim-ledger-format">Claim Ledger Format</h3>
 <pre><code>| # | Claim | Tag | Source | Rung | Confidence | Status |
 |---|-------|-----|--------|------|------------|--------|
 | 1 | US generated ~292M short tons MSW in 2018 | [E] | EPA, Facts and Figures about Materials, Waste and Recycling (2018 data, pub. 2020) | 3 | high | verified |
@@ -106,7 +107,7 @@ argument was broken. Vision stays; vision is never a citation.</p>
 | 4 | Proposed reclamation fund would tax per item | [P] | project draft text | — | n/a | design intent |
 </code></pre>
 <p>Keep the ledger as a file beside the deliverable (or an appendix), not in your head.</p>
-<h2>4. Numbers Discipline</h2>
+<h2 id="doc/research-veracity/4-numbers-discipline">4. Numbers Discipline</h2>
 <ul>
 <li>Every number carries a <strong>source and a date</strong>, or hedged language, or it does not ship.</li>
 <li><strong>Never interpolate</strong> a plausible-sounding figure to fill a gap. &quot;No reliable figure
@@ -119,7 +120,7 @@ dollars?). Most &quot;wrong&quot; numbers are right numbers with the wrong denom
 never ship as measurements. Cite a real proxy or say &quot;not yet measurable, here is how it
 could be.&quot;</li>
 </ul>
-<h2>5. Attribution</h2>
+<h2 id="doc/research-veracity/5-attribution">5. Attribution</h2>
 <ul>
 <li><strong>Cite the documented source, not the vibe.</strong> &quot;Ancient wisdom,&quot; &quot;studies show,&quot;
 &quot;experts agree&quot; are rung 6 until a name, a title, and a date are attached.</li>
@@ -131,7 +132,7 @@ communities or imply their endorsement of your project.</li>
 <li><strong>Quotations</strong> stay short, exact, and attributed. Paraphrase the rest.</li>
 <li><strong>LLM output, including your own earlier drafts</strong>, is rung 5. Re-verify before reuse.</li>
 </ul>
-<h2>6. Register Discipline in Mixed Documents</h2>
+<h2 id="doc/research-veracity/6-register-discipline-in-mixed-documents">6. Register Discipline in Mixed Documents</h2>
 <p>Many good documents braid voices — a stirring opening, an analytic core, a visionary
 close. The braid works <strong>only when the seams are honest</strong>:</p>
 <ul>
@@ -141,7 +142,7 @@ close. The braid works <strong>only when the seams are honest</strong>:</p>
 <li>For skeptical audiences, lead with <em>their</em> values and the <code>[E]</code>/<code>[H]</code> material; let the
 vision close the door behind a finished argument, not hold it up.</li>
 </ul>
-<h2>7. Failure Modes to Watch For</h2>
+<h2 id="doc/research-veracity/7-failure-modes-to-watch-for">7. Failure Modes to Watch For</h2>
 <ol>
 <li><strong>Confirmation search</strong> — googling the claim&#39;s own phrasing and stopping at the first
 agreement. <em>Fix</em>: search for the refutation first.</li>
@@ -154,7 +155,7 @@ settled, a forecast as a measurement.</li>
 <li><strong>Register leakage</strong> — a vision statement doing evidentiary work.</li>
 <li><strong>Attribution wash</strong> — &quot;indigenous wisdom,&quot; &quot;the science,&quot; &quot;experts&quot; without names.</li>
 </ol>
-<h2>Quick Checklist (run at emit time)</h2>
+<h2 id="doc/research-veracity/quick-checklist-run-at-emit-time">Quick Checklist (run at emit time)</h2>
 <ul>
 <li><input disabled="" type="checkbox"> Every load-bearing <code>[E]</code>/<code>[H]</code> claim has a citation with a date</li>
 <li><input disabled="" type="checkbox"> Adversarial pass done — I tried to refute, not confirm</li>
@@ -164,7 +165,7 @@ settled, a forecast as a measurement.</li>
 <li><input disabled="" type="checkbox"> Sources attributed by name; community knowledge names its people and its source</li>
 <li><input disabled="" type="checkbox"> Ledger retained alongside the deliverable</li>
 </ul>
-<h2>Companion references</h2>
+<h2 id="doc/research-veracity/companion-references">Companion references</h2>
 <ul>
 <li><code>references/research_veracity.md</code> — the Earth-Star-specific layer: the framework&#39;s five
 registers and three voices, its historical spine (Anderson, <em>Tending the Wild</em>, 2005) and

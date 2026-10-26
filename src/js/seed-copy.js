@@ -32,23 +32,7 @@ export function initSeedCopy() {
   btn.addEventListener('click', async () => {
     const text = seedText();
     if (!text) return;
-    let ok = false;
-    try {
-      await navigator.clipboard.writeText(text);
-      ok = true;
-    } catch {
-      // Clipboard API can be denied (permissions policy, non-secure context).
-      // Fall back to the legacy path rather than failing silently.
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.setAttribute('readonly', '');
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.select();
-      try { ok = document.execCommand('copy'); } catch { ok = false; }
-      ta.remove();
-    }
+    const ok = await copyText(text);
     btn.classList.toggle('is-copied', ok);
     btn.setAttribute('aria-label', ok ? 'Copied' : 'Copy failed — select the text manually');
     clearTimeout(resetTimer);
@@ -57,4 +41,31 @@ export function initSeedCopy() {
       btn.setAttribute('aria-label', 'Copy the seed: coherence line, equations, and seed phrase');
     }, 2000);
   });
+}
+
+// Put text on the clipboard; true if it got there. Shared with the archive
+// reader's Copy link.
+export async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // Clipboard API can be denied (permissions policy, non-secure context).
+    // Fall back to the legacy path rather than failing silently. The field
+    // goes in the focused element's parent, so a modal's inert backdrop
+    // cannot keep it from taking the selection.
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    const back = document.activeElement;
+    (back && back !== document.body ? back.parentNode : document.body).appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
+    ta.remove();
+    back?.focus?.({ preventScroll: true });
+    return ok;
+  }
 }

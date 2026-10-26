@@ -4,7 +4,7 @@ export const DOCS = [
     "id": "wrf",
     "title": "Waste Reclamation Fund",
     "category": "POLICY",
-    "description": "Legislative proposal: the WRF mechanism, funding structure, and implementation path.",
+    "description": "Draft bill: a fee on waste-making products and a penalty on planned obsolescence pay for Earth Stewards and reclamation research.",
     "tags": [
       "policy",
       "wrf",
@@ -20,7 +20,7 @@ export const DOCS = [
     "id": "harmonious-computing",
     "title": "Harmonious Computing Act",
     "category": "POLICY",
-    "description": "Model legislation treating datacenters as organs of living infrastructure — sited, powered, cooled, and integrated as mutualistic participants in urban and rural ecosystems.",
+    "description": "Model law that makes datacenters good neighbours: sited with the community, sparing with water, clean, quiet, and sharing their heat.",
     "tags": [
       "policy",
       "datacenter",
@@ -37,7 +37,7 @@ export const DOCS = [
     "id": "earth-star-skill",
     "title": "Earth Star Framework",
     "category": "FRAMEWORK",
-    "description": "The core framework — Gomens, Earth Stewards, five scales, kincentric worldview, seed equations, epistemic registers and failure modes. v3.1 of the skillset.",
+    "description": "The whole framework in one document: Gomens, Earth Stewards, the five scales, the seed equations, the five registers and how it fails.",
     "tags": [
       "framework",
       "gomens",
@@ -47,13 +47,17 @@ export const DOCS = [
       "status": "Framework specification — vision & design document (skill v3.1 core)",
       "author": "Earth Star / JHDesign",
       "date": "2025–2026 · v3.1"
+    },
+    "agents": {
+      "note": "For agents: the earth-star skill, v3.1 of the skillset.",
+      "skill": "dist/earth-star.skill"
     }
   },
   {
     "id": "research-veracity",
     "title": "Research Veracity Protocol",
     "category": "PROTOCOL",
-    "description": "The framework-agnostic truth-tending protocol: claim taxonomy, source ladder, adversarial verification loop, claim ledger, numbers discipline, attribution. Skill: earth-star-research.",
+    "description": "How a claim earns its place: a taxonomy of claims, a ladder of sources, a loop that tries to refute, and a ledger for every number.",
     "tags": [
       "protocol",
       "research",
@@ -64,13 +68,17 @@ export const DOCS = [
       "status": "Working protocol — applied to every analytic Earth Star deliverable",
       "author": "Earth Star / JHDesign",
       "date": "2026 · v3.1"
+    },
+    "agents": {
+      "note": "For agents: the earth-star-research skill.",
+      "skill": "dist/earth-star-research.skill"
     }
   },
   {
     "id": "heliosphere-data",
     "title": "Heliosphere Data Catalog",
     "category": "DATA",
-    "description": "The live-verified catalog behind The Viewer: every space-weather feed with its CORS status, shape, cadence, latency and evidence tier, plus the model reference values the platform tests against. Skill: heliosphere-data.",
+    "description": "Every space-weather feed behind the Viewer, fetched and checked: what each one returns, how often, how late, and how far to trust it.",
     "tags": [
       "data",
       "space weather",
@@ -81,6 +89,10 @@ export const DOCS = [
       "status": "Verified catalog — fetched live 2026-09-06/08; sources.md holds the records",
       "author": "Earth Star skill track",
       "date": "2026 · v3.1"
+    },
+    "agents": {
+      "note": "For agents: the heliosphere-data skill.",
+      "skill": "dist/heliosphere-data.skill"
     }
   }
 ];

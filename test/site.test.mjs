@@ -63,18 +63,33 @@ async function newPage(opts = {}) {
   check('title', (await page.title()).includes('Earth Star'));
   check('grid pre-rendered', await page.locator('.archive-card').count() >= 3);
 
-  await page.locator('.archive-card').first().scrollIntoViewIfNeeded();
-  await page.locator('.archive-card').first().click();
+  // A card opens by its title link; the reader takes the focus, so the keys
+  // read the text, and [ ] turn to the previous or next document
+  await page.locator('.archive-card a').first().scrollIntoViewIfNeeded();
+  await page.locator('.archive-card a').first().click();
   await page.waitForSelector('.archive-panel.open');
   await page.waitForSelector('.archive-md h1, .archive-md h2');
   check('panel opens with content', true);
   check('no sprout from card click', await page.locator('.emoji-transient').count() === 0);
   check('provenance line', await page.locator('.archive-provenance').count() === 1);
 
-  await page.keyboard.press('ArrowRight');
+  const readerTop = () => page.evaluate(() => document.getElementById('archivePanelBody').scrollTop);
+  await page.keyboard.press('PageDown');
   await page.waitForTimeout(400);
-  check('arrow nav', ((await page.locator('#archiveDocTitle').textContent()) || '').trim().length > 0);
+  const paged = await readerTop();
+  check('PageDown scrolls the document', paged > 0, `scrollTop ${paged}`);
+  await page.keyboard.press(' ');
+  await page.waitForTimeout(400);
+  check('Space does not close the reader', await page.locator('.archive-panel.open').count() === 1 && await readerTop() > paged);
+
+  const firstTitle = await page.locator('#archiveDocTitle').textContent();
+  await page.keyboard.press(']');
+  await page.waitForTimeout(400);
+  const nextTitle = await page.locator('#archiveDocTitle').textContent();
+  check('] turns to the next document', nextTitle.trim().length > 0 && nextTitle !== firstTitle, `${firstTitle} → ${nextTitle}`);
+  // Closing goes back through history, so it lands a moment later
   await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('.archive-panel.open'), null, { timeout: 2000 }).catch(() => {});
   check('esc closes', await page.locator('.archive-panel.open').count() === 0);
 
   await page.goto(BASE + '/#doc/earth-star-skill', { waitUntil: 'networkidle' });
@@ -82,7 +97,11 @@ async function newPage(opts = {}) {
   await page.waitForSelector('.archive-md table');
   const taxonomyCells = await page.locator('.archive-md td', { hasText: /^Empirical$/ }).count();
   check('skill doc taxonomy table renders', taxonomyCells === 1, `${taxonomyCells} cell(s) reading "Empirical"`);
+  // (closing is a step Back, and the browser restores the page's scroll a
+  // frame or two after it: let it land before scrolling)
   await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('.archive-panel.open'), null, { timeout: 2000 }).catch(() => {});
+  await page.waitForTimeout(300);
 
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForTimeout(300);
@@ -153,6 +172,22 @@ async function newPage(opts = {}) {
   await page.waitForTimeout(600);
   const after = await page.locator('.hero-images img').nth(3).evaluate(el => el.style.transform);
   check('scroll parallax (mobile)', before !== after);
+  await ctx.close();
+}
+
+{
+  // Back closes the reader and keeps the visitor on the site: opening a
+  // document is one history entry (it once replaced the page's own entry, so
+  // Back left for whatever came before)
+  const { ctx, page } = await newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  await page.goto('about:blank');
+  await page.goto(BASE + '/', { waitUntil: 'networkidle' });
+  await page.locator('.archive-card a').first().scrollIntoViewIfNeeded();
+  await page.locator('.archive-card a').first().click();
+  await page.waitForSelector('.archive-panel.open .archive-md h1');
+  await page.goBack();
+  await page.waitForTimeout(400);
+  check('back closes the reader', page.url().startsWith(BASE) && await page.locator('.archive-panel.open').count() === 0, page.url());
   await ctx.close();
 }
 
