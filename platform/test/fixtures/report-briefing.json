@@ -9,7 +9,7 @@
   "Solar X-ray background is class M1.2 (1.2e-5 watts per square metre, 0.1–0.8 nanometre band, GOES). Measured [E], 18:04 UTC.",
   "NOAA scales today: radio blackouts R1 (Minor), solar radiation S0 (None), geomagnetic storms G2 (Moderate). NOAA's own product, modeled [D].",
   "Modeled [D] magnetopause standoff: 8.4 Earth radii on the sunward side, with flaring parameter 0.60, computed from the propagated solar wind above (dynamic pressure 4.20 nanopascals) using Shue et al. 1998, doi:10.1029/98JA01103. That is a compressed magnetosphere — the shield is being pushed in. The bow shock stands off at 10.9 Earth radii (Farris & Russell 1994).",
-  "Most recent NOAA notice, 12:00 UTC: K-index of 5. 1 notices in the last three days.",
+  "No NOAA notice is in force (checked 18:10 UTC). The most recent, K-index of 5, was issued 12:00 UTC (validity not stated). 1 notice in the last 72 h.",
   "2 cones are drawn expanding from the Sun [D], warm where Earth lies inside the cone and cool where it does not. The apex direction, half-angle and speed are DONKI's analysis of coronagraph imagery; the radial propagation is ours.",
   "Scene: the Sun at centre, with all eight planets at their true positions for 18:10 UTC, computed locally with astronomy-engine [D]. The Sun is currently overhead at 5.9°N, 93.0°W, and Earth's day/night terminator in the scene is drawn from that point [D]. The Moon is shown at its true direction from Earth.",
   "Earth's surface is measured imagery [E]: NASA's Blue Marble Next Generation composite, acquired through 2004, with NASA's Black Marble 2016 night lights drawn as emission on the night side. Nothing about it is live — it is a dated composite, and it says so here rather than pretending to be today's clouds.",

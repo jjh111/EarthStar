@@ -12,8 +12,9 @@ import type { SpacecraftPos } from '../data/ephemerides.js';
 import { hhmmUTC, formatAge } from '../contract/types.js';
 import type { AuroraNow, Envelope } from '../contract/types.js';
 import type { Cme } from '../data/cme.js';
-import { stalenessOf } from './format.js';
-import { errorReason } from '../data/state.js';
+import { splitNotices, stalenessOf, whenUTC } from './format.js';
+import { errorReason, valueState } from '../data/state.js';
+import { ALERT_LIMIT } from '../data/swpc.js';
 import { scaleLabel, type ScaleMode } from '../scene/scales.js';
 import { subsolarPoint } from '../models/ephemeris.js';
 import { igrfCitation } from '../models/igrf14.js';
@@ -410,15 +411,54 @@ export function buildReportLines(
       say('shield', 'Magnetopause standoff: not computed, because the solar-wind inputs it needs are missing. No boundary is drawn.', 'inst.mpause', 'model.shue1998');
     }
 
-    /* --- Alerts --------------------------------------------------------- */
-    if (d.alerts.length > 0) {
-      const a = d.alerts[0]!;
-      say('geomagnetic', 
-        `Most recent NOAA notice, ${hhmmUTC(a.issued)} UTC: ${a.headline || a.product}. ` +
-        `${d.alerts.length} notices in the last three days.`,
-      );
+    /* --- NOAA notices --------------------------------------------------- */
+    // Three different claims, never blurred: the feed could not be read; it
+    // was read and a notice is in force; it was read and none is. Only the
+    // last may say so, and it says when it looked. "In force" is NOAA's own
+    // validity, read by `parseAlerts`; the rules are this subject's limits.
+    const ns = valueState({
+      lane: { loading: lanes.snapshot, error: null, nextAttempt: lanes.nextAttempt ?? null },
+      received: true, meta: p.alerts, now,
+    });
+    if (ns.state === 'error') {
+      say('geomagnetic',
+        `NOAA notices: unavailable (${errorReason(p.alerts?.error)}).${nextAttemptText(lanes)}`,
+        'concept.noaa-notices');
     } else {
-      say('geomagnetic', 'No NOAA alerts, watches or warnings in the feed.');
+      const { current, ended } = splitNotices(d.alerts, now);
+      // Counted from issue times, not from the length of a list that is cut
+      // at ALERT_LIMIT — and when the cut falls inside the window, said so.
+      const since = now.getTime() - 72 * 3.6e6;
+      const recent = d.alerts.filter((a) => Date.parse(a.issued) >= since).length;
+      const oldest = d.alerts[d.alerts.length - 1];
+      const cut = d.alerts.length >= ALERT_LIMIT && !!oldest && Date.parse(oldest.issued) >= since;
+      const count = recent === 0 ? ' No notices in the last 72 h.'
+        : ` ${cut ? 'At least ' : ''}${recent} notice${recent === 1 ? '' : 's'} in the last 72 h.`;
+      if (current.length > 0) {
+        const a = current[0]!;
+        const onset = a.beganAt && Date.parse(a.issued) - Date.parse(a.beganAt) > 3.6e6
+          ? `; the condition began ${whenUTC(a.beganAt, now)}` : '';
+        say('geomagnetic',
+          `NOAA notice in force: ${a.headline || a.product}, issued ${whenUTC(a.issued, now)}` +
+          (a.validityStated
+            ? ` and in force until ${whenUTC(a.validUntil, now)}`
+            : `; its validity is not stated, so it is held in force until ${whenUTC(a.validUntil, now)}`) +
+          `${onset}.` +
+          (current.length > 1 ? ` ${current.length - 1} more ${current.length === 2 ? 'is' : 'are'} in force.` : '') +
+          count,
+          'concept.noaa-notices');
+      } else {
+        const last = ended[0];
+        say('geomagnetic',
+          `No NOAA notice is in force (checked ${hhmmUTC(env?.fetched_at)} UTC).` +
+          (last
+            ? ` The most recent, ${last.headline || last.product}, was issued ${whenUTC(last.issued, now)}` +
+              (!last.validityStated ? ' (validity not stated).'
+                : last.validUntil ? ` and ended ${whenUTC(last.validUntil, now)}.` : ' and has ended.')
+            : ' The feed carried none.') +
+          count,
+          'concept.noaa-notices');
+      }
     }
   }
 

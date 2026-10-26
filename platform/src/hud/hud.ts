@@ -4,10 +4,10 @@
  */
 
 
-import type { AlertLevel } from '../contract/types.js';
+import type { AlertItem } from '../contract/types.js';
 import type { PartMeta } from '../data/source.js';
 import type { StoreState } from '../data/store.js';
-import { valueState, type DataState } from '../data/state.js';
+import { errorReason, valueState, type DataState } from '../data/state.js';
 import type { FrameStats } from '../scene/viewer.js';
 import { ImageCache } from './image-cache.js';
 import type { CheckResult } from '../data/checks.js';
@@ -15,15 +15,15 @@ import type { ForecastBundle } from '../data/forecast.js';
 import type { SolarCycle } from '../data/solar-cycle.js';
 import { LOOPS, type ImageLoop } from '../data/solar-imagery.js';
 import {
-  NO_DATA, badgeFor, badgeTitle, hhmmUTC,
+  NO_DATA, badgeFor, badgeTitle, hhmmUTC, noticeWord, splitNotices, validityText, whenUTC,
 } from './format.js';
 import { INSTRUMENTS } from './instruments.js';
 import type { SunPlaneCalibration } from '../scene/sun-plane.js';
 import { tileSpark } from './tile-spark.js';
 import { inlineSpark } from './sparkline.js';
 import {
-  BODY_PREFIX, TABS, escapeHtml, renderChecks, renderDetail, renderForecast, renderReport,
-  renderSources, renderSun, type SunState, type TabId,
+  BODY_PREFIX, NOTICES_DETAIL, NOTICES_SUBJECT, TABS, escapeHtml, renderChecks, renderDetail,
+  renderForecast, renderReport, renderSources, renderSun, type SunState, type TabId,
 } from './margin.js';
 import { buildSituationReport, type SceneNarration } from './situation-report.js';
 import { briefingFilename, buildBriefing } from './briefing.js';
@@ -42,15 +42,57 @@ export interface HudCallbacks {
   onSunPlanes?(on: boolean): void;
 }
 
-/** Now, then expected, then possible, then over. */
-const LEVEL_RANK: Record<AlertLevel, number> = {
-  alert: 0, warning: 1, watch: 2, cancel: 3, summary: 4, other: 5,
-};
+/**
+ * The NOAA notices as the header and the ticker carry them.
+ *
+ * Only a notice in force by NOAA's own validity may say "now" or "expected";
+ * everything else says it has ended and carries its date. Among the current
+ * ones the order is what NOAA's words mean rather than the clock: happening
+ * now, then expected, then possible. When there is no notice to show, the
+ * ticker states a fact instead — loading, unavailable with when it is
+ * retried, or nothing in force as of a time — and never reassurance.
+ */
+export function noticeTicker(state: StoreState, now = new Date()): { top: AlertItem | null; items: string } {
+  const env = state.now;
+  const lane = {
+    loading: state.lanes.snapshot, error: env ? null : state.lastError, nextAttempt: state.nextAttempt,
+  };
+  const st = valueState({ lane, received: !!env, meta: env?.parts?.alerts, now });
+  const fact = (text: string, cls = ''): string =>
+    `<span class="ticker-item level-none${cls}"><span class="alert-text">${escapeHtml(text)}</span></span>`;
 
-const LEVEL_WORD: Record<AlertLevel, string> = {
-  alert: 'now', warning: 'expected', watch: 'possible',
-  cancel: 'cancelled', summary: 'ended', other: 'notice',
-};
+  if (st.state === 'loading') return { top: null, items: fact('Loading NOAA notices…') };
+  if (st.state === 'error') {
+    const reason = errorReason(lane.error ?? env?.parts?.alerts?.error);
+    const retry = state.nextAttempt ? `${hhmmUTC(state.nextAttempt)} UTC` : 'on the next refresh';
+    return { top: null, items: fact(`NOAA notices unavailable — ${reason}; retrying ${retry}`, ' is-error') };
+  }
+
+  const { current, ended } = splitNotices(env?.data?.alerts ?? [], now);
+  if (current.length === 0) {
+    const last = ended[0];
+    return {
+      top: null,
+      items: env ? fact(`No NOAA notice in force · checked ${hhmmUTC(env.fetched_at)} UTC${
+        last ? ` · last: ${last.text || last.product} ${whenUTC(last.issued, now)}` : ''}`)
+        : fact(NO_DATA),
+    };
+  }
+
+  // Current first, then whatever ended in the last day, six at most.
+  const dayAgo = now.getTime() - 24 * 3.6e6;
+  const shown = [...current, ...ended.filter((a) => Date.parse(a.issued) >= dayAgo)].slice(0, 6);
+  const items = shown.map((a) => {
+    const live = current.includes(a);
+    return `<span class="ticker-item level-${live ? a.level : 'summary'}" title="${
+      escapeHtml(`${validityText(a, now)} — ${a.message.slice(0, 400)}`)}">`
+      + `<span class="alert-level">${escapeHtml(noticeWord(a, now))}</span>`
+      + `<span class="alert-text">${escapeHtml(a.text || a.product)}</span>`
+      + `<span class="alert-time">${escapeHtml(whenUTC(a.issued, now))}${
+        a.validityStated ? '' : ' · validity not stated'}</span></span>`;
+  }).join('');
+  return { top: current[0] ?? null, items };
+}
 
 export class Hud {
   private instrumentsEl: HTMLElement;
@@ -306,6 +348,8 @@ export class Hud {
       if (corona) { this.cb.onSelectCorona?.(corona.dataset['corona'] || null); return; }
       if (el.closest('[data-planes]')) { this.setSunPlanes(!this.sunPlanesOn); return; }
       if (el.closest('#sun-play')) { this.cb.onToggleSunPlay(); return; }
+      const back = el.closest('[data-back]') as HTMLElement | null;
+      if (back) { this.selectTab(back.dataset['back'] as TabId); this.bodyEl.focus(); return; }
     });
     this.bodyEl.addEventListener('input', (e) => {
       const el = e.target as HTMLInputElement;
@@ -410,10 +454,26 @@ export class Hud {
   /** Open any subject — a model, a drawn layer, an idea — by registry id. */
   showSubject(id: string): void { this.openDetail(id); }
 
+  /** Every NOAA notice in the feed, verbatim — from the header notice and the ticker. */
+  openNotices(): void { this.openDetail(NOTICES_DETAIL); }
+
   private openDetail(id: string): void {
+    // The notices subject is read where the notices are, not as a card of its own.
+    if (id === NOTICES_SUBJECT) id = NOTICES_DETAIL;
     this.tab = 'detail';
     this.detailId = id;
-    for (const b of this.tabsEl.querySelectorAll('[data-tab]')) b.setAttribute('aria-selected', 'false');
+    // Notices are the Now tab's own detail, so its tab stays lit and is the way
+    // back; any other detail is opened from a tile or the scene and names itself.
+    const home: TabId | null = id === NOTICES_DETAIL ? 'report' : null;
+    for (const b of this.tabsEl.querySelectorAll('[data-tab]')) {
+      const on = b.getAttribute('data-tab') === home;
+      b.setAttribute('aria-selected', String(on));
+      if (home) b.setAttribute('tabindex', on ? '0' : '-1');
+    }
+    if (home) {
+      this.bodyEl.setAttribute('aria-labelledby', `tab-${home}`);
+      this.bodyEl.removeAttribute('aria-label');
+    }
     for (const [k, el] of this.tiles) {
       if (el.tagName === 'BUTTON') el.setAttribute('aria-current', String(k === id));
     }
@@ -551,38 +611,23 @@ export class Hud {
       : d?.solar_wind ? 'fresh'
         : (env?.parts?.solar_wind?.error ?? state.lastError) ? 'error' : 'no-data');
 
-    // Notices. Ordered by what NOAA's own words mean rather than by clock:
-    // something happening now outranks something expected, which outranks
-    // something possible, which outranks something already over.
-    const alerts = [...(d?.alerts ?? [])].sort(
-      (a, b) => (LEVEL_RANK[a.level] ?? 9) - (LEVEL_RANK[b.level] ?? 9)
-        || Date.parse(b.issued) - Date.parse(a.issued),
-    );
-
-    // The most consequential one goes in the header, where the space was empty.
-    const top = alerts[0];
+    // Notices: the header shows the most consequential one in force, or
+    // nothing — it never says "all clear". The ticker's text is built by
+    // `noticeTicker`, a pure function, so its failed state can be tested.
+    const notices = noticeTicker(state, now);
+    const top = notices.top;
     this.headlineEl.hidden = !top;
     if (top) {
       this.headlineEl.className = `headline-alert level-${top.level}`;
       this.headlineEl.innerHTML =
-        `<span class="alert-level">${escapeHtml(LEVEL_WORD[top.level] ?? 'notice')}</span>`
+        `<span class="alert-level">${escapeHtml(noticeWord(top, now))}</span>`
         + `<span class="alert-text">${escapeHtml(top.text || top.product)}</span>`
-        + `<span class="alert-time">${hhmmUTC(top.issued)} UTC</span>`;
-      this.headlineEl.title = top.message.slice(0, 400);
+        + `<span class="alert-time">${escapeHtml(whenUTC(top.issued, now))}</span>`;
+      this.headlineEl.title = `${validityText(top, now)} — ${top.message.slice(0, 400)}`;
     }
-
     this.tickerEl.innerHTML =
       '<span class="ticker-tag">NOAA</span><span class="ticker-items" data-t></span>';
-    const t = this.tickerEl.querySelector('[data-t]') as HTMLElement;
-    t.innerHTML = alerts.length
-      ? alerts.slice(0, 6).map((a) =>
-        `<span class="ticker-item level-${a.level}" title="${escapeHtml(a.message.slice(0, 400))}">`
-        + `<span class="alert-level">${escapeHtml(LEVEL_WORD[a.level] ?? 'notice')}</span>`
-        + `<span class="alert-text">${escapeHtml(a.text || a.product)}</span>`
-        + `<span class="alert-time">${hhmmUTC(a.issued)}</span></span>`).join('')
-      : `<span class="ticker-item level-none"><span class="alert-text">${
-        d ? 'No watches, warnings or alerts outstanding.'
-          : state.lanes.snapshot ? 'Loading NOAA notices…' : NO_DATA}</span></span>`;
+    (this.tickerEl.querySelector('[data-t]') as HTMLElement).innerHTML = notices.items;
     this.fitTicker();
 
     // Status — four states, because "not live", "partly working" and "not
@@ -794,11 +839,19 @@ export class Hud {
       const all = [...items.querySelectorAll('.ticker-item')] as HTMLElement[];
       for (const el of all) el.hidden = false;
       box.querySelector('.ticker-more')?.remove();
+      box.querySelector('.ticker-all')?.remove();
       box.classList.toggle('is-expanded', this.tickerExpanded);
 
-      // Expanded shows everything; it only needs a way back.
+      // Expanded shows everything; it needs a way back, and a way on to the
+      // notices as NOAA wrote them.
       if (this.tickerExpanded) {
         if (all.length > 1) items.append(this.tickerMoreButton('show fewer', true));
+        const verbatim = document.createElement('button');
+        verbatim.className = 'ticker-all';
+        verbatim.type = 'button';
+        verbatim.textContent = 'all notices, verbatim';
+        verbatim.addEventListener('click', () => this.openNotices());
+        items.append(verbatim);
         return;
       }
 

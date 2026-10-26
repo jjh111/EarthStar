@@ -267,9 +267,133 @@ export function parseScalesNow(json: unknown): ScalesNow | null {
  * Alerts
  * ---------------------------------------------------------------- */
 
-export function parseAlerts(json: unknown, limit = 8): AlertItem[] {
-  return asArray(json)
-    .map((r) => {
+/**
+ * How many notices the HUD keeps, after each chain has collapsed. The feed
+ * carries about thirty days; eight was too few to say how many had been issued
+ * in the last three, and the Situation Report used to quote the eight as if it
+ * were that count.
+ */
+export const ALERT_LIMIT = 20;
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const HOUR = 3_600_000;
+const DAY = 24 * HOUR;
+
+/** NOAA writes times inside a message as `2026 Oct 23 1955 UTC`. */
+function noaaTime(raw: string | null): string | null {
+  const m = /^(\d{4})\s+([A-Za-z]{3})\s+(\d{1,2})\s+(\d{2})(\d{2})\s*UTC/.exec(raw ?? '');
+  if (!m) return null;
+  const month = MONTHS.indexOf(m[2]!.slice(0, 1).toUpperCase() + m[2]!.slice(1).toLowerCase());
+  if (month < 0) return null;
+  const t = Date.UTC(Number(m[1]), month, Number(m[3]), Number(m[4]), Number(m[5]));
+  return Number.isFinite(t) ? new Date(t).toISOString() : null;
+}
+
+/** The value of a `Label: value` line, matched from the start of the line. */
+function field(lines: string[], label: string): string | null {
+  const re = new RegExp(`^${label}\\s*:\\s*(.*)$`, 'i');
+  for (const l of lines) {
+    const m = re.exec(l);
+    if (m) return m[1]!.trim();
+  }
+  return null;
+}
+
+const iso = (t: number): string => new Date(t).toISOString();
+
+/**
+ * A K-index alert's three-hour synoptic period, placed on the day the
+ * threshold was reached (or, failing that, the day it was issued). A period
+ * that starts after that moment belongs to the day before — NOAA issues the
+ * 2100–2400 alert a few minutes into the next day.
+ */
+function synopticPeriod(raw: string | null, anchor: string): { from: string; until: string } | null {
+  const m = /^(\d{2})(\d{2})\s*-\s*(\d{2})(\d{2})/.exec(raw ?? '');
+  const at = Date.parse(anchor);
+  if (!m || !Number.isFinite(at)) return null;
+  const day = at - (at % DAY);
+  let from = day + Number(m[1]) * HOUR + Number(m[2]) * 60_000;
+  let until = day + Number(m[3]) * HOUR + Number(m[4]) * 60_000;
+  if (until <= from) until += DAY;
+  if (from > at) { from -= DAY; until -= DAY; }
+  return { from: iso(from), until: iso(until) };
+}
+
+/**
+ * The days a WATCH names, as `Oct 21:  G1 (Minor)   Oct 22: …`. The year is
+ * the issue year, except that a December watch naming January means the next.
+ */
+function watchDays(message: string, issued: string): number[] {
+  const at = new Date(issued);
+  const out: number[] = [];
+  const body = message.split(/Predicted by Day:/i)[1] ?? '';
+  for (const m of body.matchAll(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2})\s*:/g)) {
+    const month = MONTHS.indexOf(m[1]!);
+    const year = at.getUTCFullYear() + (month < at.getUTCMonth() - 6 ? 1 : 0);
+    out.push(Date.UTC(year, month, Number(m[2])));
+  }
+  return out;
+}
+
+interface Validity {
+  validFrom: string | null;
+  validUntil: string | null;
+  validityStated: boolean;
+}
+
+/**
+ * When a notice stops being current. NOAA states this for some kinds and
+ * implies it for others, and the HUD may call a notice "now" or "expected"
+ * only inside this window:
+ *
+ *  · WARNING and EXTENDED WARNING — `Valid To`, or `Now Valid Until` once
+ *    extended.
+ *  · ALERT with a synoptic period (the K-index alerts) — the end of that
+ *    three-hour period.
+ *  · any other ALERT, and CONTINUED ALERT — 24 h after issue, unless it states
+ *    an end. NOAA reissues a CONTINUED ALERT daily for as long as the
+ *    condition lasts, so a day without one means it has stopped. A SUMMARY of
+ *    the same series ends it sooner (see `parseAlerts`).
+ *  · WATCH — the end of the last UTC day it names, or 72 h after issue.
+ *  · SUMMARY and CANCEL — already over: valid until the moment of issue.
+ *  · anything the parser cannot read — 24 h after issue, flagged
+ *    `validityStated: false`. A wording NOAA changes tomorrow then errs toward
+ *    showing a notice, marked as such, rather than calling it ended on the day
+ *    it was issued.
+ */
+function validity(
+  level: AlertLevel, lines: string[], message: string, issued: string, began: string | null,
+): Validity {
+  const t = Date.parse(issued);
+  const stated = noaaTime(field(lines, 'Now Valid Until')) ?? noaaTime(field(lines, 'Valid To'));
+  const from = noaaTime(field(lines, 'Valid From'));
+  const fallback: Validity = { validFrom: from, validUntil: iso(t + DAY), validityStated: false };
+  switch (level) {
+    case 'warning':
+      return stated ? { validFrom: from, validUntil: stated, validityStated: true } : fallback;
+    case 'alert': {
+      if (stated) return { validFrom: from, validUntil: stated, validityStated: true };
+      const period = synopticPeriod(field(lines, 'Synoptic Period'), began ?? issued);
+      if (period) return { validFrom: period.from, validUntil: period.until, validityStated: true };
+      return { validFrom: from ?? began, validUntil: iso(t + DAY), validityStated: true };
+    }
+    case 'watch': {
+      const days = watchDays(message, issued);
+      return days.length
+        ? { validFrom: iso(Math.min(...days)), validUntil: iso(Math.max(...days) + DAY), validityStated: true }
+        : { validFrom: from, validUntil: iso(t + 3 * DAY), validityStated: false };
+    }
+    case 'summary':
+    case 'cancel':
+      return { validFrom: from, validUntil: issued, validityStated: true };
+    default:
+      return fallback;
+  }
+}
+
+export function parseAlerts(json: unknown, limit = ALERT_LIMIT): AlertItem[] {
+  const all = asArray(json)
+    .map((r): AlertItem | null => {
       const issued = swpcTime(r['issue_datetime'] as string);
       const message = ((r['message'] as string) ?? '').replace(/\r/g, '');
       if (!issued) return null;
@@ -279,27 +403,69 @@ export function parseAlerts(json: unknown, limit = 8): AlertItem[] {
       // K04A" is a correct first line and a useless headline.
       const lines = message.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
       const headline =
-        lines.find((l) => /^(ALERT|WARNING|WATCH|SUMMARY|EXTENDED WARNING|CANCEL)/i.test(l))
+        lines.find((l) => /^(CONTINUED ALERT|ALERT|WARNING|WATCH|SUMMARY|EXTENDED WARNING|CANCEL)/i.test(l))
         ?? lines.find((l) => !/^(Space Weather Message Code|Serial Number|Issue Time|Valid From|Valid To)\b/i.test(l))
         ?? lines[0]
         ?? '';
-      const m = /^(EXTENDED WARNING|CANCEL WARNING|CANCEL|ALERT|WARNING|WATCH|SUMMARY)\s*:?\s*(.*)$/i
+      const m = /^(EXTENDED WARNING|CANCEL(?: WARNING| WATCH| ALERT)?|CONTINUED ALERT|ALERT|WARNING|WATCH|SUMMARY)\s*:?\s*(.*)$/i
         .exec(headline);
       const word = (m?.[1] ?? '').toUpperCase();
+      // A CONTINUED ALERT is the same alert reissued while the condition
+      // lasts — the one notice in the feed most likely to be current.
       const level: AlertLevel =
         word.startsWith('CANCEL') ? 'cancel'
-          : word === 'ALERT' ? 'alert'
+          : word === 'ALERT' || word === 'CONTINUED ALERT' ? 'alert'
             : word.includes('WARNING') ? 'warning'
               : word === 'WATCH' ? 'watch'
                 : word === 'SUMMARY' ? 'summary' : 'other';
+      const began = noaaTime(field(lines, 'Begin Time')) ?? noaaTime(field(lines, 'Threshold Reached'));
       return {
         issued, product: (r['product_id'] as string) ?? '', message, headline,
         level, text: (m?.[2] ?? headline).trim(),
+        serial: field(lines, 'Serial Number'),
+        supersedes: field(lines, 'Extension to Serial Number')
+          ?? field(lines, 'Continuation of Serial Number')
+          ?? field(lines, 'Cancel Serial Number'),
+        beganAt: began,
+        ...validity(level, lines, message, issued, began),
       };
     })
     .filter((a): a is AlertItem => a !== null)
-    .sort((a, b) => Date.parse(b.issued) - Date.parse(a.issued))
-    .slice(0, limit);
+    .sort((a, b) => Date.parse(b.issued) - Date.parse(a.issued));
+
+  // One notice per chain. An extension, a continuation or a cancellation names
+  // the serial it replaces, so the older message is dropped and the chain
+  // reads as its newest word. Serials are counted per product, so the key
+  // carries the product too.
+  const replaced = new Set(all.filter((a) => a.supersedes).map((a) => `${a.product}#${a.supersedes}`));
+  const kept = all.filter((a) => !(a.serial && replaced.has(`${a.product}#${a.serial}`)));
+
+  // "THIS SUPERSEDES ANY/ALL PRIOR WATCHES IN EFFECT" — NOAA's own words. An
+  // older watch stops when the next one that says so was issued, whatever
+  // days it named. Walked newest first, so each watch meets its successor.
+  let newerWatch: string | null = null;
+  for (const a of kept) {
+    if (a.level !== 'watch') continue;
+    if (newerWatch && a.validUntil && Date.parse(a.validUntil) > Date.parse(newerWatch)) {
+      a.validUntil = newerWatch;
+    }
+    if (/SUPERSEDES ANY\/ALL PRIOR WATCHES/i.test(a.message)) newerWatch = a.issued;
+  }
+
+  // A SUMMARY says the event is over. An alert of the same series issued
+  // before it — XM5A before XM5S, the A and S of one product code — ends
+  // there rather than a day after it was issued, which would keep a finished
+  // flare reading "now" for the rest of the day.
+  for (const s of kept) {
+    if (s.level !== 'summary' || !/S$/.test(s.product)) continue;
+    const series = s.product.slice(0, -1);
+    for (const a of kept) {
+      if (a.level === 'alert' && a.product === `${series}A` && a.issued < s.issued
+        && a.validUntil && a.validUntil > s.issued) a.validUntil = s.issued;
+    }
+  }
+
+  return kept.slice(0, limit);
 }
 
 /* ---------------------------------------------------------------- *

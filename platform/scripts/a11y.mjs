@@ -75,6 +75,10 @@ async function run(name, viewport) {
   await p.evaluate(() => document.getElementById('tile-kp')?.click());
   await p.waitForTimeout(800);
   total += await scan('tile detail');
+  // And the notices, verbatim — what the header notice opens.
+  await p.evaluate(() => window.__hud?.openNotices());
+  await p.waitForTimeout(800);
+  total += await scan('notices detail');
   console.log(`  TOTAL violations: ${total}`);
   if (total > 0) FAILED = true;
   await p.close();

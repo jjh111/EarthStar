@@ -5,7 +5,7 @@
  * that could read as zero.
  */
 
-import { type Badge, formatAge, hhmmUTC } from '../contract/types.js';
+import { type AlertItem, type AlertLevel, type Badge, formatAge, hhmmUTC } from '../contract/types.js';
 import type { PartMeta } from '../data/source.js';
 
 export const NO_DATA = 'no data';
@@ -68,6 +68,70 @@ export function stalenessOf(meta: PartMeta | undefined, now = new Date()): Stale
     label: `${hhmmUTC(meta.data_time)} UTC · ${formatAge(ageS)} old`,
     short: `${formatAge(ageS)} old`,
   };
+}
+
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * `19:55 UTC` on today's UTC date, `23 Oct 19:55 UTC` on any other. A bare
+ * clock time is only honest for today: "K-index of 4, 19:55" read at noon
+ * three days later looked like last night's.
+ */
+export function whenUTC(iso: string | null | undefined, now = new Date()): string {
+  const t = iso ? Date.parse(iso) : NaN;
+  if (!Number.isFinite(t)) return `${hhmmUTC(null)} UTC`;
+  const d = new Date(t);
+  if (d.toISOString().slice(0, 10) === now.toISOString().slice(0, 10)) return `${hhmmUTC(iso)} UTC`;
+  return `${String(d.getUTCDate()).padStart(2, '0')} ${MON[d.getUTCMonth()]} ${hhmmUTC(iso)} UTC`;
+}
+
+/**
+ * Is NOAA's notice still current? Only inside its own validity window (see
+ * `parseAlerts` for how that is read), and never for a summary or a
+ * cancellation, which report something already over.
+ */
+export function inForce(a: AlertItem, now: Date | number = new Date()): boolean {
+  const t = typeof now === 'number' ? now : now.getTime();
+  return a.validUntil != null && Date.parse(a.validUntil) > t
+    && a.level !== 'summary' && a.level !== 'cancel';
+}
+
+/** Now, then expected, then possible, then over. */
+export const LEVEL_RANK: Record<AlertLevel, number> = {
+  alert: 0, warning: 1, watch: 2, cancel: 3, summary: 4, other: 5,
+};
+
+/** The word for a notice in force. One no longer in force is "ended", whatever it was. */
+export const LEVEL_WORD: Record<AlertLevel, string> = {
+  alert: 'now', warning: 'expected', watch: 'possible',
+  cancel: 'cancelled', summary: 'ended', other: 'notice',
+};
+
+/**
+ * The feed split by NOAA's own validity: what is current, most consequential
+ * first, and what has ended, newest first.
+ */
+export function splitNotices(
+  alerts: AlertItem[], now = new Date(),
+): { current: AlertItem[]; ended: AlertItem[] } {
+  const byTime = (a: AlertItem, b: AlertItem) => Date.parse(b.issued) - Date.parse(a.issued);
+  const current = alerts.filter((a) => inForce(a, now))
+    .sort((a, b) => (LEVEL_RANK[a.level] ?? 9) - (LEVEL_RANK[b.level] ?? 9) || byTime(a, b));
+  const ended = alerts.filter((a) => !inForce(a, now)).sort(byTime);
+  return { current, ended };
+}
+
+/** "now", "expected"… while in force; "cancelled" or "ended" after. */
+export function noticeWord(a: AlertItem, now = new Date()): string {
+  if (inForce(a, now)) return LEVEL_WORD[a.level] ?? 'notice';
+  return a.level === 'cancel' ? 'cancelled' : 'ended';
+}
+
+/** `in force until 27 Oct 05:17 UTC`, `ended 23 Oct 21:00 UTC`, or `validity not stated`. */
+export function validityText(a: AlertItem, now = new Date()): string {
+  if (!a.validityStated) return 'validity not stated';
+  if (inForce(a, now)) return `in force until ${whenUTC(a.validUntil, now)}`;
+  return a.validUntil ? `ended ${whenUTC(a.validUntil, now)}` : 'ended';
 }
 
 export { hhmmUTC, formatAge };

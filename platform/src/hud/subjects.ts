@@ -176,6 +176,36 @@ const CONCEPTS: Subject[] = [
     sources: [{ name: 'Earth Star viewer platform plan, §2' }],
     related: ['concept.reconnection'],
   },
+  {
+    // Opened as the Notices detail rather than as a card: the notices
+    // themselves, verbatim, are the point, and this prose follows them.
+    id: 'concept.noaa-notices',
+    aliases: ['NOAA notice'],
+    kind: 'concept', tier: 'E', label: 'NOAA notices',
+    oneLine: 'The watches, warnings, alerts and summaries NOAA’s forecasters issue, verbatim.',
+    meaning: 'NOAA’s Space Weather Prediction Center issues four kinds of notice, and the '
+      + 'kind is the point: a watch says a storm may come on the days it names, a warning '
+      + 'says a condition is expected inside a stated window, an alert says a threshold has '
+      + 'been crossed, and a summary says an event has finished. They are written by duty '
+      + 'forecasters from the same measurements this panel shows, so a notice is NOAA’s '
+      + 'reading of the data rather than another datum.',
+    howMade: 'Read from NOAA SWPC products/alerts.json, about thirty days of messages. Each '
+      + 'message’s serial, validity and onset are parsed out of its own text; a chain of '
+      + 'extensions, continuations or a cancellation collapses to its newest message, and '
+      + 'the message itself is shown exactly as NOAA wrote it.',
+    limits: 'In force means inside NOAA’s own validity: a warning until its Valid To or Now '
+      + 'Valid Until, a K-index alert until its three-hour synoptic period ends, any other '
+      + 'alert for 24 hours after issue or until NOAA’s summary of it (NOAA reissues a '
+      + 'continuing alert daily), a watch '
+      + 'until the end of the last day it names, and a summary or cancellation not at all; '
+      + 'a notice whose wording the parser cannot read is held in force for 24 hours and '
+      + 'marked “validity not stated”, so a change in NOAA’s format errs toward showing a '
+      + 'notice rather than ending it. The feed holds about a month, and the panel keeps '
+      + 'its newest twenty notices.',
+    sources: [{ name: 'NOAA SWPC products/alerts.json',
+      url: 'https://services.swpc.noaa.gov/products/alerts.json' }],
+    related: ['inst.kp', 'inst.electrons', 'inst.protons', 'inst.xray'],
+  },
 ];
 
 /* ------------------------------------------------------------------ *
@@ -720,7 +750,8 @@ const MEASUREMENTS: Subject[] = [
       + 'says nothing about where the disturbance is. It is also the only thing driving '
       + 'T89, so the drawn magnetosphere inherits its coarseness: seven bands, stepping.',
     sources: [SWPC],
-    related: ['model.t89', 'layer.field-lines', 'inst.dst', 'model.ovation'],
+    related: ['model.t89', 'layer.field-lines', 'inst.dst', 'model.ovation',
+      'concept.noaa-notices'],
   },
   {
     id: 'inst.bz', kind: 'measurement', tier: 'E', label: 'IMF Bz',
@@ -818,7 +849,7 @@ const MEASUREMENTS: Subject[] = [
     limits: 'The hazard is the accumulated dose over days, so an instantaneous number '
       + 'above the alert level is much less informative than a week spent there.',
     sources: [SWPC],
-    related: ['inst.protons', 'inst.geosync'],
+    related: ['inst.protons', 'inst.geosync', 'concept.noaa-notices'],
   },
   {
     id: 'inst.geosync', kind: 'measurement', tier: 'E', label: 'Field at 6.6 Rₑ',

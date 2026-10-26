@@ -99,6 +99,28 @@ export interface AlertItem {
   level: AlertLevel;
   /** The headline with its leading "ALERT:" style prefix removed. */
   text: string;
+  /**
+   * NOAA's own serial for this message, and the serial it extends, continues
+   * or cancels. A chain of them is one notice: an EXTENDED WARNING replaces
+   * the warning before it, and a CONTINUED ALERT is the same alert reissued.
+   */
+  serial: string | null;
+  supersedes: string | null;
+  /**
+   * When the notice holds, as NOAA states it or as its kind implies (the rules
+   * are in `parseAlerts`). All ISO. `beganAt` is the onset NOAA reports —
+   * "Begin Time" or "Threshold Reached" — which can be days before `issued`.
+   */
+  validFrom: string | null;
+  validUntil: string | null;
+  beganAt: string | null;
+  /**
+   * False when the parser could not read a validity from the message and fell
+   * back to a default window. The notice is then shown as in force for that
+   * window and says "validity not stated", rather than being quietly called
+   * ended on the day it was issued.
+   */
+  validityStated: boolean;
 }
 
 export interface MagnetopauseNow {

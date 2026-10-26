@@ -18,7 +18,10 @@ import type { CheckResult } from '../data/checks.js';
 import type { ForecastBundle } from '../data/forecast.js';
 import type { PartMeta } from '../data/source.js';
 import { INSTRUMENTS } from './instruments.js';
-import { badgeFor, formatAge, hhmmUTC, stalenessOf } from './format.js';
+import {
+  badgeFor, formatAge, hhmmUTC, inForce, noticeWord, splitNotices, stalenessOf, whenUTC,
+} from './format.js';
+import { errorReason, valueState } from '../data/state.js';
 import { CLOUD_ARRIVAL } from '../data/enlil.js';
 
 const TIER_WORD: Record<string, string> = {
@@ -98,15 +101,34 @@ export function buildBriefing(input: BriefingInput): string {
     out.push('');
   }
 
+  // A failed read is said, not omitted: a briefing with no notices section
+  // reads as a quiet day, which is the one thing a failed fetch cannot claim.
   const alerts = env.data.alerts ?? [];
-  if (alerts.length > 0) {
-    out.push('## NOAA alerts');
-    out.push('');
-    for (const a of alerts.slice(0, 6)) {
-      out.push(`- ${hhmmUTC(a.issued)} UTC — ${a.headline || a.product}`);
+  const ns = valueState({
+    lane: { loading: state.lanes?.snapshot ?? false, error: null, nextAttempt: state.nextAttempt ?? null },
+    received: true, meta: env.parts.alerts, now,
+  });
+  out.push('## NOAA notices');
+  out.push('');
+  if (ns.state === 'error') {
+    out.push(`NOAA notices: unavailable (${errorReason(env.parts.alerts?.error)}).`);
+  } else {
+    const { current, ended } = splitNotices(alerts, now);
+    // Everything in force, then the most recent of what has ended.
+    const listed = [...current, ...ended].slice(0, Math.max(6, current.length));
+    if (current.length === 0) {
+      out.push(`No NOAA notice in force (checked ${hhmmUTC(env.fetched_at)} UTC).`);
+      if (listed.length) out.push('');
     }
-    out.push('');
+    for (const a of listed) {
+      const until = whenUTC(a.validUntil, now);
+      const status = inForce(a, now)
+        ? (a.validityStated ? `in force until ${until}` : `validity not stated; held in force until ${until}`)
+        : (a.validityStated ? `${noticeWord(a, now)} ${until}` : `${noticeWord(a, now)}; validity not stated`);
+      out.push(`- ${whenUTC(a.issued, now)} — ${a.headline || a.product} — ${status}`);
+    }
   }
+  out.push('');
 
   if (checks) {
     const decisive = checks.rows.length - checks.inconclusive;

@@ -476,6 +476,13 @@ installKeyboard({
   focusReport: () => hud.selectTab('report'),
 });
 
+// The header notice opens every notice, verbatim. Its href stays, so without
+// script it still lands on the report.
+document.getElementById('headline-alert')?.addEventListener('click', (e) => {
+  e.preventDefault();
+  hud.openNotices();
+});
+
 /* Cold-start sequencing (task: snapshot lane → slow lane → imagery). The Sun's
    frame list is megabytes behind a slow link and every JSON the instrument rail
    needs is a few hundred KB, so imagery waits for the snapshot lane to resolve

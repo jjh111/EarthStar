@@ -6,7 +6,7 @@
  * that reading: value, provenance, recent history, and what it means.
  */
 
-import type { Now } from '../contract/types.js';
+import type { AlertItem, Now } from '../contract/types.js';
 import type { NowEnvelope, PartMeta } from '../data/source.js';
 import type { StoreState } from '../data/store.js';
 import type { CheckResult } from '../data/checks.js';
@@ -17,7 +17,11 @@ import { SPACECRAFT_NOTE, type SpacecraftPos } from '../data/ephemerides.js';
 import { instrumentFor, type ImageLoop, type LoopKind } from '../data/solar-imagery.js';
 import { igrfCitation } from '../models/igrf14.js';
 import { coverageBands, type SunPlaneCalibration } from '../scene/sun-plane.js';
-import { NO_DATA, badgeFor, badgeTitle, formatAge, hhmmUTC, stalenessOf } from './format.js';
+import {
+  NO_DATA, badgeFor, badgeTitle, formatAge, hhmmUTC, inForce, noticeWord, stalenessOf,
+  validityText, whenUTC,
+} from './format.js';
+import { valueState } from '../data/state.js';
 import { panelSpark } from './sparkline.js';
 import { stateSentence, stateSentenceText } from './state-sentence.js';
 import type { ForecastBundle } from '../data/forecast.js';
@@ -1011,10 +1015,78 @@ export function renderBody(name: string, now: Date): string {
     ${renderSubjectProse(bodySubjectId(name))}`;
 }
 
+/**
+ * The Notices detail: every notice NOAA has in the feed, as NOAA wrote it.
+ * Opened from the header notice, the expanded ticker, and any mention of the
+ * notices subject; it belongs to the Now tab, whose tab stays lit.
+ */
+export const NOTICES_DETAIL = 'notices';
+export const NOTICES_SUBJECT = 'concept.noaa-notices';
+
+/**
+ * One place where the notices can be read verbatim. The ticker and the header
+ * paraphrase — level word, headline, time — and a paraphrase of a warning is
+ * a different claim from the warning, the same reason the Ahead tab reproduces
+ * the forecast discussion rather than summarising it. Newest first, each with
+ * its level word, when it was issued and how long it holds.
+ *
+ * `status` is the feed's state line: when it was checked, or why it could not
+ * be read. A failed read lists nothing and says so, rather than an empty list
+ * that would read as a quiet month.
+ */
+export function renderNotices(
+  alerts: AlertItem[], now: Date,
+  status: { error: string | null; checked: string | null } = { error: null, checked: null },
+): string {
+  const items = [...alerts].sort((a, b) => Date.parse(b.issued) - Date.parse(a.issued));
+  const list = items.map((a) => {
+    const live = inForce(a, now);
+    // An unreadable validity is still shown in force for a while; say until when.
+    const held = !a.validityStated && live ? ` · held in force until ${whenUTC(a.validUntil, now)}` : '';
+    return `<li class="notice level-${live ? a.level : 'summary'}">
+      <p class="notice-head"><span class="alert-level">${escapeHtml(noticeWord(a, now))}</span>
+        <span class="notice-text">${escapeHtml(a.text || a.product)}</span></p>
+      <p class="tile-meta">issued ${escapeHtml(whenUTC(a.issued, now))} ·
+        ${escapeHtml(validityText(a, now) + held)}</p>
+      <pre class="product">${escapeHtml(a.message.trim())}</pre>
+    </li>`;
+  }).join('');
+  const state = status.error
+    ? `<span class="tile-state err"><span class="tile-state-word">unavailable</span> · ${escapeHtml(status.error)}</span>`
+    : `checked ${status.checked ? `${hhmmUTC(status.checked)} UTC` : NO_DATA}`;
+  return `
+    <p><button type="button" class="subject-link" data-back="report">‹ Situation Report</button></p>
+    <h2>NOAA notices</h2>
+    <p class="tile-meta"><span class="badge badge-e" title="Measured — NOAA SWPC">E</span>
+      NOAA SWPC products/alerts.json · ${state}</p>
+    ${status.error ? '' : items.length
+      ? `<p class="fine">Newest first. A chain of extensions or continuations shows as its
+        newest message. “In force” is NOAA’s own validity — how it is read is under
+        “What it does not say”, below.</p>
+        <ol class="notices">${list}</ol>`
+      : '<p>The feed carried no notices.</p>'}
+    ${renderSubjectProse(NOTICES_SUBJECT)}`;
+}
+
 export function renderDetail(
   id: string, state: StoreState, now: Date,
 ): string {
   if (id.startsWith(BODY_PREFIX)) return renderBody(id.slice(BODY_PREFIX.length), now);
+  if (id === NOTICES_DETAIL || id === NOTICES_SUBJECT) {
+    const meta = state.now?.parts?.alerts;
+    const st = valueState({
+      lane: { loading: state.lanes.snapshot, error: state.now ? null : state.lastError,
+        nextAttempt: state.nextAttempt },
+      received: !!state.now, meta, now,
+    });
+    return st.state === 'loading'
+      ? `<p><button type="button" class="subject-link" data-back="report">‹ Situation Report</button></p>
+        <h2>NOAA notices</h2><p><span class="tile-state loading">Loading NOAA notices<span class="pulse">…</span></span></p>`
+      : renderNotices(state.now?.data?.alerts ?? [], now, {
+        error: st.state === 'error' ? st.label.replace(/^unavailable · /, '') : null,
+        checked: state.now?.fetched_at ?? null,
+      });
+  }
   const inst = INSTRUMENTS.find((i) => i.id === id);
   // A model, a layer or a concept opened from a Related link. It has no live
   // value and no feed provenance of its own — the prose is the whole of it.

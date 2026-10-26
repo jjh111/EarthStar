@@ -426,6 +426,8 @@ header.top {
 .ticker-item .alert-time {
   font-family: var(--mono); font-size: 0.62rem; color: var(--ink-faint);
 }
+/* A failed read is red and says when it tries again; it never reads as quiet. */
+.ticker-item.is-error .alert-text { color: var(--err); }
 .ticker-tag {
   font-family: var(--mono); font-size: 0.58rem; letter-spacing: 0.1em;
   color: var(--accent); border: 1px solid currentColor; border-radius: 2px;
@@ -721,8 +723,8 @@ header.top {
    tablet user actually has to hit, and 44 px is the floor both platform
    guidelines settle on. */
 @media (pointer: coarse) {
-  .ctl, .tab, .ticker-more, .ctl-sm { min-height: 44px; }
-  /* Links too: the mark goes home and the notice opens the report, and a
+  .ctl, .tab, .ticker-more, .ticker-all, .ctl-sm { min-height: 44px; }
+  /* Links too: the mark goes home and the notice opens the notices, and a
      23-pixel target is a miss waiting to happen. */
   .mark, .headline-alert { min-height: 44px; align-items: center; }
   .tile { padding: 0.5rem 0.55rem; }
@@ -827,6 +829,21 @@ text.l1-idle { fill: var(--ink-faint); }
   border-radius: 2px; padding: 0 0.3em; cursor: pointer; white-space: nowrap;
 }
 .ticker-more:hover, .ticker-more:focus-visible { border-color: var(--accent); }
+/* The way on from the expanded ticker to the notices as NOAA wrote them. */
+.ticker-all {
+  font: inherit; font-size: 0.72rem; color: var(--accent); background: none; border: 0;
+  padding: 0; cursor: pointer; white-space: nowrap;
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.ticker-all:hover, .ticker-all:focus-visible { color: var(--ink); }
+
+/* The Notices detail: each notice's word, times, then NOAA's own text. */
+.notices { list-style: none; margin: 0.4rem 0 0; padding: 0; }
+.notice { border-top: 1px solid var(--line); padding: 0.45rem 0 0.1rem; }
+.notice-head { display: flex; align-items: baseline; gap: 0.45rem; margin: 0; }
+.notice-text { color: var(--ink); }
+.notice.level-summary .notice-text { color: var(--ink-dim); }
+.notice .tile-meta { margin: 0.15rem 0 0; }
 
 .perf {
   margin: 0; padding: 0.3rem 0.7rem 0.5rem;
