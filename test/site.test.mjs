@@ -314,6 +314,70 @@ async function newPage(opts = {}) {
   const v = await page.locator('#sky-kp .sky-value').textContent();
   check('mock mode shows fixture value', /\d/.test(v), v);
   check('mock mode is labelled', await page.locator('#sky-now.is-mock').count() === 1);
+  // Kp to one decimal with NOAA's thirds label, as the Viewer writes it
+  const kpDetail = await page.locator('#sky-kp .sky-detail').textContent();
+  check('sky Kp reads one decimal and NOAA Kp', v === '2.3' && kpDetail.includes('NOAA Kp 2+'), `${v} · ${kpDetail}`);
+  await ctx.close();
+}
+
+{
+  // One quantity per tile, on one line, with its unit; a southward field is
+  // written with U+2212 in the tile and in the sentence, never a hyphen
+  const { ctx, page } = await newPage({ viewport: { width: 360, height: 740 } });
+  await page.route('**/assets/data/now.mock.json', async (route) => {
+    const m = await (await route.fetch()).json();
+    m.wind.bz_gsm = -1.6;
+    route.fulfill({ json: m });
+  });
+  await page.goto(BASE + '/?mock=1#sky', { waitUntil: 'networkidle' });
+  await page.waitForTimeout(800);
+  const wind = await page.evaluate(() => {
+    const t = document.getElementById('sky-wind'), q = (s) => t.querySelector(s).textContent;
+    return { value: q('.sky-value'), unit: q('.sky-unit'), detail: q('.sky-detail'), sentence: document.getElementById('sky-sentence').textContent };
+  });
+  check('sky wind tile holds the speed, its unit apart', /^\d+$/.test(wind.value) && wind.unit === 'km/s', `${wind.value} | ${wind.unit}`);
+  check('sky minus is U+2212 in tile and sentence', wind.detail.startsWith('Bz \u22121.6 nT · southward') && /Bz\s\u22121\.6\snT/.test(wind.sentence)
+    && !/-\d/.test(wind.detail + wind.sentence), `${wind.detail} / ${wind.sentence}`);
+  const lines = await page.evaluate(() => [...document.querySelectorAll('.sky-value')].map((v) => {
+    const r = document.createRange(); r.selectNodeContents(v);
+    return new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size;
+  }));
+  check('every sky reading is one line at 360', lines.every((n) => n === 1), lines.join(','));
+  await ctx.close();
+}
+
+{
+  // Upstream blocked: every tile unavailable, the note says why, and a
+  // refresh that changes nothing leaves the live sentence alone (it would be
+  // read out again). Each tile opens its own reading in the Viewer.
+  const { ctx, page } = await newPage();
+  await page.route(/services\.swpc\.noaa\.gov|raw\.githubusercontent\.com/, (r) => r.abort('internetdisconnected'));
+  await page.goto(BASE + '/#sky', { waitUntil: 'networkidle' });
+  await page.waitForFunction(() => [...document.querySelectorAll('.sky-tile')].every((t) => t.dataset.state !== 'loading'), null, { timeout: 25000 }).catch(() => {});
+  const states = await page.$$eval('.sky-tile', (ts) => ts.map((t) => t.dataset.state));
+  check('sky blocked: every tile unavailable', states.every((s) => s === 'error'), states.join(','));
+  check('sky blocked: the note says NOAA could not be reached', /NOAA could not be reached/.test(await page.locator('.sky-note').textContent()));
+  const mutations = await page.evaluate(async () => {
+    const line = document.getElementById('sky-sentence'), grid = document.getElementById('sky-now');
+    let n = 0;
+    new MutationObserver((l) => { n += l.length; }).observe(line, { childList: true, characterData: true, subtree: true });
+    for (let i = 0; i < 2; i++) {
+      // the tiles are rewritten at the end of every refresh; wait for that
+      const done = new Promise((res) => { const o = new MutationObserver(() => { o.disconnect(); setTimeout(res, 50); }); o.observe(grid, { childList: true, subtree: true, characterData: true }); });
+      document.dispatchEvent(new Event('visibilitychange'));
+      await done;
+    }
+    return n;
+  });
+  check('sky sentence is not rewritten by an unchanged refresh', mutations === 0, `${mutations} mutations`);
+  const links = await page.$$eval('.sky-tile .sky-open', (as) => as.map((a) => a.getAttribute('href')));
+  check('each sky tile opens its reading in the Viewer',
+    links.join(' ') === '/viewer/#d=inst.kp /viewer/#d=inst.speed /viewer/#d=inst.xray /viewer/#t=report', links.join(' '));
+  // a stand-in Viewer page: this checks where the splash goes, not the Viewer
+  await page.route('**/viewer/', (r) => r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Viewer</title>' }));
+  await page.locator('#sky-wind').click({ position: { x: 140, y: 80 } });
+  await page.waitForURL(/\/viewer\//, { timeout: 15000 }).catch(() => {});
+  check('a sky tile is the link, in every state', page.url().endsWith('/viewer/#d=inst.speed'), page.url());
   await ctx.close();
 }
 

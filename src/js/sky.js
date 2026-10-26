@@ -85,6 +85,14 @@ function kpLabel(s) {
   return m ? m[1] + ({ P: '+', M: '−', Z: '' })[m[2]] : s;
 }
 
+function fmtSigned(v, digits) {
+  // As the Viewer writes a signed reading: U+2212 for minus, '+' for plus, and
+  // no sign on a value that rounds to zero ("−0.0" would claim a direction)
+  const s = Math.abs(v).toFixed(digits);
+  if (Number(s) === 0) return s;
+  return (v < 0 ? '\u2212' : '+') + s;
+}
+
 function xrayClass(flux) {
   if (flux == null || !(flux > 0)) return null;
   const bands = [['A', 1e-8], ['B', 1e-7], ['C', 1e-6], ['M', 1e-5], ['X', 1e-4]];
@@ -124,6 +132,10 @@ function parse(key, data) {
 }
 
 // ── state machine ────────────────────────────────────────────────────────
+
+const TILES = ['kp', 'wind', 'xray', 'scales'];
+const NOTE_DOWN = 'NOAA could not be reached from this browser. The page tries again every minute.';
+let noteLive = null; // the note as the page ships it, restored once a reading arrives
 
 const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -179,16 +191,20 @@ function render(results, via) {
   const kp = results.kp;
   if (kp === undefined) setTile('kp', 'error', { error: results.errors.kp });
   else if (!kp || kp.estimated_kp == null) setTile('kp', 'nodata', { when: kp?.time });
-  else setTile('kp', st('kp', kp), { value: kp.estimated_kp.toFixed(2), unit: 'Kp', detail: kp.kp ? 'NOAA ' + kp.kp : '', when: kp.time, via });
+  // One decimal: the 1-minute estimate moves in thirds, so a second decimal is
+  // false precision. Its label is NOAA's 1-minute estimate, not the 3-hour Kp.
+  else setTile('kp', st('kp', kp), { value: kp.estimated_kp.toFixed(1), unit: 'Kp', detail: '1-minute estimate' + (kp.kp ? ` · NOAA Kp ${kp.kp}` : ''), when: kp.time, via });
 
   const mag = results.mag, wind = results.wind;
   if (mag === undefined && wind === undefined) setTile('wind', 'error', { error: results.errors.mag || results.errors.wind });
   else if ((!mag || mag.bz_gsm == null) && (!wind || wind.speed == null)) setTile('wind', 'nodata', { when: mag?.time || wind?.time });
   else {
+    // One quantity per tile: the speed is the reading, the field rides in the
+    // detail with its own unit, so the value never wraps
     const bz = mag?.bz_gsm, sp = wind?.speed;
-    const value = (sp != null ? Math.round(sp) + ' km/s' : '—') + (bz != null ? ` · Bz ${bz > 0 ? '+' : ''}${bz.toFixed(1)} nT` : '');
     const t = mag?.time || wind?.time;
-    setTile('wind', st('mag', { time: t }), { value, unit: '', detail: (mag?.spacecraft || wind?.spacecraft || '') + (bz != null ? (bz < 0 ? ' · southward' : ' · northward') : ''), when: t, via });
+    const field = bz != null ? `Bz ${fmtSigned(bz, 1)} nT · ${bz < 0 ? 'southward' : 'northward'} · ` : '';
+    setTile('wind', st('mag', { time: t }), { value: sp != null ? String(Math.round(sp)) : '—', unit: 'km/s', detail: field + (mag?.spacecraft || wind?.spacecraft || ''), when: t, via });
   }
 
   const x = results.xray;
@@ -203,13 +219,28 @@ function render(results, via) {
 
   const line = document.getElementById('sky-sentence');
   if (line) {
+    // A symbol never wraps away from its number, nor a number from its unit
+    // (\u00a0, a no-break space); the word 'wind' may stand at a line's end
     const parts = [];
-    if (kp && kp.estimated_kp != null) parts.push(`Kp ${kp.estimated_kp.toFixed(1)}`);
-    if (wind && wind.speed != null) parts.push(`wind ${Math.round(wind.speed)} km/s`);
-    if (mag && mag.bz_gsm != null) parts.push(`Bz ${mag.bz_gsm > 0 ? '+' : ''}${mag.bz_gsm.toFixed(1)} nT`);
-    if (x && x.class) parts.push(`X-rays ${x.class}`);
+    if (kp && kp.estimated_kp != null) parts.push(`Kp\u00a0${kp.estimated_kp.toFixed(1)}`);
+    if (wind && wind.speed != null) parts.push(`wind ${Math.round(wind.speed)}\u00a0km/s`);
+    if (mag && mag.bz_gsm != null) parts.push(`Bz\u00a0${fmtSigned(mag.bz_gsm, 1)}\u00a0nT`);
+    if (x && x.class) parts.push(`X-rays\u00a0${x.class}`);
     const quiet = kp && kp.estimated_kp != null ? (kp.estimated_kp < 4 ? 'Quiet sky' : kp.estimated_kp < 5 ? 'Unsettled sky' : 'Storm') : 'The sky';
-    line.textContent = parts.length ? `${quiet} — ${parts.join(', ')}.` : 'The sky is not reporting right now.';
+    const text = parts.length ? `${quiet} — ${parts.join(', ')}.` : 'The sky is not reporting right now.';
+    // The sentence is a live region: rewriting it unchanged every minute
+    // would read it out again, so it is written only when it says something new
+    if (line.textContent !== text) line.textContent = text;
+  }
+
+  // When no feed answered at all, the note says why instead of promising
+  // live readings; any reading that arrives brings the promise back
+  const note = document.querySelector('#sky .sky-note');
+  if (note) {
+    noteLive ??= note.innerHTML;
+    const down = TILES.every((id) => document.getElementById('sky-' + id)?.dataset.state === 'error');
+    const html = down ? NOTE_DOWN : noteLive;
+    if (note.innerHTML !== html) note.innerHTML = html;
   }
 }
 
@@ -220,7 +251,7 @@ async function refresh(mockMode) {
       render({ ...fromMock(m), errors: {} }, 'MOCK fixture — not live');
       document.getElementById('sky-now')?.classList.add('is-mock');
     } catch (e) {
-      for (const id of ['kp', 'wind', 'xray', 'scales']) setTile(id, 'error', { error: 'mock fixture missing' });
+      for (const id of TILES) setTile(id, 'error', { error: 'mock fixture missing' });
     }
     return;
   }
@@ -242,7 +273,7 @@ export function initSky() {
   const root = document.getElementById('sky-now');
   if (!root) return;
   const mockMode = new URLSearchParams(location.search).get('mock') === '1';
-  for (const id of ['kp', 'wind', 'xray', 'scales']) setTile(id, 'loading');
+  for (const id of TILES) setTile(id, 'loading');
   refresh(mockMode);
   if (mockMode) return;
   let timer = setInterval(() => refresh(false), REFRESH_MS);

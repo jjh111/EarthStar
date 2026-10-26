@@ -618,21 +618,35 @@ body.is-searching .wf-search:not(.pop-open) .wf-status {
 .sky-sentence { max-width: 62ch; font-family: var(--serif); font-size: 1.4em; color: var(--ink); margin: -2px 0 14px; }
 .sky-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--gutter); }
 @media (max-width: 900px) { .sky-grid { grid-template-columns: repeat(2, 1fr); } }
+/* Each tile holds one quantity. Its rows are label, reading, detail, then the
+   provenance pinned to the foot, so the rows line up across a row of tiles */
 .sky-tile {
   position: relative; display: grid; gap: 4px; min-height: 108px;
+  grid-template-rows: auto auto 1fr auto; align-content: start;
   padding: 14px 16px 12px;
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
-  transition: opacity 0.4s;
+  transition: opacity 0.4s, border-color 0.15s;
 }
 .sky-label { font-size: 0.76em; font-weight: 600; color: var(--ink-2); display: flex; align-items: center; gap: 8px; }
+/* Each tile opens its own reading in the Viewer: the label is the link, and
+   its ::after stretches over the tile, so the whole tile is the target. The
+   link works in every state, because the Viewer says its own */
+.sky-open { color: inherit; text-decoration: none; }
+.sky-open::after { content: ''; position: absolute; inset: 0; border-radius: var(--radius); }
+.sky-open:focus-visible { outline: none; }
+.sky-open:focus-visible::after { outline: 2px solid var(--gold); outline-offset: 3px; }
+.sky-go { color: var(--ink-3); letter-spacing: 0; transition: color 0.15s; }
+.sky-tile:hover, .sky-tile:focus-within { border-color: var(--line-2); }
+.sky-tile:hover .sky-go, .sky-tile:focus-within .sky-go { color: var(--ink); }
 /* A live reading gets one gold point of light; nothing else in the tile is decorated */
 .sky-tile[data-state="live"] .sky-label::before {
   content: ''; width: 6px; height: 6px; border-radius: 50%;
   background: var(--gold); box-shadow: 0 0 6px var(--gold-glow);
 }
-.sky-reading { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
-.sky-value { font-family: var(--mono); font-size: 1.4em; color: var(--ink); letter-spacing: 0.02em; }
+.sky-reading { display: flex; align-items: baseline; gap: 6px; flex-wrap: nowrap; }
+.sky-value { font-family: var(--mono); font-size: 1.4em; color: var(--ink); letter-spacing: 0.02em; white-space: nowrap; }
 .sky-unit { font-family: var(--mono); font-size: 0.8em; color: var(--ink-3); }
+.sky-unit:empty { display: none; } /* a class or a scale has no unit, and no gap after it */
 .sky-detail { font-size: 0.9em; color: var(--ink-2); }
 .sky-prov { font-family: var(--mono); font-size: 0.76em; color: var(--ink-3); letter-spacing: 0.02em; }
 .sky-tile[data-state="loading"] { opacity: 0.7; }
@@ -646,10 +660,28 @@ body.is-searching .wf-search:not(.pop-open) .wf-status {
   font-family: var(--sans); font-size: 1em; color: var(--ink-3); letter-spacing: 0.04em;
 }
 .sky-tile[data-state="error"] { border-style: dashed; }
+/* MOCK rides the tile's top edge, clear of the label and its ↗ */
 .is-mock .sky-tile::after {
-  content: 'MOCK'; position: absolute; top: 8px; right: 10px;
-  font-family: var(--mono); font-size: 0.62em; letter-spacing: 0.18em; color: var(--ink-3);
-  border: 1px solid var(--line); padding: 1px 5px; border-radius: var(--radius);
+  content: 'MOCK'; position: absolute; top: 0; right: 10px; transform: translateY(-50%);
+  font-family: var(--mono); font-size: 0.62em; line-height: 1.4; letter-spacing: 0.18em; color: var(--ink-3);
+  background: var(--bg-2); border: 1px solid var(--line); padding: 1px 5px; border-radius: var(--radius);
+}
+/* Phones: one compact row per tile, the words on the left and the reading
+   on the right, so the four readings read down one column. The provenance
+   runs the tile's full width beneath both: beside a reading it wrapped */
+@media (max-width: 480px) {
+  .sky-grid { grid-template-columns: 1fr; gap: 8px; }
+  .sky-tile {
+    min-height: 0; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto auto;
+    column-gap: 12px; row-gap: 2px; padding: 10px 14px; line-height: 1.4;
+  }
+  .sky-label { grid-column: 1; grid-row: 1; }
+  .sky-reading { grid-column: 2; grid-row: 1 / span 2; align-self: center; justify-content: flex-end; }
+  .sky-detail { grid-column: 1; grid-row: 2; font-size: 0.86em; }
+  .sky-prov { grid-column: 1 / -1; grid-row: 3; }
+  /* under ?mock=1 the MOCK tag takes the corner beneath the reading, not the reading's place */
+  .is-mock .sky-tile::after { position: static; transform: none; grid-column: 2; grid-row: 3; justify-self: end; align-self: end; }
+  .is-mock .sky-prov { grid-column: 1; }
 }
 .sky-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 22px; margin-top: 18px; }
 .sky-note { font-size: 0.92em; color: var(--ink-2); max-width: 60ch; }
@@ -675,13 +707,16 @@ body.is-searching .wf-search:not(.pop-open) .wf-status {
 }
 .sky-shot img { display: block; width: 100%; height: auto; transition: transform 0.4s ease; }
 .sky-shot:hover img, .sky-shot:focus-visible img { transform: scale(1.02); }
+/* The frame mixes measured imagery, modelled field lines and ambient art, so
+   the caption carries all three of the Viewer's tiers, not one. The badges
+   lead the line and the words flow on under them, two lines on the small frame */
 .sky-shot-cap {
   position: absolute; left: 0; right: 0; bottom: 0;
-  display: flex; align-items: center; gap: 8px;
-  padding: 8px 12px; font-size: 0.78em; letter-spacing: 0.04em; color: #f3ead2;
+  padding: 8px 12px; font-size: 0.78em; line-height: 1.5; letter-spacing: 0.02em; text-wrap: pretty; color: #f3ead2;
   background: linear-gradient(to top, rgba(8, 20, 12, 0.75), transparent);
 }
 .sky-shot-cap .badge { color: #f3ead2; }
+.sky-tiers { display: inline-flex; gap: 3px; margin-right: 4px; vertical-align: -0.1em; }
 
 /* Register badges: ink text, gold hairline — the provenance grammar is a flourish that carries meaning */
 .badge {
