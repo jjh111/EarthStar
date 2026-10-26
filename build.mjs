@@ -257,7 +257,7 @@ if (process.argv.includes('--images')) {
   // (`viewer/og.jpg`) so the two can never disagree, and it IS generated here
   // because index.html references these files: a reference with no producer is
   // how the card shipped as a broken image on 2026-09-17. 400w + 800w, because
-  // the frame renders ~335px wide (see .sky-lower in src/css/site.css).
+  // the frame renders ~280–520px wide (see .sky-lower in src/css/site.css).
   for (const w of [400, 800]) {
     await sharp(p('viewer/og.jpg')).resize({ width: w }).jpeg({ quality: 84, mozjpeg: true })
       .toFile(`${IMG}/viewer-og-${w}.jpg`);

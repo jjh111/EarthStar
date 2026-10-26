@@ -19,8 +19,12 @@ export function initSeedCopy() {
     if (prime) parts.push(prime.textContent.trim());
     const main = seed.querySelector('.equation-main');
     if (main) parts.push(main.textContent.trim());
+    // The phrase's lines are <br>s, which textContent drops: walk its nodes
     const phrase = seed.querySelector('.seed-phrase p');
-    if (phrase) parts.push(phrase.textContent.replace(/\s*<br>\s*/g, '\n').trim());
+    if (phrase) {
+      parts.push(Array.from(phrase.childNodes).map((n) => (n.nodeName === 'BR' ? '\n' : n.textContent))
+        .join('').split('\n').map((line) => line.trim()).join('\n').trim());
+    }
     return parts.join('\n\n');
   };
 

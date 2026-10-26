@@ -184,6 +184,45 @@ async function newPage(opts = {}) {
   await ctx.close();
 }
 
+{
+  // Copying the seed keeps the phrase's lines: they are <br>s in the page,
+  // which textContent alone would run together
+  const { ctx, page } = await newPage({ permissions: ['clipboard-read', 'clipboard-write'] });
+  await page.goto(BASE + '/', { waitUntil: 'networkidle' });
+  await page.locator('#seedCopy').click();
+  await page.waitForTimeout(200);
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  check('copy the seed keeps its lines', copied.includes('recursion.\nYour memory is soil.') && copied.split('\n').length >= 10,
+    `${copied.split('\n').length} lines`);
+  await ctx.close();
+}
+
+{
+  // The ideas fill full rows: a short last row shares the width, also under
+  // a lens; an opened idea takes a row of its own, and closing it hands the
+  // URL back to the section
+  const { ctx, page } = await newPage({ viewport: { width: 1280, height: 800 } });
+  await page.goto(BASE + '/#idea/gomens', { waitUntil: 'networkidle' });
+  const holes = () => page.evaluate(() => {
+    const grid = document.getElementById('ideas-grid');
+    const gw = grid.getBoundingClientRect().width, gap = parseFloat(getComputedStyle(grid).columnGap);
+    const rows = new Map();
+    for (const el of grid.querySelectorAll('.idea:not([hidden])')) {
+      const b = el.getBoundingClientRect(), r = rows.get(Math.round(b.top)) || { w: -gap };
+      r.w += b.width + gap; rows.set(Math.round(b.top), r);
+    }
+    return [...rows.values()].filter((r) => Math.abs(r.w - gw) > 2).length;
+  });
+  const open = await page.evaluate(() => Math.round(document.getElementById('idea-gomens').getBoundingClientRect().width - document.getElementById('ideas-grid').getBoundingClientRect().width));
+  check('an opened idea spans the row', open === 0 && await holes() === 0, `${open} px short`);
+  await page.locator('#idea-gomens .idea-head').click();
+  check('closing an idea leaves #ideas', await page.evaluate(() => location.hash) === '#ideas');
+  const all = await holes();
+  await page.locator('.chip[data-lens="economics"]').click();
+  check('the ideas leave no hole in the grid', all === 0 && await holes() === 0);
+  await ctx.close();
+}
+
 // Mock mode renders numbers and says so
 {
   const { ctx, page } = await newPage();

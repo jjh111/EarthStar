@@ -289,6 +289,23 @@ h1 {
 /* II · five scales, and the Gomens that tend them */
 .scale-row { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--gutter); }
 @media (max-width: 1000px) { .scale-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } .scale:last-child { grid-column: 1 / -1; } }
+/* Five across only when each card gets 290 px; narrower than that, three over
+   two on a six-track row, so the lore keeps a line worth reading. The stage is
+   the container, so the rule follows the column, not the screen. */
+.scales-stage .stage-inner { container-type: inline-size; }
+@container (min-width: 940px) and (max-width: 1513px) {
+  .scale-row { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .scale, .scale:last-child { grid-column: span 2; }
+  .scale:nth-child(n+4) { grid-column: span 3; }
+}
+/* Wide screens: the lede and the lore on the left, the key to the script
+   beside them, the row of Gomens below */
+@media (min-width: 1440px) {
+  .scales-stage .stage-inner { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); column-gap: 56px; align-items: start; }
+  .scales-stage .section-label, .scales-stage .scale-row { grid-column: 1 / -1; }
+  .scales-stage .stage-lede, .scales-stage .gomen-lore { grid-column: 1; }
+  .scales-stage .script-key { grid-column: 2; grid-row: 2 / span 2; margin-top: 0; padding-top: 0; border-top: 0; }
+}
 .scale {
   display: flex; flex-direction: column; gap: 4px; padding: 12px 14px 14px;
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
@@ -314,7 +331,7 @@ h1 {
 .gomen-name .badge { vertical-align: 0.15em; margin-left: 2px; }
 .gomen-reading { font-family: var(--serif); font-style: italic; font-size: 1.02em; line-height: 1.35; color: var(--ink); }
 .gomen-radicals { display: block; font-family: var(--sans); font-style: normal; font-size: 0.68em; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 2px; }
-.gomen-line { font-size: 0.88em; line-height: 1.5; color: var(--ink-2); margin-top: 4px; }
+.gomen-line { max-width: 68ch; font-size: 0.88em; line-height: 1.5; color: var(--ink-2); margin-top: 4px; }
 .scale-live { margin-top: auto; padding-top: 4px; font-size: 0.88em; color: var(--ink); text-decoration-color: var(--gold); text-underline-offset: 3px; }
 .gomen-say {
   position: absolute; left: 50%; top: -16px; transform: translate(-50%, 4px); white-space: nowrap; pointer-events: none;
@@ -332,6 +349,16 @@ h1 {
   .scale > :not(.gomen-pic) { grid-column: 2; }
   .gomen-lore { font-size: 1.12em; }
   .scale:last-child { grid-column: auto; }
+}
+/* tablets: the star Gomen has a row to itself, so it takes the phone's
+   figure-beside-words layout rather than a hundred-character line. Only
+   while the row is two across: the container query marks the 3+2 band. */
+@media (min-width: 641px) and (max-width: 1000px) {
+  @container (max-width: 939px) {
+    .scale:last-child { display: grid; grid-template-columns: 150px minmax(0, 1fr); column-gap: 20px; row-gap: 4px; align-items: start; }
+    .scale:last-child > .gomen-pic { grid-column: 1; grid-row: 1 / span 5; margin: 0; }
+    .scale:last-child > :not(.gomen-pic) { grid-column: 2; }
+  }
 }
 
 /* Waking: the figure sways from its base, its gold kindles, the wash breathes.
@@ -384,7 +411,7 @@ h1 {
 }
 .seed-copy:hover, .seed-copy:focus-visible { border-color: var(--gold); color: var(--gold-2); background: var(--bg-3); }
 .seed-copy.is-copied { border-color: var(--gold); color: var(--gold-2); }
-.seed-plain { font-family: var(--serif); font-size: 1.4em; line-height: 1.5; color: var(--ink); margin-bottom: 12px; }
+.seed-plain { max-width: 46ch; font-family: var(--serif); font-size: 1.4em; line-height: 1.5; color: var(--ink); margin-bottom: 12px; }
 .seed-math { font-family: var(--mono); }
 .equation-prime, .equation-main { font-family: var(--mono); color: var(--gold-2); letter-spacing: 0.04em; }
 .equation-prime { font-size: 1.22em; font-weight: 700; margin-bottom: 6px; }
@@ -393,6 +420,14 @@ h1 {
 .seed-phrase-label { display: block; font-size: 0.78em; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-2); }
 .seed-phrase p { margin-top: 8px; font-family: var(--mono); font-size: 0.95em; line-height: 1.85; color: var(--ink); }
 .equation-live { color: var(--gold-2); }
+/* phones: the copy button sits in the card's corner instead of taking a
+   column, so the equations get the card's full width */
+@media (max-width: 640px) {
+  .seed { position: relative; }
+  .seed-copy-wrap { display: block; }
+  .seed-copy { position: absolute; top: 10px; right: 10px; width: 34px; height: 34px; }
+  .seed-plain { padding-right: 40px; }
+}
 
 /* ── The script ──
    Every glyph on the page is drawn by src/glyphs (a seeded brush, build-time)
@@ -534,7 +569,7 @@ h1 {
 }
 
 /* ── Sky now ── */
-.sky-sentence { font-family: var(--serif); font-size: 1.4em; color: var(--ink); margin: -2px 0 14px; }
+.sky-sentence { max-width: 62ch; font-family: var(--serif); font-size: 1.4em; color: var(--ink); margin: -2px 0 14px; }
 .sky-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--gutter); }
 @media (max-width: 900px) { .sky-grid { grid-template-columns: repeat(2, 1fr); } }
 .sky-tile {
@@ -574,16 +609,20 @@ h1 {
 .sky-note { font-size: 0.92em; color: var(--ink-2); max-width: 60ch; }
 
 /* The Viewer screenshot beside the live data: a door with a view through it.
-   The frame is deliberately small — half the width the 1.6fr column used to get
-   (≈335px at the 1200px column, 2.25 : 1 against the foot beside it). The shot
-   is a signpost to the Viewer, not the subject of the section; at full column
-   width it read as the section's illustration and pushed the live readings out
-   of the fold. Keep `sizes` in index.html in step with the 335px figure. */
+   The frame is deliberately small. The shot is a signpost to the Viewer, not
+   the subject of the section; at full column width it read as the section's
+   illustration and pushed the live readings out of the fold. So it takes
+   ≈335px at the 1200px column (2.25 : 1 against the foot beside it), a quarter
+   of the wider column from 1440 (≈280–520px), 40% of the width beside the foot
+   at 601–900, and the full width only on phones. Keep `sizes` in index.html
+   in step with these figures. */
 .sky-lower {
   display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2.25fr);
   gap: var(--gutter); align-items: center; margin-top: 18px;
 }
-@media (max-width: 900px) { .sky-lower { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .sky-lower { grid-template-columns: 1fr; } }
+@media (min-width: 601px) and (max-width: 900px) { .sky-lower { grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); } }
+@media (min-width: 1440px) { .sky-lower { grid-template-columns: minmax(0, 1fr) minmax(0, 3fr); } }
 .sky-shot {
   display: block; position: relative; overflow: hidden; border-radius: var(--radius);
   border: 1px solid var(--line); background: #0e2117;
@@ -616,15 +655,25 @@ h1 {
 .chip:hover { border-color: var(--ink); color: var(--ink); }
 .chip[aria-pressed="true"] { color: var(--bg); background: var(--ink); border-color: var(--ink); }
 .ideas-count { font-size: 0.86em; color: var(--ink-3); letter-spacing: 0.06em; }
-.ideas-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gutter); }
+/* Cards keep their own height, so none is ever stretched hollow. Rows are
+   always full: an open card takes a row of its own and the closed cards flow
+   around it (dense), and ideas.js lets the cards of a short last row share it
+   (.is-coda, --span) */
+.ideas-inner { container-type: inline-size; }
+.ideas-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-flow: row dense; align-items: start; gap: var(--gutter); }
 @media (max-width: 1000px) { .ideas-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 600px) { .ideas-grid { grid-template-columns: 1fr; } }
+@container (min-width: 1300px) { .ideas-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .idea {
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 14px 16px; transition: border-color 0.15s;
 }
 .idea:hover, .idea.is-open { border-color: var(--line-2); }
-.idea.is-open { grid-row: span 2; }
+.idea.is-coda { grid-column: span var(--span); }
+/* An open idea becomes a panel the width of the grid, its notes in two columns
+   once there is room; the text keeps its measure however wide the panel */
+@media (min-width: 601px) { .idea.is-open { grid-column: 1 / -1; } }
+@container (min-width: 900px) { .idea.is-open .idea-more { columns: 2 22em; column-gap: 32px; } }
 .idea-head {
   display: flex; align-items: center; gap: 10px; width: 100%;
   background: none; border: 0; padding: 0; cursor: pointer; text-align: left; color: inherit;
@@ -635,8 +684,8 @@ h1 {
 .idea-name { flex: 1; font-family: var(--serif); font-size: 1.22em; font-weight: 600; line-height: 1.25; color: var(--ink); letter-spacing: 0.02em; }
 .idea-head::after { content: '+'; font-family: var(--mono); color: var(--ink-3); font-size: 1.1em; }
 .idea-head[aria-expanded="true"]::after { content: '−'; }
-.idea-meaning { font-size: 1em; line-height: 1.6; color: var(--ink-2); margin-top: 8px; }
-.idea-more { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 1em; line-height: 1.65; color: var(--ink-2); }
+.idea-meaning { max-width: 64ch; font-size: 1em; line-height: 1.6; color: var(--ink-2); margin-top: 8px; }
+.idea-more { max-width: calc(128ch + 32px); margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 1em; line-height: 1.65; color: var(--ink-2); }
 .idea-more p + p { margin-top: 10px; }
 .idea-formula { font-family: var(--mono); color: var(--gold-2); font-size: 0.92em; }
 .idea-align strong { color: var(--ink); font-weight: 600; }
@@ -651,7 +700,8 @@ h1 {
 .legend-item { white-space: nowrap; }
 
 /* ── Archive ── */
-.archive-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); gap: var(--gutter); }
+/* auto-fit: on the wide column the few cards share the row instead of leaving empty tracks */
+.archive-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(196px, 1fr)); gap: var(--gutter); }
 .archive-card {
   position: relative; padding: 20px 18px 18px; cursor: pointer;
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
@@ -743,7 +793,7 @@ h1 {
 /* ── Begin ── */
 .begin .links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 0.4em; }
 .link-btn { text-decoration: none; }
-.resources { list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin: 22px 0 0; padding: 0; }
+.resources { list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin: 22px 0 0; padding: 0; }
 .resources li { margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .resources a.res-dl {
   font-family: var(--mono); font-size: 0.78em; letter-spacing: 0.06em;
@@ -881,7 +931,10 @@ footer > p { margin-top: 4px; }
 :root[data-tod="night"] .hero-images :nth-child(3) img { filter: brightness(0.62) hue-rotate(25deg) saturate(0.85); }
 :root[data-tod="night"] .hero-images :nth-child(5) img { filter: brightness(0.9) saturate(1.2); }
 
-/* ── Responsive frame ── */
+/* ── Responsive frame ──
+   From 1440 px the column grows with the screen, so the grids get the width;
+   prose keeps its measure, because every paragraph carries its own ch cap */
+@media (min-width: 1440px) { :root { --col: clamp(1200px, 86vw, 2200px); } }
 @media (max-width: 1100px) { :root { --pad-x: 28px; } }
 @media (max-width: 768px) {
   :root { --pad-x: 16px; }
