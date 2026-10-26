@@ -43,7 +43,18 @@ export interface HudCallbacks {
   onSelectCorona?(id: string | null): void;
   onLoadCycle(): void;
   onSunPlanes?(on: boolean): void;
+  /** A detail, or the report from its tile, has just been put in front of the reader. */
+  onOpenDetail?(id: string): void;
 }
+
+/**
+ * The phone layout: one page that scrolls, the scene a band across its top.
+ * A phone on its side is not this — it gets the desktop grid on one screen —
+ * so the query is the narrow width less short landscape, the same split
+ * styles.css makes.
+ */
+export const PAGE_LAYOUT =
+  '(max-width: 860px) and (orientation: portrait), (max-width: 860px) and (min-height: 521px)';
 
 /**
  * The NOAA notices as the header and the ticker carry them.
@@ -97,6 +108,92 @@ export function noticeTicker(state: StoreState, now = new Date()): { top: AlertI
   return { top: current[0] ?? null, items };
 }
 
+/**
+ * The status line, in four states and loading, because "not live", "partly
+ * working" and "not working" are not the same thing and a reader deciding
+ * whether to trust a number needs to know which one they are looking at.
+ *
+ * `text` is the form the margin's foot has room for, beside the briefing
+ * buttons; `title` is the whole sentence. Failures keep their words in both.
+ */
+export function statusLine(state: StoreState, now = new Date()): {
+  text: string; title: string; tone: 'error' | 'mirror' | 'degraded' | null;
+} {
+  const env = state.now;
+  const onMirror = env ? Object.values(env.parts).some((p) => p.mirrored) : false;
+  // "Live" is a claim: it needs at least one timestamp behind it. A
+  // completed composite whose every feed failed has none.
+  const gotAny = env ? Object.values(env.parts).some((p) => p.data_time) : false;
+  // "Live" also needs the readings to be current. A fetch that succeeds but
+  // brings back only old readings — a feed that has stopped upstream — is a
+  // live fetch of a stale page, and says so, in amber, with the newest age.
+  const ages = env ? [...new Set(INSTRUMENTS.map((i) => env.parts[i.part]))]
+    .filter((p) => p?.data_time)
+    .map((p) => ({ age: (now.getTime() - Date.parse(p.data_time!)) / 1000, after: p.stale_after_s })) : [];
+  const allStale = ages.length > 0 && ages.every((a) => a.age > a.after);
+  const newest = allStale ? Math.min(...ages.map((a) => a.age)) : null;
+  const same = (text: string, tone: 'error' | 'degraded' | null) => ({ text, title: text, tone });
+
+  if (state.lastError) {
+    return same(`Last refresh failed (${state.lastError}) at ${
+      hhmmUTC(state.lastAttempt)} UTC. Showing last good data, ageing.`, 'error');
+  }
+  if (env && onMirror) {
+    // The mirror is a byte-for-byte copy, so each value still carries the
+    // time NOAA observed it — which is the number that decides whether it is
+    // worth anything, and it is already on every tile.
+    return {
+      text: `Mirror · NOAA unreachable · captured ${hhmmUTC(env.fetched_at)} UTC`,
+      title: `NOAA SWPC unreachable · reading Earth Star's mirror (stage B), captured ${
+        hhmmUTC(env.fetched_at)} UTC · every value keeps NOAA's own timestamp`,
+      tone: 'mirror',
+    };
+  }
+  if (env && !gotAny) {
+    return same(`NOAA SWPC unreachable — nothing has loaded yet. Retrying${
+      state.nextAttempt ? ` at ${hhmmUTC(state.nextAttempt)} UTC` : ''}.`, 'degraded');
+  }
+  if (env && newest !== null) {
+    // "Live fetch", never plain "Live": the fetch is live, the readings are not.
+    return {
+      text: `Live fetch · newest reading ${formatAge(newest)} old`,
+      title: `Live fetch · NOAA SWPC · refreshed ${hhmmUTC(env.fetched_at)} UTC · newest reading ${
+        formatAge(newest)} old`,
+      tone: 'degraded',
+    };
+  }
+  if (env) {
+    return {
+      text: `Live · NOAA SWPC · ${hhmmUTC(env.fetched_at)} UTC`,
+      title: `Live · NOAA SWPC · refreshed ${hhmmUTC(env.fetched_at)} UTC · DirectSource (stage A)`,
+      tone: null,
+    };
+  }
+  return same('Fetching live data from NOAA SWPC…', null);
+}
+
+/**
+ * The renderer trades resolution for frame rate on its own. Doing that
+ * silently would be the same kind of dishonesty as quietly degrading data, so
+ * it is said out loud — the chip while it is happening, because a permanent
+ * frame-rate counter is noise the rest of the time, and the sentence in the
+ * Sources tab always.
+ */
+export function renderScale(s: FrameStats): { reduced: boolean; chip: string; sentence: string } {
+  const reduced = s.pixelRatio < s.maxPixelRatio;
+  return {
+    reduced,
+    chip: `${+(s.pixelRatio / s.maxPixelRatio).toFixed(2)}×`,
+    sentence: reduced
+      ? `Rendering at ${s.pixelRatio}x rather than ${s.maxPixelRatio}x `
+        + `(${s.megapixels.toFixed(1)} MP) to hold the frame rate — `
+        + `${Math.round(s.fps)} fps. Geometry and data are unaffected.`
+      : `Full resolution, ${s.maxPixelRatio}x (${s.megapixels.toFixed(1)} MP) — `
+        + `${Math.round(s.fps)} fps. If the frame rate falls, resolution gives way first; `
+        + 'geometry and data never do.',
+  };
+}
+
 export class Hud {
   private instrumentsEl: HTMLElement;
   private tickerEl: HTMLElement;
@@ -106,12 +203,17 @@ export class Hud {
   private bodyEl: HTMLElement;
   private statusEl: HTMLElement;
   private perfEl: HTMLElement;
+  /** The column the tabs head; on a phone, where an opened detail is scrolled to. */
+  private marginEl: HTMLElement;
+  /** The render-scale sentence, for the Sources tab; null until a frame is measured. */
+  private rendering: string | null = null;
   private headlineEl: HTMLAnchorElement;
   /** One line under the rail's head for a total outage, instead of thirteen alarms. */
   private outageEl: HTMLElement;
   private copyEl: HTMLButtonElement;
   private downloadEl: HTMLButtonElement;
   private perfKey = '';
+  private scaleKey = '';
   /** Last-drawn sparkline signature per tile, so an unchanged series is not redrawn. */
   private sparkKeys = new Map<string, string>();
   /**
@@ -163,6 +265,7 @@ export class Hud {
       new ResizeObserver(() => this.fitTicker()).observe(this.tickerEl);
     }
     this.tabsEl = document.getElementById('tabs') as HTMLElement;
+    this.marginEl = (this.tabsEl.closest('.margin') as HTMLElement | null) ?? this.tabsEl;
     this.bodyEl = document.getElementById('margin-body') as HTMLElement;
     this.bodyEl.addEventListener('click', this.onBodyClick);
     this.statusEl = document.getElementById('status') as HTMLElement;
@@ -301,8 +404,8 @@ export class Hud {
     // NOAA scales are three values, so they get their own shape. Like the
     // aurora peak they have no detail of their own; both open the report.
     tile('scales', 'NOAA scales', '<span class="tile-value scales-row" data-scales></span>',
-      () => this.selectTab('report'));
-    tile('aurora', 'Aurora peak', valueSlot('%'), () => this.selectTab('report'));
+      () => { this.selectTab('report'); this.reveal('report'); });
+    tile('aurora', 'Aurora peak', valueSlot('%'), () => { this.selectTab('report'); this.reveal('report'); });
   }
 
   /**
@@ -529,7 +632,22 @@ export class Hud {
       if (el.tagName === 'BUTTON') el.setAttribute('aria-current', String(k === id));
     }
     this.renderMargin();
-    this.bodyEl.focus();
+    // A new detail starts at its top, not at the old panel's scroll position.
+    this.bodyEl.scrollTop = 0;
+    this.reveal(id);
+  }
+
+  /**
+   * Put what was just opened in front of the reader. The panel takes focus
+   * without the browser scrolling to it: on a desktop it is already in view,
+   * and on a phone the page is scrolled on purpose, to the column's top, so
+   * the detail starts under the tab bar — the focus scroll had been landing
+   * its heading 13 px under the header, with the open rail still over it.
+   */
+  private reveal(id: string): void {
+    this.bodyEl.focus({ preventScroll: true });
+    if (window.matchMedia(PAGE_LAYOUT).matches) this.marginEl.scrollIntoView({ block: 'start' });
+    this.cb.onOpenDetail?.(id);
   }
 
   /**
@@ -683,50 +801,13 @@ export class Hud {
     (this.tickerEl.querySelector('[data-t]') as HTMLElement).innerHTML = notices.items;
     this.fitTicker();
 
-    // Status — four states, because "not live", "partly working" and "not
-    // working" are not the same thing and a reader deciding whether to trust
-    // a number needs to know which one they are looking at.
-    const onMirror = env ? Object.values(env.parts).some((p) => p.mirrored) : false;
-    // "Live" is a claim: it needs at least one timestamp behind it. A
-    // completed composite whose every feed failed has none.
-    const gotAny = env ? Object.values(env.parts).some((p) => p.data_time) : false;
-    // "Live" also needs the readings to be current. A fetch that succeeds but
-    // brings back only old readings — a feed that has stopped upstream — is a
-    // live fetch of a stale page, and says so, in amber, with the newest age.
-    const ages = env ? [...new Set(INSTRUMENTS.map((i) => env.parts[i.part]))]
-      .filter((p) => p?.data_time)
-      .map((p) => ({ age: (now.getTime() - Date.parse(p.data_time!)) / 1000, after: p.stale_after_s })) : [];
-    const allStale = ages.length > 0 && ages.every((a) => a.age > a.after);
-    const newest = allStale ? Math.min(...ages.map((a) => a.age)) : null;
-    const quietlyStale = !state.lastError && !!env && !onMirror && newest !== null;
-    this.statusEl.classList.toggle('is-error', !!state.lastError);
-    this.statusEl.classList.toggle('is-mirror', !state.lastError && onMirror);
-    this.statusEl.classList.toggle('is-degraded',
-      !state.lastError && !!env && !onMirror && (!gotAny || quietlyStale));
-    if (state.lastError) {
-      this.statusEl.textContent =
-        `Last refresh failed (${state.lastError}) at ${hhmmUTC(state.lastAttempt)} UTC. Showing last good data, ageing.`;
-    } else if (env && onMirror) {
-      // The mirror is a byte-for-byte copy, so each value still carries the
-      // time NOAA observed it — which is the number that decides whether it is
-      // worth anything, and it is already on every tile.
-      this.statusEl.textContent =
-        `NOAA SWPC unreachable · reading Earth Star's mirror (stage B), captured ${
-          hhmmUTC(env.fetched_at)} UTC · every value keeps NOAA's own timestamp`;
-    } else if (env && !gotAny) {
-      this.statusEl.textContent =
-        `NOAA SWPC unreachable — nothing has loaded yet. Retrying${
-          state.nextAttempt ? ` at ${hhmmUTC(state.nextAttempt)} UTC` : ''}.`;
-    } else if (env && quietlyStale) {
-      this.statusEl.textContent =
-        `Live fetch · NOAA SWPC · refreshed ${hhmmUTC(env.fetched_at)} UTC · newest reading ${
-          formatAge(newest!)} old`;
-    } else if (env) {
-      this.statusEl.textContent =
-        `Live · NOAA SWPC · refreshed ${hhmmUTC(env.fetched_at)} UTC · DirectSource (stage A)`;
-    } else {
-      this.statusEl.textContent = 'Fetching live data from NOAA SWPC…';
-    }
+    // Status: the short form in the foot, the whole sentence in its title.
+    const status = statusLine(state, now);
+    this.statusEl.classList.toggle('is-error', status.tone === 'error');
+    this.statusEl.classList.toggle('is-mirror', status.tone === 'mirror');
+    this.statusEl.classList.toggle('is-degraded', status.tone === 'degraded');
+    this.statusEl.textContent = status.text;
+    this.statusEl.title = status.title;
 
     this.renderMargin();
   }
@@ -749,23 +830,26 @@ export class Hud {
     document.getElementById(id)?.setAttribute('data-state', state);
   }
 
-/**
-   * The renderer trades resolution for frame rate on its own. Doing that
-   * silently would be the same kind of dishonesty as quietly degrading data, so
-   * it is said out loud — but only while it is happening, because a permanent
-   * frame-rate counter is noise the rest of the time.
+  /**
+   * The render scale, as `renderScale` words it: a chip in the margin's foot
+   * while resolution is reduced, and the sentence in the Sources tab, which is
+   * re-rendered when the scale changes rather than with every frame-rate tick.
    */
   setStats(s: FrameStats): void {
-    const reduced = s.pixelRatio < s.maxPixelRatio;
-    const key = reduced ? `${s.pixelRatio}/${s.maxPixelRatio}/${Math.round(s.fps)}` : '';
+    const scale = renderScale(s);
+    this.rendering = scale.sentence;
+    const scaleKey = `${s.pixelRatio}/${s.maxPixelRatio}`;
+    if (scaleKey !== this.scaleKey) {
+      this.scaleKey = scaleKey;
+      if (this.tab === 'sources') this.renderMargin();
+    }
+    const key = scale.reduced ? scale.sentence : '';
     if (key === this.perfKey) return;
     this.perfKey = key;
-    this.perfEl.hidden = !reduced;
-    if (!reduced) return;
-    this.perfEl.textContent =
-      `Rendering at ${s.pixelRatio}x rather than ${s.maxPixelRatio}x `
-      + `(${s.megapixels.toFixed(1)} MP) to hold the frame rate — `
-      + `${Math.round(s.fps)} fps. Geometry and data are unaffected.`;
+    this.perfEl.hidden = !scale.reduced;
+    if (!scale.reduced) return;
+    this.perfEl.title = scale.sentence;
+    this.perfEl.innerHTML = `${escapeHtml(scale.chip)}<span class="sr-only"> — ${escapeHtml(scale.sentence)}</span>`;
   }
 
   private readonly SECTION_KEY = 'viewer.sections';
@@ -817,7 +901,7 @@ export class Hud {
         this.bodyEl.innerHTML = renderSources(state, this.checks, this.remembered, {
           surface: this.narration.earthSurface ?? 'vector',
           lights: this.earthLights, coast: this.earthCoast,
-        });
+        }, this.rendering);
         break;
       case 'checks': this.bodyEl.innerHTML = renderChecks(this.checks, this.checksRunning); break;
       case 'detail':
@@ -909,10 +993,10 @@ export class Hud {
       box.querySelector('.ticker-all')?.remove();
       box.classList.toggle('is-expanded', this.tickerExpanded);
 
-      // Expanded shows everything; it needs a way back, and a way on to the
-      // notices as NOAA wrote them.
+      // Expanded shows everything; it needs a way back, in the place the way
+      // in was, and a way on to the notices as NOAA wrote them.
       if (this.tickerExpanded) {
-        if (all.length > 1) items.append(this.tickerMoreButton('show fewer', true));
+        if (all.length > 1) box.append(this.tickerMoreButton('show fewer', true));
         const verbatim = document.createElement('button');
         verbatim.className = 'ticker-all';
         verbatim.type = 'button';
@@ -924,8 +1008,10 @@ export class Hud {
 
       if (box.scrollHeight <= box.clientHeight + 1) return;
 
+      // The count is the box's own child, beside the items rather than among
+      // them, so the box cannot clip it with the overflow it counts.
       const more = this.tickerMoreButton('', false);
-      items.append(more);
+      box.append(more);
       let hidden = 0;
       // Hide from the end until it fits, always keeping the newest alert.
       for (let i = all.length - 1; i >= 1; i--) {
@@ -934,6 +1020,9 @@ export class Hud {
         more.textContent = `+${hidden} more`;
         if (box.scrollHeight <= box.clientHeight + 1) break;
       }
+      // One notice too long for the box is cut by its own line clamp; there is
+      // nothing behind it for a count to offer.
+      if (hidden === 0) { more.remove(); return; }
       more.textContent = `+${hidden} more`;
     } finally {
       this.fittingTicker = false;

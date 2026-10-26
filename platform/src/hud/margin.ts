@@ -417,6 +417,7 @@ export function renderSources(
   remembered?: (id: string) => boolean | undefined,
   earth: { surface: 'vector' | 'imagery' | 'loading'; lights: boolean; coast: boolean } =
     { surface: 'vector', lights: false, coast: false },
+  rendering: string | null = null,
 ): string {
   const env = state.now;
   if (!env) return '<h2>Provenance</h2><p>No envelope loaded yet.</p>';
@@ -456,6 +457,11 @@ export function renderSources(
     <td class="num">${au.data ? `${au.latency_s}s` : NO_DATA}</td>
   </tr>` : '';
 
+  // How the scene is being drawn on this device. Not a feed and not a tier:
+  // the resolution the renderer chose, said here as the foot's chip says it.
+  const renderingRow = rendering
+    ? `<tr><td>rendering</td><td>—</td><td colspan="3">${escapeHtml(rendering)}</td></tr>` : '';
+
   const monitors = renderMonitors(
     state.spacecraft?.data ?? [], state.now?.data.solar_wind?.speed ?? null,
   );
@@ -467,7 +473,7 @@ export function renderSources(
     ${section('prov-table', 'Every element', `
       <table class="prov">
         <thead><tr><th>Element</th><th>Tier</th><th>Source</th><th>Time</th><th>Lat.</th></tr></thead>
-        <tbody>${Object.entries(env.parts).map(([k, m]) => metaRow(k, m)).join('')}${auRow}</tbody>
+        <tbody>${Object.entries(env.parts).map(([k, m]) => metaRow(k, m)).join('')}${auRow}${renderingRow}</tbody>
       </table>`, true, remembered)}
     ${section('prov-earth', 'The Earth base — imagery, not a feed', `
       <table class="prov">
@@ -581,22 +587,17 @@ export function renderChecks(checks: CheckResult | null, running: boolean): stri
     <p>Our values against NOAA’s own published figures, fetched by a separate path at the
     same timestamp. Drift is a bug, not a rounding preference.</p>
     ${checkSummary(checks)}
-    <table class="prov">
-      <tbody>
-        ${checks.rows.map((r) => `
-          <tr class="check-row">
-            <td colspan="2"><strong>${escapeHtml(r.name)}</strong></td>
-            <td class="${r.inconclusive ? 'verdict-none' : r.ok ? 'verdict-ok' : 'verdict-bad'}">${
-              r.inconclusive ? 'no signal' : r.ok ? 'pass' : 'DRIFT'}</td>
-          </tr>
-          <tr class="check-row">
-            <td class="num">${escapeHtml(r.ours)}</td>
-            <td class="tile-meta">vs</td>
-            <td class="num">${escapeHtml(r.theirs)}</td>
-          </tr>
-          <tr><td class="check-note" colspan="3">${escapeHtml(r.note)}</td></tr>`).join('')}
-      </tbody>
-    </table>
+    ${checks.rows.map((r) => `
+      <div class="check">
+        <div class="check-head"><strong>${escapeHtml(r.name)}</strong>
+          <span class="${r.inconclusive ? 'verdict-none' : r.ok ? 'verdict-ok' : 'verdict-bad'}">${
+            r.inconclusive ? 'no signal' : r.ok ? 'pass' : 'DRIFT'}</span></div>
+        <dl class="check-vals">
+          <dt>ours</dt><dd>${escapeHtml(r.ours)}</dd>
+          <dt>NOAA</dt><dd>${escapeHtml(r.theirs)}</dd>
+        </dl>
+        <p class="check-note">${escapeHtml(r.note)}</p>
+      </div>`).join('')}
     <p class="tile-meta">Last run ${hhmmUTC(checks.ranAt)} UTC.</p>`;
 }
 

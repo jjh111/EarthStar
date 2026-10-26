@@ -9,7 +9,7 @@
 
 import './styles.css';
 import { Viewer } from './scene/viewer.js';
-import { Hud } from './hud/hud.js';
+import { Hud, PAGE_LAYOUT } from './hud/hud.js';
 import { NowStore } from './data/store.js';
 import { EarthStore } from './data/earth-store.js';
 import { DirectSource } from './data/direct-source.js';
@@ -337,6 +337,10 @@ const hud = new Hud({
   onRunChecks: () => void doChecks(),
   onSunFrame: (img) => showSunFrame(img),
   onCoronaFrame: (img) => showCoronaFrame(img),
+  // On a phone a tile's detail opens below the band and the page scrolls to
+  // it; the rail folds behind it, so on the way back up the band is the view
+  // again. The reader's saved setting is left as they made it.
+  onOpenDetail: () => { if (window.matchMedia(PAGE_LAYOUT).matches) setRail(false, false, false); },
 });
 
 /* ---------------- controls ---------------- */
@@ -481,21 +485,24 @@ controlsToggle.addEventListener('click', () => {
 /**
  * The tiles' show/hide. Open by default on a desktop, where the rail is the
  * glance; closed by default on a phone, where the scene band is the view and
- * the tiles are the clutter — the reader's own choice is remembered after
- * that, per device.
+ * the tiles are the clutter, and on a phone on its side, where 116 px is a
+ * quarter of a stage under 400 px tall — the reader's own choice is
+ * remembered after that, per device.
  */
 const RAIL_KEY = 'viewer.rail';
 const railEl = document.getElementById('rail') as HTMLElement;
 const railToggle = btn('rail-toggle');
 
-function setRail(open: boolean, announceIt = true): void {
+function setRail(open: boolean, announceIt = true, remember = true): void {
   railEl.classList.toggle('is-collapsed', !open);
   railToggle.setAttribute('aria-expanded', String(open));
   railToggle.setAttribute('aria-label', open ? 'Hide instrument tiles' : 'Show instrument tiles');
   const chevron = railToggle.querySelector('.rail-chevron');
   if (chevron) chevron.textContent = open ? '‹' : '›';
-  try { localStorage.setItem(RAIL_KEY, open ? 'open' : 'closed'); } catch {
-    // Private browsing: the choice applies for the session only.
+  if (remember) {
+    try { localStorage.setItem(RAIL_KEY, open ? 'open' : 'closed'); } catch {
+      // Private browsing: the choice applies for the session only.
+    }
   }
   if (announceIt) announce(open ? 'Instrument tiles shown.' : 'Instrument tiles hidden.');
 }
@@ -509,8 +516,8 @@ function railOpenNow(): boolean {
   try { saved = localStorage.getItem(RAIL_KEY); } catch { /* fall through */ }
   const open = saved !== null
     ? saved === 'open'
-    // Desktops open, phones closed — the two defaults the two layouts want.
-    : window.matchMedia('(min-width: 861px)').matches;
+    // Desktops open, phones and short landscape closed.
+    : window.matchMedia('(min-width: 861px) and (min-height: 521px)').matches;
   setRail(open, false);
 })();
 

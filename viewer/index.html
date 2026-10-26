@@ -25,8 +25,8 @@
   <meta name="twitter:image" content="https://earthstar.space/viewer/og.jpg" />
 
   <link rel="preconnect" href="https://services.swpc.noaa.gov" crossorigin />
-  <script type="module" crossorigin src="/viewer/assets/index-BTPo_XqB.js"></script>
-  <link rel="stylesheet" crossorigin href="/viewer/assets/index-ew2maTad.css">
+  <script type="module" crossorigin src="/viewer/assets/index-ejD8EtbY.js"></script>
+  <link rel="stylesheet" crossorigin href="/viewer/assets/index-DLjP8RY0.css">
 </head>
 <body>
   <a class="skip-link" href="#margin-body">Skip to the Situation Report</a>
@@ -130,14 +130,19 @@
            to be able to reach it to scroll it. The skip link lands here too. -->
       <div class="margin-body" id="margin-body" role="tabpanel" tabindex="0"
            aria-labelledby="tab-report"></div>
+      <!-- The foot is one row: the status line, then the actions beside it.
+           On a phone the status moves up under the tabs instead. The chip is
+           the render scale, shown only while the renderer is trading
+           resolution for frame rate; its sentence is in its title and the
+           Sources tab. -->
+      <p class="status" id="status" role="status"></p>
       <div class="margin-actions">
+        <span class="perf-chip" id="perf" hidden></span>
         <button class="ctl ctl-sm" id="brief-copy" type="button"
                 title="Copy the whole panel as Markdown, with every timestamp and source">Copy briefing</button>
         <button class="ctl ctl-sm" id="brief-download" type="button"
                 title="Download the briefing as a Markdown file">.md</button>
       </div>
-      <p class="status" id="status" role="status"></p>
-      <p class="perf" id="perf" hidden></p>
     </aside>
   </div>
 
