@@ -20,9 +20,10 @@ import { fetchForecast, type ForecastBundle } from './data/forecast.js';
 import { fetchSolarCycle } from './data/solar-cycle.js';
 import { bodyFacts, distanceText, lightTimeText } from './hud/body-facts.js';
 import { LOOPS, fetchLoop, preloadLoop, type ImageLoop } from './data/solar-imagery.js';
-import { scaleLabel, type ScaleMode } from './scene/scales.js';
+import { scaleLabel, scaleNote, type ScaleMode } from './scene/scales.js';
 import { VIEWS, type ViewName } from './scene/camera-rig.js';
 import { errorReason } from './data/state.js';
+import { TIER_WORD, whenUTC } from './hud/format.js';
 import { SubjectCard } from './hud/subject-card.js';
 import { subject } from './hud/subjects.js';
 
@@ -61,6 +62,8 @@ function retryImagery(kind: 'disk' | 'corona', id: string): void {
   if (sunRetryTimers.has(key)) return;
   const at = new Date(Date.now() + IMAGERY_RETRY_MS).toISOString();
   if (kind === 'disk') hud.setSunRetry(at); else hud.setCoronaRetry(at);
+  imageryGap[kind] = { retryAt: at };
+  syncStageNote();
   const t = window.setTimeout(() => {
     sunRetryTimers.delete(key);
     if (kind === 'disk' ? hud.sunState.loopId === id : hud.sunState.coronaId === id) {
@@ -78,6 +81,7 @@ async function selectLoop(id: string): Promise<void> {
     const cached = loopCache.get(spec.id) ?? null;
     hud.setSunLoop(cached, false);
     sunTexture(cached);
+    setImageryGap('disk', cached ? null : 'no-data');
     return;
   }
   hud.setSunLoop(null, true);
@@ -87,6 +91,7 @@ async function selectLoop(id: string): Promise<void> {
     if (hud.sunState.loopId === spec.id) {
       hud.setSunLoop(loop, false);
       sunTexture(loop);
+      setImageryGap('disk', loop ? null : 'no-data');
     }
   } catch (e) {
     if (hud.sunState.loopId === spec.id) {
@@ -109,25 +114,90 @@ async function selectCorona(id: string | null): Promise<void> {
     viewer.setCoronaPlane(null);
     hud.setPlaneCalibration('corona', null);
     viewer.syncCoronaFraming();
+    setImageryGap('corona', null);
     return;
   }
   const spec = LOOPS.find((l) => l.id === id && l.kind === 'coronagraph');
   if (!spec) return;
   if (loopCache.has(spec.id)) {
-    hud.setCoronaLoop(loopCache.get(spec.id) ?? null, false);
+    const cached = loopCache.get(spec.id) ?? null;
+    hud.setCoronaLoop(cached, false);
+    setImageryGap('corona', cached ? null : 'no-data');
     return;
   }
   hud.setCoronaLoop(null, true);
   try {
     const loop = await fetchLoop(spec);
     loopCache.set(spec.id, loop);
-    if (hud.sunState.coronaId === spec.id) hud.setCoronaLoop(loop, false);
+    if (hud.sunState.coronaId === spec.id) {
+      hud.setCoronaLoop(loop, false);
+      setImageryGap('corona', loop ? null : 'no-data');
+    }
   } catch (e) {
     if (hud.sunState.coronaId === spec.id) {
       hud.setCoronaLoop(null, false, errorReason(e));
       retryImagery('corona', spec.id);
     }
   }
+}
+
+/* ---------------- the imagery note on the stage ---------------- */
+
+/**
+ * What each imagery lane is missing from the scene: its next retry when the
+ * fetch failed, 'no-data' when the frame list came back with nothing usable,
+ * null while it is fine. Kept here rather than read off the HUD's Sun state,
+ * which clears its error while a retry is in flight — and through that retry
+ * the Sun in the scene is still the placeholder the note explains.
+ */
+type ImageryGap = { retryAt: string } | 'no-data' | null;
+const imageryGap: Record<'disk' | 'corona', ImageryGap> = { disk: null, corona: null };
+
+/**
+ * The views with the Sun in frame. Sunward looks out from the Sun, and Profile
+ * and Polar frame Earth alone: there the note would explain nothing on screen.
+ */
+const SUN_IN_FRAME: ReadonlySet<ViewName> = new Set<ViewName>(['deck', 'corona', 'system']);
+const stageNote = document.getElementById('stage-note') as HTMLElement;
+
+function setImageryGap(kind: 'disk' | 'corona', gap: ImageryGap): void {
+  if (imageryGap[kind] === gap) return;
+  imageryGap[kind] = gap;
+  syncStageNote();
+}
+
+/**
+ * Says in words why the Sun looks the way it does. Without SUVI the sphere is
+ * the flat unobserved placeholder, and it stays plain on purpose — its
+ * plainness is the no-data statement — but only the Sun tab said so, and a
+ * reader looking at the scene had no way to know. Without the coronagraph
+ * alone the Sun is real, so the note names only what is missing.
+ */
+function syncStageNote(): void {
+  const { disk, corona } = imageryGap;
+  if ((!disk && !corona) || !SUN_IN_FRAME.has(view)) {
+    stageNote.hidden = true;
+    return;
+  }
+  // The four label states hold here too: a feed that answered with nothing
+  // usable is "no usable frames", not "unavailable", and has no retry to name.
+  const missing = (what: string, gap: NonNullable<ImageryGap>): string => (gap === 'no-data'
+    ? `${what}: no usable frames`
+    : `${what} unavailable`);
+  const retry = (gap: NonNullable<ImageryGap>): string => (gap === 'no-data'
+    ? '' : ` · retrying ${whenUTC(gap.retryAt)}`);
+  if (disk) {
+    const badge = document.createElement('span');
+    badge.className = 'badge badge-m';
+    badge.title = TIER_WORD.M.replace(/^./, (c) => c.toUpperCase());
+    badge.textContent = 'M';
+    stageNote.replaceChildren(
+      `${missing('Solar imagery', disk)} — the Sun is drawn as the unobserved placeholder `,
+      badge, retry(disk));
+  } else if (corona) {
+    stageNote.textContent = `${missing('Coronagraph imagery', corona)}${retry(corona)}`;
+  }
+  stageNote.hidden = false;
 }
 
 /**
@@ -274,6 +344,10 @@ const hud = new Hud({
 const btn = (id: string) => document.getElementById(id) as HTMLButtonElement;
 const btnScaleGlobe = btn('scale-globe');
 const btnScaleTrue = btn('scale-true');
+/** The scale note on the stage, and its button to the other scale. */
+const scaleNoteEl = document.getElementById('scale-note') as HTMLElement;
+const scaleNoteText = document.getElementById('scale-note-text') as HTMLElement;
+const btnScaleFlip = btn('scale-flip');
 const btnMotion = btn('motion-toggle');
 const btnShield = btn('shield-toggle');
 const btnAurora = btn('aurora-toggle');
@@ -333,13 +407,23 @@ function setView(v: ViewName): void {
   // The polar view exists to show the oval; arriving to a bare globe would be
   // an odd way to present it.
   if (v === 'polar' && !viewer.auroraOn) setAurora(true);
+  syncStageNote();
   syncNarration();
 }
 
+/**
+ * Every route to a scale comes through here — the header pair, the note's own
+ * button, the s key — so the note on the stage can never say one scale while
+ * the scene draws the other.
+ */
 function setScale(mode: ScaleMode): void {
   viewer.setScaleMode(mode);
   btnScaleGlobe.setAttribute('aria-pressed', String(mode === 'globe'));
   btnScaleTrue.setAttribute('aria-pressed', String(mode === 'true'));
+  const note = scaleNote(mode);
+  scaleNoteText.textContent = note.text;
+  btnScaleFlip.textContent = note.flip;
+  scaleNoteEl.hidden = false;
   announce(scaleLabel(mode));
   syncNarration();
 }
@@ -434,6 +518,7 @@ railToggle.addEventListener('click', () => setRail(!railOpenNow()));
 
 btnScaleGlobe.addEventListener('click', () => setScale('globe'));
 btnScaleTrue.addEventListener('click', () => setScale('true'));
+btnScaleFlip.addEventListener('click', () => setScale(viewer.scaleMode === 'globe' ? 'true' : 'globe'));
 btnShield.addEventListener('click', () => setShield(!viewer.shieldOn));
 btnAurora.addEventListener('click', () => setAurora(!viewer.auroraOn));
 btnWind.addEventListener('click', () => setWind(!viewer.windOn));

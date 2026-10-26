@@ -457,6 +457,42 @@ header.top {
   padding: 0 0.22rem; flex: none; margin-top: 0.1rem;
 }
 
+/* ---------- notes on the stage ----------
+   Rule 6 on the scene itself: which scale is drawn and what it distorts, with
+   the other scale one click away, top right of the visible scene — clear of
+   the rail on the left, the margin on the right and the header above. A second
+   note, in amber, appears only while solar imagery is down and the Sun is in
+   frame. The column passes the pointer through, so only the notes themselves
+   are taken from the scene's drag. */
+.stage-notes {
+  position: absolute; top: 0.55rem; right: 0.55rem; z-index: 4;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem;
+  max-width: min(26rem, calc(100% - var(--rail-w) - 2rem));
+  pointer-events: none;
+}
+.stage-notes > * {
+  pointer-events: auto; margin: 0;
+  font: max(10px, 0.62rem)/1.35 var(--mono); color: var(--ink-dim);
+  background: var(--bg-panel);
+  backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
+  border: 1px solid var(--line); border-radius: 3px;
+  padding: 0.2rem 0.45rem;
+}
+.stage-note { color: var(--warn); }
+.stage-note .badge { margin: 0 0.1em; }
+/* A 24 px target that does not open up the line it sits in: the padding makes
+   the box, and the equal negative margin hands the extra back, so the margin
+   box is one line tall and the note keeps an even line spacing. */
+.scale-flip {
+  font: inherit; color: var(--accent); background: none;
+  border: 0; border-radius: 2px; cursor: pointer;
+  text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.2em;
+  min-height: 24px; padding: calc((24px - 1.35em) / 2) 0;
+  margin: calc((1.35em - 24px) / 2) 0;
+}
+.scale-flip:hover { color: var(--ink); }
+.scale-flip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 /* ---------- margin column ---------- */
 .margin {
   grid-column: 2; grid-row: 2;
@@ -719,6 +755,17 @@ header.top {
     background: linear-gradient(180deg, transparent, var(--bg) 42px);
   }
   .ticker { margin-left: 0; }
+  /* The notes hang from the stage's top edge, which is the scene band's
+     bottom: they sit at the band's bottom right, clear of the rail and the
+     header, and scroll up with the page as the report rises over the band.
+     Absolute, never fixed — a fixed note would float over the report. */
+  .stage-notes {
+    top: -0.5rem; right: 0.5rem; transform: translateY(-100%);
+    max-width: calc(100vw - 3.5rem);
+  }
+  /* The rail, opened, overlays the band's left side down to its foot; the
+     notes narrow to the space beside it rather than run underneath. */
+  .rail:not(.is-collapsed) ~ .stage-notes { max-width: calc(100vw - var(--rail-w) - 1.5rem); }
   /* A notice headline is longer than a phone is wide, so the item wraps
      rather than being cut off at the edge — the same rule the whole ticker
      already follows about never hiding its own content. */
@@ -754,6 +801,13 @@ header.top {
      side padding only takes it from the time and the detail. */
   .tile { padding: 0.5rem 0.26rem; }
   .sect > summary { padding: 0.7rem 0 0.5rem; }
+  /* The scale note's button is a phrase in a line of text, so it grows its
+     target rather than its box: an invisible 44 px band around the words. */
+  .scale-flip { position: relative; }
+  .scale-flip::after {
+    content: ''; position: absolute; left: -0.3rem; right: -0.3rem;
+    top: calc(50% - 22px); height: 44px;
+  }
 }
 
 /* ---------- sparklines: word-sized data graphics ---------- */

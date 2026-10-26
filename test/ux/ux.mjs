@@ -55,6 +55,7 @@ export const LAYERS = {
     ['#scene', 1],
     ['header.top', 2], ['aside.margin', 2], ['.rail', 2], ['.subject-card', 2],
     ['#instruments', 1], ['.margin-body', 1], ['#clock', 1], ['.headline-alert', 1], ['#ticker', 1],
+    ['.scale-note, .stage-note', 1],
     ['.subject-card .card-body, .subject-card p, .subject-card dl', 1], ['#tip', 1],
     ['.brand', 2], ['.controls', 2], ['.controls-toggle', 2], ['.rail-head', 2], ['.tabs', 2],
     ['.margin-actions', 2], ['#status', 2],
@@ -176,7 +177,7 @@ export async function measure(browser, surface, bp, out) {
   const hScroll = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1);
   const screens = surface === 'viewer' ? 1 : Math.min(24, Math.ceil(docH / bp.height));
   const total = [0, 0, 0, 0];
-  let fold = null;
+  let fold = null, scaleNote = null;
   for (let i = 0; i < screens; i++) {
     await page.evaluate((y) => window.scrollTo(0, y), i * bp.height);
     await page.waitForTimeout(i ? 350 : 0);
@@ -184,6 +185,17 @@ export async function measure(browser, surface, bp, out) {
     m.counts.forEach((c, k) => { total[k] += c; });
     if (i === 0) {
       fold = summarise(m.counts);
+      // README rule 6: the scale is stated on the stage, on the first screen.
+      if (surface === 'viewer') scaleNote = await page.evaluate(() => {
+        const el = document.querySelector('#scale-note');
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return {
+          visible: el.checkVisibility() && r.width > 0,
+          inViewport: r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight,
+          text: el.textContent.replace(/\s+/g, ' ').trim(),
+        };
+      });
       const shot = join(out, `${surface}-${bp.name}.png`);
       await page.screenshot({ path: shot });
       await overlay(shot, m, join(out, `${surface}-${bp.name}-map.png`));
@@ -194,7 +206,8 @@ export async function measure(browser, surface, bp, out) {
     await page.screenshot({ path: join(out, `${surface}-${bp.name}-full.jpg`), fullPage: true, type: 'jpeg', quality: 70 });
   }
   await ctx.close();
-  return { surface, bp: bp.name, width: bp.width, height: bp.height, docH, screens, hScroll, fold, page: summarise(total), errors };
+  return { surface, bp: bp.name, width: bp.width, height: bp.height, docH, screens, hScroll, fold, page: summarise(total), errors,
+    ...(surface === 'viewer' ? { scaleNote } : {}) };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

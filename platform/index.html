@@ -108,6 +108,17 @@
         <div id="instruments" class="instruments"></div>
       </div>
       <div id="ticker" class="ticker"></div>
+      <!-- Notes on the stage itself, top right: which scale is drawn and what
+           it distorts, with the other scale one click away (README rule 6),
+           and — only while it is true — that the Sun is the unobserved
+           placeholder because solar imagery is unavailable. Both are written
+           by main.ts; the scale note stays hidden until there is a scene for
+           it to describe. -->
+      <div class="stage-notes" id="stage-notes">
+        <p class="scale-note" id="scale-note" hidden><span id="scale-note-text"></span>
+          <button type="button" class="scale-flip" id="scale-flip"></button></p>
+        <p class="stage-note" id="stage-note" hidden></p>
+      </div>
       <div id="tip" class="tip" role="status" hidden></div>
     </main>
 
