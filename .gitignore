@@ -14,3 +14,7 @@ experiments/manta-design/
 .rec_*
 __pycache__/
 field-guide/plates/*.png
+
+# UX harness output (test/ux/ux.mjs) and auditors' scratch
+test/ux/out/
+test/ux/tmp-*/
