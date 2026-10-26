@@ -1149,14 +1149,17 @@ text.l1-idle { fill: var(--ink-faint); }
 /* A check that ran but could not settle the question is neither pass nor fail. */
 .verdict-none { color: var(--ink-faint); font-family: var(--mono); font-size: 0.6rem; }
 
-/* Hover label for bodies in the scene. Follows the pointer; never blocks it. */
+/* Hover label for bodies in the scene. Follows the pointer; never blocks it.
+   A sentence, so it wraps at a reading measure instead of running one line
+   across the margin; main.ts flips it to the pointer's left at the stage's
+   right edge. */
 .tip {
   position: absolute; left: 0; top: 0; pointer-events: none; z-index: 5;
-  font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.02em;
+  font-family: var(--sans); font-size: 0.68rem; line-height: 1.35; letter-spacing: 0.01em;
   color: var(--ink); background: var(--bg-panel);
   backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
   border: 1px solid var(--line-strong); border-radius: 3px;
-  padding: 0.22rem 0.42rem; white-space: nowrap;
+  padding: 0.22rem 0.42rem; max-width: 22rem; white-space: normal;
 }
 
 .margin-actions {
@@ -1251,12 +1254,18 @@ text.l1-idle { fill: var(--ink-faint); }
   gap: 0.6rem;
   justify-content: space-between;
 }
-.subject-card h2 { margin: 0; font-size: 1.05rem; }
+/* A name, so it is set like the margin's titles. */
+.subject-card h2 { margin: 0; font-family: var(--serif); font-weight: 500; font-size: 1.3rem; line-height: 1.15; }
 .card-close {
   background: none; border: 0; color: var(--ink-dim);
   font-size: 1.3rem; line-height: 1; cursor: pointer; padding: 0 0.2rem;
+  min-width: 32px; min-height: 32px; flex: none;
 }
 .card-close:hover, .card-close:focus-visible { color: var(--ink); }
+/* After the rule it raises, so a finger gets the 44 px floor. */
+@media (pointer: coarse) {
+  .card-close { min-width: 44px; min-height: 44px; }
+}
 .subject-card p { margin: 0.5rem 0 0; }
 .card-one { color: var(--ink-dim); font-style: italic; }
 /* The limits line is the charter made visible, so it is set apart rather than

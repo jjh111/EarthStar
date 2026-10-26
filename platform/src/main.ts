@@ -25,7 +25,7 @@ import { VIEWS, type ViewName } from './scene/camera-rig.js';
 import { errorReason } from './data/state.js';
 import { TIER_WORD, whenUTC } from './hud/format.js';
 import { SubjectCard } from './hud/subject-card.js';
-import { subject } from './hud/subjects.js';
+import { bodySubjectId, subject } from './hud/subjects.js';
 
 const canvas = document.getElementById('scene') as HTMLCanvasElement;
 /**
@@ -682,15 +682,59 @@ afterFirstPaint(loadEarthImagery);
 /* ---------------- picking ---------------- */
 
 const tipEl = document.getElementById('tip') as HTMLElement;
+const stageEl = document.querySelector('main.stage') as HTMLElement;
 let tipKey = '';
-const card = new SubjectCard({ showSubject: (id) => hud.showSubject(id) });
+
+/**
+ * "Full detail" from a card. A body opens its own detail — distances, light
+ * time, apparent size, then the prose — which says more than the subject's
+ * prose alone; everything else opens as the subject.
+ */
+function showSubject(id: string): void {
+  const s = subject(id);
+  if (s?.kind === 'body') hud.showBody(s.label);
+  else hud.showSubject(id);
+}
+
+const card = new SubjectCard({ showSubject, earthScreen: () => viewer.earthScreen() });
+
+/** A point in canvas coordinates, as the viewport has it. */
+function onPage(at: { x: number; y: number }): { x: number; y: number } {
+  const r = canvas.getBoundingClientRect();
+  return { x: r.left + at.x, y: r.top + at.y };
+}
+
+function hideTip(): void {
+  tipEl.hidden = true;
+  tipKey = '';
+}
+
+/**
+ * The tip beside the pointer, inside the visible scene: under the header, in
+ * the stage's width. It flips to the pointer's left where it would cross the
+ * stage's right edge — on a desktop that edge is the margin, and the tip ran
+ * on over the margin's text — and is held above the scene's foot.
+ */
+function placeTip(at: { x: number; y: number }): void {
+  const p = onPage(at);
+  const stage = stageEl.getBoundingClientRect();
+  const scene = canvas.getBoundingClientRect();
+  const top = Math.max(scene.top, headerEl.getBoundingClientRect().bottom);
+  const bottom = Math.min(scene.bottom, window.innerHeight);
+  const w = tipEl.offsetWidth;
+  const h = tipEl.offsetHeight;
+  let x = p.x + 14;
+  if (x + w > stage.right) x = p.x - 14 - w;
+  x = Math.max(stage.left, x);
+  const y = Math.max(top, Math.min(p.y + 14, bottom - h));
+  // The tip is positioned in the stage's box, not the viewport's.
+  tipEl.style.transform = `translate(${Math.round(x - stage.left)}px, ${Math.round(y - stage.top)}px)`;
+}
 
 viewer.onHover = (p) => {
-  if (!p) {
-    tipEl.hidden = true;
-    tipKey = '';
-    return;
-  }
+  // A card is the answer to the last question; a tip under it is noise.
+  if (card.isOpen) return;
+  if (!p) { hideTip(); return; }
   const facts = bodyFacts(p.id as never, new Date());
   // Earth has no distance-from-Earth to quote, so it says where it is instead.
   const line = p.kind === 'sun'
@@ -705,7 +749,7 @@ viewer.onHover = (p) => {
   // Only touch the text when it changes; the position moves every pointer event.
   if (line !== tipKey) { tipEl.textContent = line; tipKey = line; }
   tipEl.hidden = false;
-  tipEl.style.transform = `translate(${p.screen.x + 14}px, ${p.screen.y + 14}px)`;
+  placeTip(p.screen);
 };
 
 /**
@@ -714,8 +758,9 @@ viewer.onHover = (p) => {
  * scene is clickable at all — without it nobody discovers the card.
  */
 viewer.onLayerHover = (p) => {
+  if (card.isOpen) return;
   if (!p) {
-    if (tipKey.startsWith('layer:')) { tipEl.hidden = true; tipKey = ''; }
+    if (tipKey.startsWith('layer:')) hideTip();
     return;
   }
   const s = subject(p.subject);
@@ -723,16 +768,26 @@ viewer.onLayerHover = (p) => {
   const key = `layer:${s.id}`;
   if (key !== tipKey) { tipEl.textContent = `${s.label} · ${s.oneLine}`; tipKey = key; }
   tipEl.hidden = false;
-  tipEl.style.transform = `translate(${p.screen.x + 14}px, ${p.screen.y + 14}px)`;
+  placeTip(p.screen);
 };
 
 viewer.onLayerSelect = (p) => {
+  hideTip();
   // One click to put a card away, the next to open one — see `sceneClick`.
   // Empty sky dismisses too: a click that hits nothing means "never mind".
-  card.sceneClick(p?.subject ?? null, p?.screen ?? { x: 0, y: 0 });
+  card.sceneClick(p?.subject ?? null, onPage(p?.screen ?? { x: 0, y: 0 }));
 };
 
 viewer.onSelect = (p) => {
+  hideTip();
+  // A body answers a click the way a layer does: with its card, where it was
+  // clicked. On a phone that is a sheet over the page, not a jump 900 px down
+  // to a detail with no tab lit; the card's "Full detail" is still the door.
+  const id = bodySubjectId(p.id);
+  if (p.kind !== 'sun' && p.kind !== 'spacecraft' && subject(id)) {
+    card.sceneClick(id, onPage(p.screen));
+    return;
+  }
   // A body click puts an open card away first, for the same reason a layer
   // click does: with a card up, the next click means "not this one".
   if (card.isOpen) { card.close(); return; }

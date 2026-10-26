@@ -14,6 +14,11 @@ import {
 import {
   SATURN_RING_RADII, distanceToScene, radiusToScene, type ScaleMode,
 } from './scales.js';
+import { planetPosition } from './geometry.js';
+
+/** How much of a planet shows in the views about Earth. See `Planet.setDimmed`. */
+const DIMMED_OPACITY = 0.35;
+const RING_OPACITY = 0.42;
 
 const PLANET_COLOR: Record<PlanetName, number> = {
   Mercury: 0x9c8f83, Venus: 0xe0c9a0, Earth: 0x4a7fb5, Mars: 0xc1613c,
@@ -39,6 +44,7 @@ export class Planet {
   readonly marker: Mesh;
   /** Saturn only. Laid in the planet's equatorial plane, not the ecliptic. */
   private rings: Mesh | null = null;
+  private dimmed = false;
 
   constructor(readonly name: PlanetName) {
     this.mesh = new Mesh(
@@ -56,7 +62,7 @@ export class Planet {
       this.rings = new Mesh(
         new RingGeometry(SATURN_RING_RADII.inner, SATURN_RING_RADII.outer, 72),
         new MeshBasicMaterial({
-          color: 0xe8dcb5, transparent: true, opacity: 0.42,
+          color: 0xe8dcb5, transparent: true, opacity: RING_OPACITY,
           side: DoubleSide, depthWrite: false,
         }),
       );
@@ -65,11 +71,32 @@ export class Planet {
     }
   }
 
+  /**
+   * Dimmed in the views about Earth, full in the views about the system.
+   *
+   * Near Earth a planet is a passer-by: Venus sat on the Sun's face in the
+   * opening frame, a second bright disc competing with the one the view is
+   * about. Moving it would make its position a composition choice, so it stays
+   * exactly where the ephemeris puts it and only its weight drops, and its
+   * marker ring — a finding aid, which here would find the wrong thing — goes.
+   * It is still a body: hover and picking work from its position, not its pixels.
+   */
+  setDimmed(on: boolean): void {
+    if (on === this.dimmed) return;
+    this.dimmed = on;
+    const m = this.mesh.material as MeshLambertMaterial;
+    m.transparent = on;
+    m.opacity = on ? DIMMED_OPACITY : 1;
+    // Transparency moves the mesh to the sorted pass; the program is rebuilt once.
+    m.needsUpdate = true;
+    if (this.rings) {
+      (this.rings.material as MeshBasicMaterial).opacity = RING_OPACITY * (on ? DIMMED_OPACITY : 1);
+    }
+    if (on) this.marker.visible = false;
+  }
+
   update(date: Date, mode: ScaleMode, cameraPos: Vector3): void {
-    const helio = planetState(this.name, date).helio;
-    const scenePos = toScene(helio);
-    const au = scenePos.length();
-    scenePos.normalize().multiplyScalar(distanceToScene(au, mode));
+    const scenePos = planetPosition(this.name, date, mode);
     this.group.position.copy(scenePos);
 
     const r = radiusToScene(this.name, mode);
@@ -90,7 +117,7 @@ export class Planet {
     const dist = cameraPos.distanceTo(scenePos);
     const markerR = dist * 0.012;
     this.marker.scale.setScalar(markerR);
-    this.marker.visible = r < markerR * 0.9;
+    this.marker.visible = !this.dimmed && r < markerR * 0.9;
     this.marker.lookAt(cameraPos);
   }
 }

@@ -21,10 +21,10 @@ import { Moon, OrbitRing, Planet, makePlanets } from './bodies.js';
 import { makeStarfield } from './starfield.js';
 import { CameraRig, type ViewName } from './camera-rig.js';
 import {
-  AU_KM, BODY_RADIUS_KM, distanceToScene, moonDistanceToScene, radiusToScene,
-  type ScaleMode,
+  AU_KM, BODY_RADIUS_KM, distanceToScene, radiusToScene, type ScaleMode,
 } from './scales.js';
-import { gseBasis, moonGeo, planetState, solarNorth, sunGeo, toScene } from '../models/ephemeris.js';
+import { frameBodies, moonPosition, sceneGeometry } from './geometry.js';
+import { gseBasis, solarNorth } from '../models/ephemeris.js';
 import { FieldLines, Magnetosphere } from './magnetosphere.js';
 import type { ExternalModel } from '../models/fieldlines.js';
 import { SolarWind } from './solar-wind.js';
@@ -560,23 +560,44 @@ export class Viewer {
   }
 
   setView(view: ViewName, immediate = false): void {
-    const { earthPos, earthRadius, sunDir } = this.geometryNow(new Date());
+    const date = new Date();
+    const { earthPos, earthRadius, sunDir } = this.geometryNow(date);
     // What the Sun is actually showing, so the Corona view frames the picture
     // rather than the body at its centre — and reframes when the selection
     // changes from a six-radius coronagraph to a thirty-radius one.
     this.lastReach = this.sun.reachRsun();
     this.rig.goTo(view, earthPos, earthRadius, sunDir,
-      distanceToScene(this.lastReach * SUN_RADIUS_AU, this.mode), immediate);
+      distanceToScene(this.lastReach * SUN_RADIUS_AU, this.mode),
+      frameBodies(date, this.mode, earthPos, earthRadius), immediate);
+    // The other planets are the subject of System and part of the sky in
+    // Corona; in the four views about Earth they are dimmed where they stand.
+    const nearEarth = view !== 'system' && view !== 'corona';
+    for (const [name, p] of this.planets) if (name !== 'Earth') p.setDimmed(nearEarth);
   }
 
+  /** Earth position, rendered radius and the Sun's direction from Earth, in scene space. */
   private geometryNow(date: Date) {
-    const earthHelio = toScene(planetState('Earth', date).helio);
-    const earthAu = earthHelio.length();
-    const earthPos = earthHelio.clone().normalize().multiplyScalar(distanceToScene(earthAu, this.mode));
-    const earthRadius = radiusToScene('Earth', this.mode);
-    // Sun direction from Earth, in scene space.
-    const sunDir = sunGeo(date).dir;
-    return { earthPos, earthRadius, sunDir: toScene(sunDir).normalize() };
+    return sceneGeometry(date, this.mode);
+  }
+
+  /**
+   * Where Earth is drawn on screen: centre and radius in CSS px from the
+   * viewport's top-left, or null while it is behind the camera. The card asks,
+   * so it can open on the far side of a click from the planet.
+   */
+  earthScreen(): { x: number; y: number; r: number } | null {
+    const cam = this.rig.camera;
+    const pos = this.earth.group.position;
+    const p = pos.clone().project(cam);
+    if (p.z > 1) return null;
+    const cv = this.canvas.getBoundingClientRect();
+    const radius = radiusToScene('Earth', this.mode);
+    const ang = Math.asin(Math.min(1, radius / pos.distanceTo(cam.position)));
+    return {
+      x: cv.left + ((p.x + 1) / 2) * cv.width,
+      y: cv.top + ((1 - p.y) / 2) * cv.height,
+      r: (Math.tan(ang) / Math.tan((cam.fov * Math.PI) / 360)) * (cv.height / 2),
+    };
   }
 
   private frame = (): void => {
@@ -697,11 +718,7 @@ export class Viewer {
     this.quakes.setScale(earthRadius);
 
     // Moon at its true geocentric direction; separation compressed in Globe mode.
-    const mg = toScene(moonGeo(date));
-    const moonAu = mg.length();
-    const moonOffset = mg.clone().normalize()
-      .multiplyScalar(moonDistanceToScene(moonAu, this.mode, earthRadius));
-    this.moon.mesh.position.copy(earthPos).add(moonOffset);
+    this.moon.mesh.position.copy(moonPosition(date, this.mode, earthPos, earthRadius));
     this.moon.mesh.scale.setScalar(radiusToScene('Moon', this.mode));
 
     // Earth's direction from the Sun anchors Stonyhurst longitude 0.

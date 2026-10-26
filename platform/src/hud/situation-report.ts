@@ -512,7 +512,8 @@ export function buildReportLines(
     `positions for ${at}, computed locally with astronomy-engine [D]. ` +
     `The Sun is currently overhead at ${cardinal(ss.lat, ss.lon)}, and Earth's day/night ` +
     `terminator in the scene is drawn from that point [D]. The Moon is shown at its ` +
-    `true direction from Earth.`,
+    `true direction from Earth. Other planets are dimmed in the near-Earth views; ` +
+    `their positions are unchanged.`,
     'model.astronomy-engine', 'layer.orbits', 'layer.terminator',
   );
   /* --- The Earth's surface, and where its pixels come from --------------- */

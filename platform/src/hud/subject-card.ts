@@ -18,22 +18,96 @@
 
 import { TIER_LABEL, subject } from './subjects.js';
 import { escapeHtml } from './margin.js';
+import { PAGE_LAYOUT } from './hud.js';
 
-/** Below this width the card becomes a sheet: a popover on a phone covers the
- * thing it is describing, which defeats the point of anchoring it at all. */
-const SHEET_BREAKPOINT_PX = 768;
+/*
+ * Where the card goes.
+ *
+ * On the phone page — the scene a band across the top, the document below —
+ * it is a sheet from the bottom edge: a popover in a band that short covers
+ * the thing it is describing, which defeats the point of anchoring it at all.
+ * The query is the page layout's own, so the card and the stylesheet change
+ * model at the same 860 px.
+ *
+ * Everywhere else it opens in the stage — the part of the scene no chrome
+ * covers: right of the rail, left of the margin, under the header and the
+ * notes, above the ticker. Placed against the viewport instead, it opened
+ * over the margin's text at 1440 px and could cover the header it sat under.
+ */
 
-/** Kept clear of the viewport edge by this much when flipping. */
-const MARGIN_PX = 12;
+/** Kept clear of the stage's chrome, and of Earth, by this much. */
+const GAP_PX = 12;
+/** Kept clear of the notes on the stage by this much. */
+const NOTE_GAP_PX = 8;
+/** The widest card: a comfortable measure for the prose it carries. */
+const CARD_REM = 24;
+/**
+ * The smallest card worth opening. A stage with less room than this between
+ * its chrome — a small window, or a phone on its side, with the margin beside
+ * it — gets the subject in the margin instead, at full length, rather than a
+ * column of three words or a slot that shows the title and one line.
+ */
+const MIN_CARD_REM = 18;
+const MIN_CARD_HEIGHT_REM = 12;
 
 export interface CardHost {
   /** Open the margin's full detail for a subject. */
   showSubject: (id: string) => void;
+  /**
+   * Where Earth is drawn, in CSS px from the viewport's top-left, or null when
+   * it is not in front of the camera. The card opens on the far side of a
+   * click from it, so the answer does not cover the planet it is about.
+   */
+  earthScreen?: () => { x: number; y: number; r: number } | null;
+}
+
+interface Box { left: number; right: number; top: number; bottom: number }
+
+const rem = (): number => parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+
+/** A box, when the element is laid out and visible. */
+function boxOf(el: Element | null): DOMRect | null {
+  const r = el?.getBoundingClientRect();
+  return r && r.width > 0 && r.height > 0 ? r : null;
+}
+
+/** The stage's open area, in viewport px: inside its chrome, less the gap. */
+function stageBox(): Box {
+  const railCollapsed = document.getElementById('rail')?.classList.contains('is-collapsed');
+  const railEdge = boxOf(document.querySelector(railCollapsed ? '.rail-toggle' : '#instruments'));
+  const left = (railEdge?.right ?? 0) + GAP_PX;
+  // The margin bounds the stage only where it stands beside it; on the phone
+  // page it is below, and the window's edge is the bound.
+  const margin = boxOf(document.querySelector('aside.margin'));
+  const right = (margin && margin.left > left ? margin.left : window.innerWidth) - GAP_PX;
+  const top = (boxOf(document.querySelector('header.top'))?.bottom ?? 0) + GAP_PX;
+  const ticker = boxOf(document.getElementById('ticker'));
+  const bottom = (ticker && ticker.top > top ? ticker.top : window.innerHeight) - GAP_PX;
+  return { left, right, top, bottom };
+}
+
+/**
+ * Narrow the box's height to clear every stage note over the span `x0`–`x1`.
+ * A note in the upper half pushes the top down, one in the lower half pulls
+ * the bottom up — in short landscape the imagery note sits above the ticker.
+ */
+function clearNotes(box: Box, x0: number, x1: number): Box {
+  const out = { ...box };
+  const mid = (box.top + box.bottom) / 2;
+  for (const note of document.querySelectorAll('#stage-notes > :not([hidden])')) {
+    const r = boxOf(note);
+    if (!r || r.right <= x0 || r.left >= x1) continue;
+    if ((r.top + r.bottom) / 2 < mid) out.top = Math.max(out.top, r.bottom + NOTE_GAP_PX);
+    else out.bottom = Math.min(out.bottom, r.top - NOTE_GAP_PX);
+  }
+  return out;
 }
 
 export class SubjectCard {
   private el: HTMLElement;
   private current: string | null = null;
+  /** Where the card was asked for, so a walk through related subjects keeps its place. */
+  private anchor = { x: 0, y: 0 };
   /** Where focus was before the card took it, so Escape can give it back. */
   private returnTo: HTMLElement | null = null;
 
@@ -87,6 +161,12 @@ export class SubjectCard {
   open(id: string, at: { x: number; y: number }): void {
     const s = subject(id);
     if (!s) return;
+    if (!this.roomInStage()) {
+      this.close();
+      this.host.showSubject(id);
+      return;
+    }
+    this.anchor = at;
     if (this.current === id && !this.el.hidden) { this.place(at); return; }
 
     // Only remember where focus was on a fresh open. Swapping the card's
@@ -142,27 +222,73 @@ export class SubjectCard {
     this.returnTo = null;
   }
 
-  /** Anchor near `at`, flipped to stay on screen; a sheet on a narrow one. */
+  /**
+   * Whether the card can open here: as a sheet, or in a stage with room to
+   * read it. The height is judged under every note, the case where the card
+   * spans the stage.
+   */
+  private roomInStage(): boolean {
+    if (window.matchMedia(PAGE_LAYOUT).matches) return true;
+    const stage = stageBox();
+    const box = clearNotes(stage, stage.left, stage.right);
+    return box.right - box.left >= MIN_CARD_REM * rem()
+      && box.bottom - box.top >= MIN_CARD_HEIGHT_REM * rem();
+  }
+
+  /**
+   * Beside `at`, inside the stage, on the side of the click away from Earth.
+   *
+   * The card is as wide as 24rem or the room beside Earth on that side,
+   * whichever is less; when that side has less than the narrowest card, the
+   * other side is tried; when neither does — Earth fills the frame, or the
+   * stage is small — it takes its narrowest width, flush to the stage's edge
+   * on the far side, and covers as little of the planet as it can.
+   * Its height is whatever is left between the header, the notes and the
+   * ticker over the span it takes, and it scrolls inside that.
+   */
   private place(at: { x: number; y: number }): void {
-    if (window.innerWidth < SHEET_BREAKPOINT_PX) {
+    if (window.matchMedia(PAGE_LAYOUT).matches) {
       this.el.classList.add('is-sheet');
       this.el.style.left = '';
       this.el.style.top = '';
+      this.el.style.width = '';
+      this.el.style.maxHeight = '';
       return;
     }
     this.el.classList.remove('is-sheet');
-    const r = this.el.getBoundingClientRect();
-    const w = r.width || 320;
-    const h = r.height || 240;
-    const x = at.x + w + MARGIN_PX > window.innerWidth
-      ? Math.max(MARGIN_PX, at.x - w - MARGIN_PX)
-      : at.x + MARGIN_PX;
-    const y = Math.min(
-      Math.max(MARGIN_PX, at.y - h / 3),
-      Math.max(MARGIN_PX, window.innerHeight - h - MARGIN_PX),
-    );
+    const stage = stageBox();
+    const minW = MIN_CARD_REM * rem();
+    const earth = this.host.earthScreen?.() ?? null;
+
+    // The room beside Earth on one side, within the stage.
+    const beside = (toRight: boolean): [number, number] => {
+      if (!earth) return [stage.left, stage.right];
+      return toRight
+        ? [Math.max(stage.left, earth.x + earth.r + GAP_PX), stage.right]
+        : [stage.left, Math.min(stage.right, earth.x - earth.r - GAP_PX)];
+    };
+    const away = !earth || at.x >= earth.x;
+    let toRight = away;
+    let span = beside(toRight);
+    let flush = false;
+    if (span[1] - span[0] < minW) {
+      const other = beside(!away);
+      if (other[1] - other[0] >= minW) { toRight = !away; span = other; }
+      else { span = [stage.left, stage.right]; flush = true; }
+    }
+    const w = Math.min(flush ? minW : CARD_REM * rem(), span[1] - span[0]);
+    const clampX = (x: number) => Math.min(Math.max(x, span[0]), span[1] - w);
+    const x = flush
+      ? (toRight ? span[1] - w : span[0])
+      : clampX(toRight ? at.x + GAP_PX : at.x - GAP_PX - w);
+
+    const box = clearNotes(stage, x, x + w);
+    this.el.style.width = `${Math.round(w)}px`;
+    this.el.style.maxHeight = `${Math.max(0, Math.round(box.bottom - box.top))}px`;
+    const h = this.el.getBoundingClientRect().height;
+    const y = Math.min(Math.max(at.y - h / 3, box.top), box.bottom - h);
     this.el.style.left = `${Math.round(x)}px`;
-    this.el.style.top = `${Math.round(y)}px`;
+    this.el.style.top = `${Math.round(Math.max(box.top, y))}px`;
   }
 
   private onClick = (e: Event): void => {
@@ -180,10 +306,9 @@ export class SubjectCard {
       // Swap the card's subject in place rather than opening another. This is
       // the graph walk, and it is the feature: Bz → reconnection → field lines
       // → T89, without ever leaving the scene.
-      const at = { x: this.el.offsetLeft, y: this.el.offsetTop + 60 };
       const keep = this.returnTo;
       this.current = null;
-      this.open(next, at);
+      this.open(next, this.anchor);
       this.returnTo = keep;
     }
   };

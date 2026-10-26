@@ -79,6 +79,14 @@ async function run(name, viewport) {
   await p.evaluate(() => window.__hud?.openNotices());
   await p.waitForTimeout(800);
   total += await scan('notices detail');
+  // And the card a click in the scene opens: Earth, at its centre on screen.
+  await p.evaluate(() => scrollTo(0, 0));
+  const earth = await p.evaluate(() => window.__viewer?.earthScreen());
+  if (earth) {
+    await p.mouse.click(Math.round(earth.x), Math.round(earth.y));
+    await p.waitForTimeout(600);
+    total += await scan('scene card');
+  }
   console.log(`  TOTAL violations: ${total}`);
   if (total > 0) FAILED = true;
   await p.close();
