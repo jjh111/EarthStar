@@ -50,6 +50,16 @@ async function newPage(opts = {}) {
     .map(i => i.currentSrc || i.src));
   check('no missing same-origin assets', missing.length === 0, missing.join(', '));
   check('no broken images', broken.length === 0, broken.join(', '));
+  // Every size of the painting, not only those this viewport fetches: phones
+  // load the portrait crops, which the checks above never see
+  const paint = await page.evaluate(() => [...new Set([...document.querySelectorAll('.hero-images source, .hero-images img, link[rel=preload][as=image]')]
+    .flatMap((el) => (el.getAttribute('srcset') || el.getAttribute('imagesrcset') || el.getAttribute('src') || el.getAttribute('href') || '')
+      .split(',').map((c) => c.trim().split(/\s+/)[0]).filter(Boolean)))]);
+  const absent = [];
+  for (const u of paint) if (!(await page.request.head(new URL(u, BASE + '/').href)).ok()) absent.push(u);
+  check('every size of the painting resolves', paint.length > 0 && absent.length === 0, absent.join(', '));
+  // Earth Star surfaces open in the same tab; only offsite links open new ones
+  check('Viewer links open in the same tab', await page.locator('a[href^="/viewer/"][target]').count() === 0);
   check('title', (await page.title()).includes('Earth Star'));
   check('grid pre-rendered', await page.locator('.archive-card').count() >= 3);
 

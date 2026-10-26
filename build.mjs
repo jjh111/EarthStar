@@ -15,7 +15,7 @@
 // Filenames are not content-hashed on purpose: GitHub Pages serves everything
 // with max-age=600 regardless, so hashing would add churn without cache benefit.
 
-import { readFileSync, writeFileSync, mkdirSync, rmSync, cpSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, rmSync, cpSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { marked } from 'marked';
 import { transform } from 'esbuild';
@@ -197,23 +197,37 @@ console.log(`index.html  ${(html.length / 1024).toFixed(1)}KB (css inlined)`);
 if (process.argv.includes('--images')) {
   const sharp = (await import('sharp')).default;
   const IMG = p('assets/img');
-  rmSync(IMG, { recursive: true, force: true });
+  // Clear the old rasters so a dropped size cannot linger, but keep the
+  // script's SVGs (glyphs/, gomens/, favicon.svg) written above in this run
   mkdirSync(IMG, { recursive: true });
+  for (const f of readdirSync(IMG)) if (/\.(avif|webp|jpg|png)$/.test(f)) rmSync(`${IMG}/${f}`);
 
+  // The painting's five layers. `widths` serve screens wider than 2:3;
+  // `portrait` serves the tall ones (src/index.html): a full-height, centred
+  // crop at 720:1060, a little wider than such a screen shows so the parallax
+  // drift never reaches its edges. A phone draws it ~1.6x its own width, hence
+  // 1440 for DPR 3. The base layer's source is only 914 px tall, so its crop
+  // is offered at that native size and no larger.
+  const PORTRAIT = 720 / 1060;
   const layers = [
-    { src: 'Assets/0-BG.png', name: '0-BG', widths: [640, 960, 1280], avifQuality: 45 },
-    { src: 'Assets/1-earth.png', name: '1-earth', widths: [960, 1440, 2048] },
-    { src: 'Assets/2-sun.png', name: '2-sun', widths: [960, 1440, 2048] },
-    { src: 'Assets/3-islandship.png', name: '3-islandship', widths: [960, 1440, 2048] },
-    { src: 'Assets/4-glimmer.png', name: '4-glimmer', widths: [960, 1440, 2048] }
+    { src: 'Assets/0-BG.png', name: '0-BG', widths: [960, 1280], portrait: [620], avifQuality: 45 },
+    { src: 'Assets/1-earth.png', name: '1-earth', widths: [960, 1440, 2048], portrait: [720, 1080, 1440] },
+    { src: 'Assets/2-sun.png', name: '2-sun', widths: [960, 1440, 2048], portrait: [720, 1080, 1440] },
+    { src: 'Assets/3-islandship.png', name: '3-islandship', widths: [960, 1440, 2048], portrait: [720, 1080, 1440] },
+    { src: 'Assets/4-glimmer.png', name: '4-glimmer', widths: [960, 1440, 2048], portrait: [720, 1080, 1440] }
   ];
 
-  for (const { src, name, widths, avifQuality } of layers) {
-    for (const w of widths) {
-      const base = sharp(p(src)).resize({ width: w });
-      await base.clone().avif({ quality: avifQuality ?? 55, effort: 6 }).toFile(`${IMG}/${name}-${w}.avif`);
-      await base.clone().webp({ quality: 78 }).toFile(`${IMG}/${name}-${w}.webp`);
-      console.log(`${name}-${w} avif+webp`);
+  for (const { src, name, widths, portrait, avifQuality } of layers) {
+    const write = async (img, file) => {
+      await img.clone().avif({ quality: avifQuality ?? 55, effort: 6 }).toFile(`${IMG}/${file}.avif`);
+      await img.clone().webp({ quality: 78 }).toFile(`${IMG}/${file}.webp`);
+      console.log(`${file} avif+webp`);
+    };
+    for (const w of widths) await write(sharp(p(src)).resize({ width: w }), `${name}-${w}`);
+    const { width, height } = await sharp(p(src)).metadata();
+    const crop = { left: Math.round((width - height * PORTRAIT) / 2), top: 0, width: Math.round(height * PORTRAIT), height };
+    for (const w of portrait) {
+      await write(sharp(p(src)).extract(crop).resize({ width: w, height: Math.round(w / PORTRAIT) }), `${name}-p${w}`);
     }
   }
 

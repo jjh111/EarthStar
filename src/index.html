@@ -24,8 +24,8 @@
 
   <link rel="preload" as="font" type="font/woff2" href="assets/fonts/CormorantGaramond.woff2" crossorigin>
   <link rel="preload" as="font" type="font/woff2" href="assets/fonts/DMSans.woff2" crossorigin>
-  <link rel="preload" as="image" type="image/avif" media="(max-width: 480px)" href="assets/img/0-BG-640.avif" fetchpriority="high">
-  <link rel="preload" as="image" type="image/avif" media="(min-width: 480.1px)" imagesrcset="assets/img/0-BG-960.avif 960w, assets/img/0-BG-1280.avif 1280w" imagesizes="100vw" fetchpriority="high">
+  <link rel="preload" as="image" type="image/avif" media="(max-aspect-ratio: 2/3)" href="assets/img/0-BG-p620.avif" fetchpriority="high">
+  <link rel="preload" as="image" type="image/avif" media="not all and (max-aspect-ratio: 2/3)" imagesrcset="assets/img/0-BG-960.avif 960w, assets/img/0-BG-1280.avif 1280w" imagesizes="100vw" fetchpriority="high">
 
   <script>document.documentElement.classList.add('js');try{var t=localStorage.getItem('earthStarTheme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}</script>
   <!--BUILD:CSS-->
@@ -34,33 +34,44 @@
 <body id="top">
   <!-- The painting is the page's ground: fixed, behind everything. A veil of
        ground colour rises over it as you scroll (--sink), and the automaton
-       canvas above it takes over. Content scrolls over both. -->
+       canvas above it takes over. Content scrolls over both.
+       Tall screens (2:3 and narrower) show only the middle of the painting at
+       full height, so each layer offers them a full-height centred crop (-p),
+       sized to stay sharp at DPR 3; keep the preloads above in step. -->
   <div class="hero" aria-hidden="true">
     <div class="hero-image-frame">
       <div class="hero-images">
         <picture>
-          <source type="image/avif" media="(max-width: 480px)" srcset="assets/img/0-BG-640.avif">
-          <source type="image/webp" media="(max-width: 480px)" srcset="assets/img/0-BG-640.webp">
+          <source type="image/avif" media="(max-aspect-ratio: 2/3)" srcset="assets/img/0-BG-p620.avif">
+          <source type="image/webp" media="(max-aspect-ratio: 2/3)" srcset="assets/img/0-BG-p620.webp">
           <source type="image/avif" srcset="assets/img/0-BG-960.avif 960w, assets/img/0-BG-1280.avif 1280w" sizes="100vw">
           <source type="image/webp" srcset="assets/img/0-BG-960.webp 960w, assets/img/0-BG-1280.webp 1280w" sizes="100vw">
           <img src="assets/img/0-BG-1280.webp" width="1280" height="914" fetchpriority="high" decoding="async" alt="Earth Star illustration: a radiant sun over a living Earth, an island ship sailing between them">
         </picture>
         <picture>
+          <source type="image/avif" media="(max-aspect-ratio: 2/3)" srcset="assets/img/1-earth-p720.avif 720w, assets/img/1-earth-p1080.avif 1080w, assets/img/1-earth-p1440.avif 1440w" sizes="100vw">
+          <source type="image/webp" media="(max-aspect-ratio: 2/3)" srcset="assets/img/1-earth-p720.webp 720w, assets/img/1-earth-p1080.webp 1080w, assets/img/1-earth-p1440.webp 1440w" sizes="100vw">
           <source type="image/avif" srcset="assets/img/1-earth-960.avif 960w, assets/img/1-earth-1440.avif 1440w, assets/img/1-earth-2048.avif 2048w" sizes="100vw">
           <source type="image/webp" srcset="assets/img/1-earth-960.webp 960w, assets/img/1-earth-1440.webp 1440w, assets/img/1-earth-2048.webp 2048w" sizes="100vw">
           <img src="assets/img/1-earth-1440.webp" width="3000" height="2143" decoding="async" alt="">
         </picture>
         <picture>
+          <source type="image/avif" media="(max-aspect-ratio: 2/3)" srcset="assets/img/2-sun-p720.avif 720w, assets/img/2-sun-p1080.avif 1080w, assets/img/2-sun-p1440.avif 1440w" sizes="100vw">
+          <source type="image/webp" media="(max-aspect-ratio: 2/3)" srcset="assets/img/2-sun-p720.webp 720w, assets/img/2-sun-p1080.webp 1080w, assets/img/2-sun-p1440.webp 1440w" sizes="100vw">
           <source type="image/avif" srcset="assets/img/2-sun-960.avif 960w, assets/img/2-sun-1440.avif 1440w, assets/img/2-sun-2048.avif 2048w" sizes="100vw">
           <source type="image/webp" srcset="assets/img/2-sun-960.webp 960w, assets/img/2-sun-1440.webp 1440w, assets/img/2-sun-2048.webp 2048w" sizes="100vw">
           <img src="assets/img/2-sun-1440.webp" width="3000" height="2143" decoding="async" alt="">
         </picture>
         <picture>
+          <source type="image/avif" media="(max-aspect-ratio: 2/3)" srcset="assets/img/3-islandship-p720.avif 720w, assets/img/3-islandship-p1080.avif 1080w, assets/img/3-islandship-p1440.avif 1440w" sizes="100vw">
+          <source type="image/webp" media="(max-aspect-ratio: 2/3)" srcset="assets/img/3-islandship-p720.webp 720w, assets/img/3-islandship-p1080.webp 1080w, assets/img/3-islandship-p1440.webp 1440w" sizes="100vw">
           <source type="image/avif" srcset="assets/img/3-islandship-960.avif 960w, assets/img/3-islandship-1440.avif 1440w, assets/img/3-islandship-2048.avif 2048w" sizes="100vw">
           <source type="image/webp" srcset="assets/img/3-islandship-960.webp 960w, assets/img/3-islandship-1440.webp 1440w, assets/img/3-islandship-2048.webp 2048w" sizes="100vw">
           <img src="assets/img/3-islandship-1440.webp" width="3000" height="2143" decoding="async" alt="">
         </picture>
         <picture>
+          <source type="image/avif" media="(max-aspect-ratio: 2/3)" srcset="assets/img/4-glimmer-p720.avif 720w, assets/img/4-glimmer-p1080.avif 1080w, assets/img/4-glimmer-p1440.avif 1440w" sizes="100vw">
+          <source type="image/webp" media="(max-aspect-ratio: 2/3)" srcset="assets/img/4-glimmer-p720.webp 720w, assets/img/4-glimmer-p1080.webp 1080w, assets/img/4-glimmer-p1440.webp 1440w" sizes="100vw">
           <source type="image/avif" srcset="assets/img/4-glimmer-960.avif 960w, assets/img/4-glimmer-1440.avif 1440w, assets/img/4-glimmer-2048.avif 2048w" sizes="100vw">
           <source type="image/webp" srcset="assets/img/4-glimmer-960.webp 960w, assets/img/4-glimmer-1440.webp 1440w, assets/img/4-glimmer-2048.webp 2048w" sizes="100vw">
           <img src="assets/img/4-glimmer-1440.webp" width="3000" height="2143" decoding="async" alt="">
@@ -74,8 +85,8 @@
 
   <header class="cover">
     <img src="assets/img/logo-480.webp" width="480" height="196" decoding="async" alt="Earth Star logo" class="logo-hero" fetchpriority="high">
-    <a class="hero-link" href="/viewer/" target="_blank" rel="noopener">
-      <span class="visually-hidden">Open The Viewer, the live space-weather platform, in a new tab</span>
+    <a class="hero-link" href="/viewer/">
+      <span class="visually-hidden">Open The Viewer, the live space-weather platform</span>
       <span aria-hidden="true">The Viewer <em>live space weather</em> <span class="hero-link-arrow">↗</span></span>
     </a>
     <div class="cover-title">
