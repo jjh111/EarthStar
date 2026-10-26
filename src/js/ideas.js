@@ -1,8 +1,11 @@
 // The Ideas dashboard — every Earth Star concept as a compact tile.
 // Lens chips filter by facet; the site search (search.js) filters by text.
-// Tiles expand in place; the URL hash #idea/<id> deep-links and expands.
+// Tiles expand in place; the URL hash #idea/<id> deep-links and expands, and
+// ?lens=<id> keeps the chosen lens, so a filtered view can be shared.
 // Rows are always full: an open tile has a row of its own (site.css), and the
 // tiles of a short last row share it between them (coda, below).
+
+import { queryWords, matchesAll } from './match.js';
 
 let activeLens = 'all';
 let query = '';
@@ -10,9 +13,7 @@ let query = '';
 function tiles() { return Array.from(document.querySelectorAll('.idea')); }
 
 export function ideaMatches(el, q) {
-  if (!q) return true;
-  const hay = (el.dataset.search || '').toLowerCase();
-  return q.toLowerCase().split(/\s+/).filter(Boolean).every((w) => hay.includes(w));
+  return matchesAll(el.dataset.search, queryWords(q));
 }
 
 // Count what is visible and closed, never :nth-child (which counts hidden
@@ -89,24 +90,37 @@ export function initIdeas() {
     else if (location.hash === '#idea/' + el.dataset.id) history.replaceState(null, '', '#ideas');
   });
 
+  // A lens is part of the address (?lens=, beside any #idea/ or #doc/ hash);
+  // 'all' is the plain page. Replaced, never pushed: a lens is a view, not a step.
   const chips = document.getElementById('ideas-lenses');
+  const press = (chip) => {
+    activeLens = chip.dataset.lens;
+    for (const c of chips.querySelectorAll('[data-lens]')) c.setAttribute('aria-pressed', String(c === chip));
+  };
   chips?.addEventListener('click', (e) => {
     const chip = e.target.closest('[data-lens]');
     if (!chip) return;
-    activeLens = chip.dataset.lens;
-    for (const c of chips.querySelectorAll('[data-lens]')) c.setAttribute('aria-pressed', String(c === chip));
+    press(chip);
     apply();
+    const url = new URL(location.href);
+    if (activeLens === 'all') url.searchParams.delete('lens');
+    else url.searchParams.set('lens', activeLens);
+    history.replaceState(history.state, '', url.pathname + url.search + url.hash);
   });
-
-  const hash = location.hash;
-  if (hash.startsWith('#idea/')) expandIdea(hash.slice(6));
-  window.addEventListener('hashchange', () => {
-    if (location.hash.startsWith('#idea/')) expandIdea(location.hash.slice(6));
-  });
+  const lens = new URLSearchParams(location.search).get('lens');
+  const chip = lens && [...(chips?.querySelectorAll('[data-lens]') || [])].find((c) => c.dataset.lens === lens);
+  if (chip) press(chip);
 
   // The column count follows the container (site.css), so recount when the
   // grid resizes — on the next frame, never inside the observer's callback
   if ('ResizeObserver' in window) new ResizeObserver(() => requestAnimationFrame(coda)).observe(grid);
 
   apply();
+
+  // (after the lens: a linked idea opens even where the lens would hide it)
+  const hash = location.hash;
+  if (hash.startsWith('#idea/')) expandIdea(hash.slice(6));
+  window.addEventListener('hashchange', () => {
+    if (location.hash.startsWith('#idea/')) expandIdea(location.hash.slice(6));
+  });
 }

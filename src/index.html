@@ -100,11 +100,19 @@
 <nav class="wayfinder" aria-label="Site">
   <a class="wf-mark" href="#top" aria-label="Top of page"><!--BUILD:STAR--></a>
   <div class="wf-search">
-    <label class="visually-hidden" for="siteSearch">Search ideas and documents</label>
+    <label class="visually-hidden" for="siteSearch">Search ideas, Gomens and documents</label>
     <span class="wf-field">
-      <input type="search" id="siteSearch" class="wf-input" placeholder="search ideas, documents…" autocomplete="off" spellcheck="false">
+      <input type="search" id="siteSearch" class="wf-input" placeholder="search ideas, Gomens, documents…" autocomplete="off" spellcheck="false"
+             role="combobox" aria-controls="searchResults" aria-expanded="false" aria-autocomplete="list">
       <span class="wf-key" aria-hidden="true">/</span>
     </span>
+    <!-- What search finds, under the field: options in groups for the keys to
+         move through, then a foot with the count and the way to the page's own
+         lists. The count is said once, by the live region after it. -->
+    <div class="search-pop" id="searchPop" hidden>
+      <div id="searchResults" class="search-results" role="listbox" aria-label="Search results" tabindex="-1"></div>
+      <p class="search-foot"><span class="search-count" aria-hidden="true"></span> <a class="search-all" href="#ideas">show all on the page <span aria-hidden="true">↓</span></a></p>
+    </div>
     <span id="search-status" class="wf-status" aria-live="polite"></span>
   </div>
   <!-- The six sections: a row on wide screens, the Sections menu on narrow ones.

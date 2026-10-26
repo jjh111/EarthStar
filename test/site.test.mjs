@@ -258,6 +258,54 @@ async function newPage(opts = {}) {
   await ctx.close();
 }
 
+{
+  // Search is the page's browsing tool: ideas and documents match by one rule,
+  // the count catches up once the documents' text is in, Enter opens rather
+  // than toggles, the Gomens are in the index, and a query or a lens can be
+  // shared. Upstream is blocked, as it is for many visitors.
+  const { ctx, page } = await newPage({ viewport: { width: 1280, height: 800 } });
+  await ctx.route((u) => !/^(localhost|127\.0\.0\.1)$/.test(u.hostname), (r) => r.abort('internetdisconnected'));
+  await page.goto(BASE + '/', { waitUntil: 'networkidle' });
+  const search = page.locator('#siteSearch');
+  await search.fill('waste fund');
+  await page.waitForTimeout(600);
+  check("'waste fund' finds the Waste Reclamation Fund", await page.locator('#archiveGrid .archive-card[data-id="wrf"]').count() === 1);
+  await search.fill('IGRF');
+  await page.waitForFunction(() => document.getElementById('search-status').textContent === '1 idea · 1 document', null, { timeout: 3000 }).catch(() => {});
+  check("'IGRF' counts the document whose text holds it", await page.locator('#search-status').textContent() === '1 idea · 1 document',
+    await page.locator('#search-status').textContent());
+  await search.fill('kincentric');
+  await page.waitForTimeout(300);
+  await search.press('Enter');
+  await page.waitForTimeout(300);
+  await search.press('Enter');
+  await page.waitForTimeout(300);
+  check('Enter twice leaves an idea open', await page.locator('#idea-kincentric .idea-head').getAttribute('aria-expanded') === 'true');
+  await search.fill('clearers');
+  await page.waitForTimeout(300);
+  const listed = await page.evaluate(() => [...document.querySelectorAll('#searchResults [role="group"]')]
+    .map((g) => `${g.querySelector('.sr-head').firstChild.textContent.trim()}: ${[...g.querySelectorAll('[role="option"] .sr-title')].map((o) => o.textContent).join(', ')}`));
+  check("'clearers' lists the Clearers Gomen", await page.locator('#searchPop').isVisible() && listed.includes('Gomens: The Clearers'), listed.join(' / '));
+  await search.fill('datacenter');
+  await page.waitForTimeout(300);
+  await search.press('Enter');
+  await page.waitForSelector('.archive-panel.open .archive-md mark.search-hit', { timeout: 3000 }).catch(() => {});
+  check('datacenter then Enter opens the Harmonious Computing Act at its first hit',
+    (await page.locator('#archiveDocTitle').textContent()).includes('Harmonious Computing Act') && await page.locator('.archive-md mark.search-hit').isVisible());
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('.archive-panel.open'), null, { timeout: 2000 }).catch(() => {});
+
+  await page.goto(BASE + '/?q=waste', { waitUntil: 'networkidle' });
+  const shown = () => page.locator('.idea:not([hidden])').count();
+  const waste = await shown();
+  await page.reload({ waitUntil: 'networkidle' });
+  check('?q=waste opens searched, and keeps it across a reload', await search.inputValue() === 'waste' && waste > 0 && waste < 16 && await shown() === waste, `${waste} ideas`);
+  await page.goto(BASE + '/?lens=economics', { waitUntil: 'networkidle' });
+  check('?lens=economics opens with that lens pressed', await page.locator('.chip[data-lens="economics"]').getAttribute('aria-pressed') === 'true'
+    && await shown() < 16);
+  await ctx.close();
+}
+
 // Mock mode renders numbers and says so
 {
   const { ctx, page } = await newPage();

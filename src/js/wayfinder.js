@@ -29,6 +29,8 @@ export function initWayfinder() {
     btn.focus();
   });
   document.addEventListener('click', (e) => { if (isOpen() && !nav.contains(e.target)) set(false); });
+  // search's results hang in the same place under the bar: using it closes the menu
+  document.getElementById('siteSearch')?.addEventListener('focus', () => set(false));
   nav.addEventListener('focusout', (e) => { if (isOpen() && e.relatedTarget && !nav.contains(e.relatedTarget)) set(false); });
 
   // the name it is heard by keeps the word 'Sections' and the visible name

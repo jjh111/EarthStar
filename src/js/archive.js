@@ -12,6 +12,7 @@
 import { DOCS } from './manifest.gen.js';
 import { cardHTML, esc } from './card-template.mjs';
 import { copyText } from './seed-copy.js';
+import { queryWords, matchesAll, matchesAny, snippet } from './match.js';
 
 let searchQuery = '';
 let currentDocId = null;
@@ -24,7 +25,8 @@ let inerted = [];
 // The wide reader holds its contents in a rail beside the text
 const RAIL = window.matchMedia('(min-width: 1700px) and (min-height: 501px)');
 
-// id → { html, text } — fetched fragments, cached for the session
+// id → { html, plain, text } — fetched fragments, cached for the session: the
+// text as read (for snippets) and lowercased (for matching), contents list left out
 const docCache = new Map();
 let contentIndexLoading = null;
 
@@ -37,7 +39,9 @@ async function fetchDoc(id) {
   const html = await res.text();
   const tmp = document.createElement('div');
   tmp.innerHTML = html;
-  const entry = { html, text: tmp.textContent.toLowerCase() };
+  tmp.querySelector('.archive-toc')?.remove();
+  const plain = tmp.textContent.replace(/\s+/g, ' ').trim();
+  const entry = { html, plain, text: plain.toLowerCase() };
   docCache.set(id, entry);
   return entry;
 }
@@ -53,19 +57,16 @@ function ensureContentIndex() {
 
 // ── Grid ─────────────────────────────────────────────────
 
+// The page's one rule (match.js): every word of the query, anywhere in the
+// title, the description, the tags or, once it has arrived, the text
+function docMatches(d, words) {
+  return matchesAll([d.title, d.description, d.tags.join(' '), docCache.get(d.id)?.text].join(' '), words);
+}
+
 function renderGrid() {
   const grid = $('archiveGrid');
-  let filtered = DOCS;
-
-  if (searchQuery) {
-    const q = searchQuery.toLowerCase();
-    filtered = DOCS.filter(d =>
-      d.title.toLowerCase().includes(q) ||
-      d.description.toLowerCase().includes(q) ||
-      d.tags.some(t => t.toLowerCase().includes(q)) ||
-      (docCache.get(d.id)?.text.includes(q))
-    );
-  }
+  const words = queryWords(searchQuery);
+  const filtered = words.length ? DOCS.filter((d) => docMatches(d, words)) : DOCS;
 
   if (filtered.length === 0) {
     grid.innerHTML = '<div class="archive-empty">no documents found</div>';
@@ -80,11 +81,27 @@ function handleSearch(q) {
   searchQuery = q;
   if (q) {
     ensureContentIndex().then(() => {
-      // Re-filter once bodies arrive (only if the query is still live)
-      if (searchQuery) renderGrid();
+      // Re-filter once bodies arrive (only if the query is still live), and
+      // say so: search.js recounts and redraws its list
+      if (!searchQuery) return;
+      renderGrid();
+      document.dispatchEvent(new Event('earthstar:search-updated'));
     });
   }
   renderGrid();
+}
+
+// The documents for the list under the search field: the same rule as the
+// grid, each with a line from where its first word was found — the
+// description if it is there, else the text
+export function searchDocs(q) {
+  const words = queryWords(q);
+  if (!words.length) return [];
+  return DOCS.filter((d) => docMatches(d, words)).map((d) => {
+    const text = docCache.get(d.id)?.plain || '';
+    const about = !matchesAny(d.description, words) && matchesAny(text, words) ? text : d.description;
+    return { id: d.id, title: d.title, snippet: snippet(about, words) };
+  });
 }
 
 // ── Panel ────────────────────────────────────────────────
@@ -223,6 +240,30 @@ export async function openDoc(id, from = null, slug = null) {
   }
   // The text has the focus, not the close button: the keys scroll it
   body.focus({ preventScroll: true });
+}
+
+// Opened from search: the reader shows the first place the query's words
+// appear, marked, in the middle of the text's window
+export async function openDocById(id, q = '', from = null) {
+  await openDoc(id, from);
+  const words = queryWords(q);
+  if (!words.length || renderedDocId !== id) return;
+  const md = $('archivePanelBody').querySelector('.archive-md');
+  const walk = document.createTreeWalker(md, NodeFilter.SHOW_TEXT);
+  for (let node = walk.nextNode(); node; node = walk.nextNode()) {
+    const low = node.data.toLowerCase();
+    const hits = words.map((w) => [low.indexOf(w), w.length]).filter(([i]) => i >= 0);
+    if (!hits.length) continue;
+    const [at, len] = hits.reduce((a, b) => (b[0] < a[0] ? b : a));
+    const mark = document.createElement('mark');
+    mark.className = 'search-hit';
+    const range = document.createRange();
+    range.setStart(node, at);
+    range.setEnd(node, at + len);
+    range.surroundContents(mark);
+    mark.scrollIntoView({ block: 'center' });
+    return;
+  }
 }
 
 // Closing goes back through history when opening made an entry; the
