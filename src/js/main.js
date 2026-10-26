@@ -6,6 +6,7 @@ import { initIdeas } from './ideas.js';
 import { initSearch } from './search.js';
 import { initSky } from './sky.js';
 import { initThread } from './thread.js';
+import { initWayfinder } from './wayfinder.js';
 import { initTheme } from './theme.js';
 import { initAutomata } from './automata.js';
 import { initSeedCopy } from './seed-copy.js';
@@ -21,6 +22,7 @@ initGomens();
 initArchive();
 initIdeas();
 initSearch();
+initWayfinder(); // listens before the thread names the first section
 
 // The live strip fetches after the page has painted — five requests must not
 // compete with the hero image on a slow connection; tiles say "loading" meanwhile

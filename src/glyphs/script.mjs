@@ -446,13 +446,16 @@ M['star'] = (p) => p.star(24, 25, 20);
 M['butterfly'] = (p) => G['cold-start'](p);
 M['spark'] = (p) => { p.star(24, 24, 12); p.dot(39, 11, 2.4).dot(9, 38, 1.8); };
 
-// numerals: counted in the logo's beads; five beads make a bar
+// numerals: counted in the logo's beads; five beads make a bar. The ink is
+// centred in the box, so a numeral set on a label's centre line sits on it.
 const NUM = (n) => (p) => {
   const bars = Math.floor(n / 5), beads = n % 5;
-  for (let b = 0; b < bars; b++) p.s([[7, 34 - b * 9], [24, 33.2 - b * 9], [41, 34 - b * 9]], { w: 4.4, tipIn: 0.6, tipOut: 0.4 });
-  const y = 34 - bars * 9 - (bars ? 4 : 0);
+  const by = -bars * 9 - (bars ? 4 : 0); // the row of beads, above any bars
+  const top = beads ? by - 3.6 : -(bars - 1) * 9 - 2.2, bottom = bars ? 2.2 : 3.6;
+  const y0 = 24 - (top + bottom) / 2;
+  for (let b = 0; b < bars; b++) p.s([[7, y0 - b * 9], [24, y0 - 0.8 - b * 9], [41, y0 - b * 9]], { w: 4.4, tipIn: 0.6, tipOut: 0.4 });
   const xs = beads === 1 ? [24] : beads === 2 ? [17, 31] : beads === 3 ? [12, 24, 36] : [8.6, 19.2, 29.8, 40.4];
-  for (const x of beads ? xs : []) p.dot(x, y, 3.6);
+  for (const x of beads ? xs : []) p.dot(x, y0 + by, 3.6);
 };
 for (let n = 1; n <= 6; n++) M['num-' + n] = NUM(n);
 

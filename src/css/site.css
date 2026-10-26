@@ -32,6 +32,7 @@
 
   --col: 1200px;
   --gutter: 16px;
+  --wf-h: 58px;             /* the wayfinder's height: anchor jumps clear it */
   --pad-x: 48px;
   --radius: 2px;
   --serif: 'Cormorant Garamond', Georgia, serif;
@@ -128,12 +129,12 @@ button { font: inherit; color: inherit; }
 .ideas, .archive { border-bottom: 1px solid var(--line); }
 
 /* Anchor jumps clear the sticky wayfinder instead of hiding under it */
-#seed, #scales, #sky, #ideas, #archive-section, #begin { scroll-margin-top: 64px; }
+#seed, #scales, #sky, #ideas, #archive-section, #begin { scroll-margin-top: calc(var(--wf-h) + 12px); }
 
 .section-label {
-  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px;
   font-family: var(--sans);
-  font-size: 0.8em; font-weight: 600; letter-spacing: 0.26em; text-transform: uppercase;
+  font-size: 0.86em; font-weight: 600; letter-spacing: 0.26em; text-transform: uppercase; line-height: 1.3;
   color: var(--ink);
   padding-bottom: 8px; margin-bottom: 14px;
   border-bottom: 1px solid var(--line);
@@ -143,9 +144,11 @@ button { font: inherit; color: inherit; }
   font-size: 1.45em; letter-spacing: 0.01em; text-transform: none;
   color: var(--ink-3);
 }
+/* phones: the subtitle takes its own line, so a heading is two lines at most */
+@media (max-width: 480px) { .section-sub { flex-basis: 100%; font-size: 1.2em; } }
 
 /* Small uppercase labels, shared */
-.subtitle, .sky-label, .wf-links a, .chip, .archive-card::before,
+.subtitle, .sky-label, .wf-links a, .wf-viewer, .wf-menu, .chip, .archive-card::before,
 .archive-footer-dir, .thread-label, .coherence-meter-label {
   font-family: var(--sans); text-transform: uppercase; letter-spacing: 0.2em;
 }
@@ -238,7 +241,9 @@ h1 {
 .depth { border-top: 1px solid var(--line); }
 .stage-inner { max-width: var(--col); margin: 0 auto; padding: 28px var(--pad-x) 30px; }
 .stage-no { display: inline-flex; align-items: center; color: var(--gold-2); margin-right: 2px; align-self: center; }
-.stage-no .num { width: 2.6em; height: 2.6em; }
+/* The numeral's ink is one row of beads across the middle of a square box:
+   the empty top and bottom of the box do not get to set the heading's height */
+.stage-no .num { width: 2.2em; height: 2.2em; margin-block: -0.45em; translate: 0 -0.03em; }
 .stage-lede { max-width: 70ch; font-size: 1.06em; line-height: 1.6; color: var(--ink); margin: -2px 0 16px; }
 .stage-lede strong { color: var(--ink); font-weight: 600; }
 /* lore set as lore: serif, an illuminated initial in the script's gold */
@@ -368,16 +373,21 @@ h1 {
   -webkit-mask: var(--m) center / contain no-repeat; mask: var(--m) center / contain no-repeat;
 }
 
-/* ── Wayfinder ── */
+/* ── Wayfinder ──
+   One row at every size. The star, search, the six sections, then what is
+   always in reach: the Viewer, day and night, and on narrow screens the
+   Sections menu that the six links fold into. On wide screens its contents
+   sit on the content column. */
 .wayfinder {
   position: sticky; top: 0; z-index: 50;
-  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 16px;
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 16px;
   padding: 8px var(--pad-x);
+  padding-inline: max(var(--pad-x), calc((100% - var(--col)) / 2 + var(--pad-x)));
   background: color-mix(in srgb, var(--bg) 88%, transparent);
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
   border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
 }
-.wf-mark { display: inline-flex; color: var(--gold); text-decoration: none; padding: 4px 6px; }
+.wf-mark { display: inline-flex; color: var(--gold); text-decoration: none; padding: 4px 6px; margin-left: -6px; }
 .wf-mark .glyph { width: 22px; height: 22px; }
 .wf-search { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .wf-field { position: relative; flex: 1; min-width: 0; max-width: 460px; }
@@ -397,14 +407,18 @@ h1 {
 }
 .wf-status { font-size: 0.74em; color: var(--ink-3); white-space: nowrap; }
 .wf-links { display: flex; align-items: center; gap: 2px; }
-.wf-links a {
+.wf-links a, .wf-viewer {
   font-size: 0.76em; font-weight: 500; color: var(--ink-2); text-decoration: none; white-space: nowrap;
   padding: 8px 10px; border-bottom: 1px solid transparent; transition: color 0.15s, border-color 0.15s;
 }
-.wf-links a:hover, .wf-links a:focus-visible { color: var(--ink); border-bottom-color: var(--ink); }
-.wf-viewer { color: var(--ink) !important; }
+.wf-links a:hover, .wf-links a:focus-visible, .wf-viewer:hover, .wf-viewer:focus-visible { color: var(--ink); border-bottom-color: var(--ink); }
+/* Where you are, set by the thread as you read: gold marks your live position */
+.wf-links a[aria-current] { color: var(--ink); border-bottom-color: var(--gold); }
+.wf-links .wf-top { display: none; }
+.wf-end { display: flex; align-items: center; gap: 6px; }
+.wf-viewer { color: var(--ink); }
 .wf-theme {
-  display: inline-grid; place-items: center; width: 34px; height: 34px; margin-left: 6px;
+  display: inline-grid; place-items: center; width: 34px; height: 34px;
   background: transparent; border: 1px solid var(--line); border-radius: var(--radius);
   color: var(--ink-2); cursor: pointer; font-size: 0.95em; line-height: 1;
 }
@@ -415,13 +429,77 @@ h1 {
   :root:not([data-theme="light"]) .wf-theme .t-light { display: none; }
   :root:not([data-theme="light"]) .wf-theme .t-dark { display: inline; }
 }
+/* The menu names the section you are in. Its width is fixed so that a longer
+   name never nudges the Viewer or the switch while you scroll. */
+.wf-menu {
+  display: none; align-items: center; justify-content: space-between; gap: 6px;
+  width: 8.6em; height: 34px; padding: 0 9px 0 10px;
+  font-size: 0.7em; font-weight: 500; letter-spacing: 0.1em; line-height: 1;
+  background: transparent; border: 1px solid var(--line); border-radius: var(--radius);
+  color: var(--ink); cursor: pointer;
+}
+.wf-menu:hover { border-color: var(--ink); }
+.wf-menu-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-menu::after {
+  content: ''; flex: none; width: 5px; height: 5px; margin-top: -3px;
+  border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg); transition: transform 0.15s;
+}
+.wf-menu[aria-expanded="true"]::after { transform: translateY(3px) rotate(-135deg); }
+
+/* just above the fold point the row is tight: closer links leave search its room */
+@media (min-width: 901px) and (max-width: 1100px) {
+  .wayfinder { gap: 10px; }
+  .wf-links a, .wf-viewer { padding-inline: 7px; }
+}
+/* The compact bar, for narrow screens and landscape phones: every control 34 px */
+@media (max-width: 900px), (max-height: 500px) and (orientation: landscape) and (min-width: 700px) {
+  .wayfinder { gap: 8px; padding: 6px 12px; }
+  .wf-mark { margin-left: 0; }
+  .wf-viewer { height: 34px; line-height: 33px; padding: 0 8px; font-size: 0.72em; letter-spacing: 0.12em; }
+  .wf-input { height: 34px; padding: 0 10px; font-size: 0.86em; }
+  .wf-key { display: none; }
+  /* #search-status is the live region: hidden from sight here, never from the
+     accessibility tree. The Search brief gives it a place on narrow screens. */
+  .wf-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+}
 @media (max-width: 900px) {
-  .wayfinder { grid-template-columns: auto 1fr; gap: 4px 8px; padding: 6px 12px; }
-  .wf-links { grid-column: 1 / -1; overflow-x: auto; scrollbar-width: none; }
-  .wf-links::-webkit-scrollbar { display: none; }
-  .wf-links a { font-size: 0.72em; padding: 6px 8px; letter-spacing: 0.12em; }
-  .wf-key, .wf-status { display: none; }
-  .wf-input { padding: 7px 12px; font-size: 0.86em; }
+  :root { --wf-h: 48px; }
+  .wayfinder { grid-template-columns: auto minmax(0, 1fr) auto; }
+  /* the six links hang from the bar as a menu, one 44 px row each */
+  .wf-links {
+    position: absolute; top: 100%; inset-inline: 0; display: none; flex-direction: column; align-items: stretch; gap: 0;
+    padding: 4px 0 8px; background: var(--bg); border-bottom: 1px solid var(--line);
+  }
+  .wayfinder.is-open .wf-links { display: flex; }
+  .wf-links a { display: flex; align-items: center; min-height: 44px; padding: 0 var(--pad-x); font-size: 0.8em; border-bottom: 0; }
+  .wf-links a:focus-visible { outline-offset: -3px; }
+  .wf-links a[aria-current] { text-decoration: underline 1px var(--gold); text-underline-offset: 7px; }
+  .wf-menu { display: inline-flex; }
+}
+/* Without script the menu cannot open, so the links stay in a row of their own */
+@media (max-width: 900px) {
+  :root:not(.js) { --wf-h: 92px; }
+  :root:not(.js) .wf-menu { display: none; }
+  :root:not(.js) .wf-links { position: static; display: flex; flex-direction: row; grid-area: 2 / 1 / 3 / -1; padding: 0; border: 0; background: none; overflow-x: auto; }
+  :root:not(.js) .wf-links a { min-height: 36px; padding: 0 8px; font-size: 0.72em; letter-spacing: 0.12em; }
+}
+/* phones: the star gives its place to search, and Top joins the menu */
+@media (max-width: 480px) {
+  .wayfinder { grid-template-columns: minmax(0, 1fr) auto; }
+  .wf-mark, .wf-viewer-long { display: none; }
+  .wf-links .wf-top { display: flex; }
+}
+/* landscape phones: no room for a menu's worth of height, so the links stay in the row */
+@media (max-height: 500px) and (orientation: landscape) and (min-width: 700px) {
+  :root { --wf-h: 44px; }
+  .wayfinder { grid-template-columns: auto minmax(120px, 200px) minmax(0, 1fr) auto; padding: 4px 12px; }
+  .wf-links { position: static; display: flex; flex-direction: row; align-items: center; padding: 0; background: none; border: 0; }
+  .wf-links a { display: inline-flex; align-items: center; min-height: 0; height: 34px; padding: 0 8px; font-size: 0.72em; letter-spacing: 0.12em; border-bottom: 1px solid transparent; }
+  .wf-links a[aria-current] { text-decoration: none; border-bottom-color: var(--gold); }
+  .wf-links a:focus-visible { outline-offset: 3px; }
+  .wf-menu { display: none; }
+  .wf-input { height: 32px; }
 }
 
 /* ── Sky now ── */
@@ -754,6 +832,9 @@ footer > p { margin-top: 4px; }
   opacity: 0; transition: opacity 0.2s;
 }
 .thread-knot:hover .thread-label, .thread-knot:focus-visible .thread-label, .thread-knot.is-current .thread-label { opacity: 1; }
+/* Until the margin is wide enough to hold a label clear of the text, the
+   knot alone marks your place; hover or focus still names it */
+@media (max-width: 1399px) { .thread-knot.is-current:not(:hover):not(:focus-visible) .thread-label { opacity: 0; } }
 @media (max-width: 1100px) { .thread { display: none; } }
 
 /* ── Time of day: the painting breathes with the visitor's hour ── */

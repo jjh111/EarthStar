@@ -146,6 +146,34 @@ async function newPage(opts = {}) {
   await ctx.close();
 }
 
+{
+  // The wayfinder on a phone: one row with search, the Viewer and the switch on
+  // screen; the six sections in a menu that navigates and closes; the thread
+  // marks where you are in it
+  const { ctx, page } = await newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  await page.goto(BASE + '/', { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.scrollTo(0, innerHeight * 1.5));
+  await page.waitForTimeout(300);
+  const bar = await page.evaluate(() => {
+    const r = (s) => document.querySelector(s).getBoundingClientRect();
+    return { h: r('.wayfinder').height, theme: r('#themeToggle').right, viewer: r('.wf-viewer').right, w: innerWidth };
+  });
+  check('phone wayfinder is one row', bar.h <= 48, `${bar.h}px`);
+  check('phone wayfinder keeps the Viewer and the switch on screen', bar.theme <= bar.w && bar.viewer <= bar.w, `${bar.viewer}, ${bar.theme} of ${bar.w}`);
+  await page.locator('.wf-menu').click();
+  const opened = await page.locator('.wf-links a[href="#sky"]').isVisible() && await page.locator('.wf-menu').getAttribute('aria-expanded') === 'true';
+  await page.locator('.wf-links a[href="#sky"]').click();
+  await page.waitForTimeout(600);
+  const went = await page.evaluate(() => location.hash === '#sky' && document.getElementById('sky').getBoundingClientRect().top < innerHeight / 2);
+  check('sections menu opens, navigates and closes', opened && went && await page.locator('.wf-menu').getAttribute('aria-expanded') === 'false'
+    && !(await page.locator('.wf-links a[href="#sky"]').isVisible()));
+  await page.evaluate(() => document.getElementById('ideas').scrollIntoView());
+  await page.waitForTimeout(1200); // the thread counts sections once the page is idle
+  const current = await page.evaluate(() => [...document.querySelectorAll('.wf-links a[aria-current]')].map((a) => a.getAttribute('href')));
+  check('one wayfinder link marks the current section', current.length === 1 && current[0] === '#ideas', current.join(', '));
+  await ctx.close();
+}
+
 // Mock mode renders numbers and says so
 {
   const { ctx, page } = await newPage();

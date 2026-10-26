@@ -27,7 +27,7 @@
   <link rel="preload" as="image" type="image/avif" media="(max-width: 480px)" href="assets/img/0-BG-640.avif" fetchpriority="high">
   <link rel="preload" as="image" type="image/avif" media="(min-width: 480.1px)" imagesrcset="assets/img/0-BG-960.avif 960w, assets/img/0-BG-1280.avif 1280w" imagesizes="100vw" fetchpriority="high">
 
-  <script>try{var t=localStorage.getItem('earthStarTheme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}</script>
+  <script>document.documentElement.classList.add('js');try{var t=localStorage.getItem('earthStarTheme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}</script>
   <!--BUILD:CSS-->
   <script defer src="assets/js/main.js"></script>
 </head>
@@ -96,17 +96,25 @@
     </span>
     <span id="search-status" class="wf-status" aria-live="polite"></span>
   </div>
-  <div class="wf-links">
+  <!-- The six sections: a row on wide screens, the Sections menu on narrow ones.
+       Top stands in for the star, which phones hide. -->
+  <div class="wf-links" id="wfLinks">
+    <a class="wf-top" href="#top">Top</a>
     <a href="#seed">Seed</a>
     <a href="#scales">Scales</a>
     <a href="#sky">Sky</a>
     <a href="#ideas">Ideas</a>
     <a href="#archive-section">Archive</a>
-    <a href="#begin">Out</a>
-    <a class="wf-viewer" href="/viewer/">The Viewer <span aria-hidden="true">↗</span></a>
+    <a href="#begin">Onward</a>
+  </div>
+  <!-- Always in the bar: the door to the Viewer (↗: another Earth Star surface,
+       same tab), day and night, and on narrow screens the menu -->
+  <div class="wf-end">
+    <a class="wf-viewer" href="/viewer/"><span class="wf-viewer-long">The</span> Viewer <span aria-hidden="true">↗</span></a>
     <button type="button" class="wf-theme" id="themeToggle" aria-label="Switch to dark theme" title="Day / night">
       <span class="t-light" aria-hidden="true">☾</span><span class="t-dark" aria-hidden="true">☀</span>
     </button>
+    <button type="button" class="wf-menu" aria-expanded="false" aria-controls="wfLinks"><span class="wf-menu-label">Sections</span></button>
   </div>
 </nav>
 
@@ -212,7 +220,7 @@
   </div>
 </section>
 
-<section id="begin" class="begin" data-thread="Out">
+<section id="begin" class="begin" data-thread="Onward">
   <div class="begin-inner">
     <h2 class="section-label"><span class="stage-no" title="VI"><!--BUILD:NUM 6--><span class="visually-hidden">VI</span></span> Links out <span class="section-sub">where it leads</span></h2>
     <div class="links">
@@ -266,7 +274,7 @@
   </div>
 </div>
 
-    <footer id="garden" data-thread="Coherence">
+    <footer id="garden" data-thread="Garden">
       <div class="footer-garden" id="footerGarden"></div>
       <div class="coherence-meter">
         <span class="coherence-meter-label" id="coherenceValue" aria-live="polite">∇𝒞 = 0.00</span>

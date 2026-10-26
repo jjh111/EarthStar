@@ -1,6 +1,9 @@
 // The golden thread — a thin line down the left edge that fills as you read,
 // knotted at each section. Progress, wayfinding, and the motif in one:
 // the thread of coherence running through the whole page.
+// It keeps count at every width, even where the line itself is hidden: the
+// wayfinder's links carry aria-current for the section you are in, and each
+// change is announced as 'earthstar:section' (the Sections menu names it).
 
 export function initThread() {
   const thread = document.getElementById('thread');
@@ -14,7 +17,9 @@ export function initThread() {
     `<a class="thread-knot" href="#${s.id}" data-for="${s.id}"><span class="thread-label">${s.dataset.thread}</span></a>`).join('');
 
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const wfLinks = Array.from(document.querySelectorAll('.wf-links a'));
   let ticking = false;
+  let last;
 
   function place() {
     const docH = document.documentElement.scrollHeight - window.innerHeight;
@@ -30,6 +35,14 @@ export function initThread() {
       if (top - window.innerHeight * 0.45 <= y) current = s.id;
     }
     for (const k of knots.children) k.classList.toggle('is-current', k.dataset.for === current);
+    if (current === last) return;
+    last = current;
+    for (const a of wfLinks) {
+      if (a.getAttribute('href') === '#' + current) a.setAttribute('aria-current', 'location');
+      else a.removeAttribute('aria-current');
+    }
+    const label = current ? document.getElementById(current).dataset.thread : null;
+    document.dispatchEvent(new CustomEvent('earthstar:section', { detail: { id: current, label } }));
   }
 
   window.addEventListener('scroll', () => {
