@@ -19,14 +19,10 @@ import type { ForecastBundle } from '../data/forecast.js';
 import type { PartMeta } from '../data/source.js';
 import { INSTRUMENTS } from './instruments.js';
 import {
-  badgeFor, formatAge, hhmmUTC, inForce, noticeWord, splitNotices, stalenessOf, whenUTC,
+  TIER_WORD, badgeFor, formatAge, hhmmUTC, inForce, noticeWord, splitNotices, stalenessOf, whenUTC,
 } from './format.js';
 import { errorReason, valueState } from '../data/state.js';
 import { CLOUD_ARRIVAL } from '../data/enlil.js';
-
-const TIER_WORD: Record<string, string> = {
-  E: 'measured', D: 'modelled', M: 'ambient',
-};
 
 function line(label: string, value: string, unit: string, meta: PartMeta | undefined, now: Date): string {
   const badge = badgeFor(meta);

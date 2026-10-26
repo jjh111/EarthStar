@@ -23,7 +23,7 @@ import {
 } from './format.js';
 import { valueState } from '../data/state.js';
 import { panelSpark } from './sparkline.js';
-import { stateSentence, stateSentenceText } from './state-sentence.js';
+import { sentenceAsOf, stateSentence, stateSentenceText } from './state-sentence.js';
 import type { ForecastBundle } from '../data/forecast.js';
 import { stripProductHeader } from '../data/forecast.js';
 import type { SolarCycle } from '../data/solar-cycle.js';
@@ -155,11 +155,14 @@ export function renderReport(
 
   // The sentence carries its own evidence: each quantity appears as glyph,
   // sparkline and number together. The prose report follows it, and the
-  // screen-reader text alternative sits alongside.
+  // screen-reader text alternative sits alongside. The tab already says "Now",
+  // so the visible heading gives its line to when "now" was measured.
+  const asOf = sentenceAsOf(state, now);
   return `
-    <h2>Now</h2>
-    <p class="state-sentence" aria-hidden="true">${stateSentence(state)}</p>
-    <p class="sr-only">${escapeHtml(stateSentenceText(state))}</p>
+    <h2 class="sr-only">Now</h2>
+    ${asOf ? `<p class="as-of${asOf.stale ? ' is-stale' : ''}">${escapeHtml(asOf.text)}</p>` : ''}
+    <p class="state-sentence" aria-hidden="true">${stateSentence(state, now)}</p>
+    <p class="sr-only">${escapeHtml(stateSentenceText(state, now))}</p>
     <h3>Situation Report</h3>
     ${body}
     ${renderDrawnIndex(narration)}`;

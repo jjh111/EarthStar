@@ -33,6 +33,30 @@ export function fmtInt(v: number | null | undefined): string {
   return v === null || v === undefined || !Number.isFinite(v) ? NO_DATA : String(Math.round(v));
 }
 
+/**
+ * A negative reading is written with the minus sign, U+2212, as the splash
+ * writes it. The hyphen `toFixed` produces is shorter and lighter than the
+ * digits beside it, and at tile size "-1.6" reads as a dash and a number.
+ */
+export function minus(s: string): string {
+  return s.replace(/^-(?=\d)/, '\u2212');
+}
+
+/**
+ * NOAA writes the K index in thirds: "3P" / "3M" / "3Z" for 3+ / 3− / 3.
+ * Ported from the splash (`src/js/sky.js`), so both surfaces print NOAA's
+ * label the same way; anything that is not in that form passes through.
+ */
+export function kpLabel(s: string | null | undefined): string | null {
+  if (typeof s !== 'string') return null;
+  const m = /^(\d)([PMZ])$/.exec(s);
+  const thirds: Record<string, string> = { P: '+', M: '\u2212', Z: '' };
+  return m ? `${m[1]}${thirds[m[2]!]}` : s;
+}
+
+/** The tier in words, for a label that is read rather than seen. */
+export const TIER_WORD: Record<Badge, string> = { E: 'measured', D: 'modelled', M: 'ambient' };
+
 export interface Staleness {
   state: 'fresh' | 'stale' | 'no-data';
   ageS: number | null;

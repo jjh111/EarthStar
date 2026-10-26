@@ -4,10 +4,10 @@
  */
 
 
-import type { AlertItem } from '../contract/types.js';
+import type { AlertItem, Badge } from '../contract/types.js';
 import type { PartMeta } from '../data/source.js';
 import type { StoreState } from '../data/store.js';
-import { errorReason, valueState, type DataState } from '../data/state.js';
+import { errorReason, valueState, type DataState, type ValueStateResult } from '../data/state.js';
 import type { FrameStats } from '../scene/viewer.js';
 import { ImageCache } from './image-cache.js';
 import type { CheckResult } from '../data/checks.js';
@@ -15,9 +15,12 @@ import type { ForecastBundle } from '../data/forecast.js';
 import type { SolarCycle } from '../data/solar-cycle.js';
 import { LOOPS, type ImageLoop } from '../data/solar-imagery.js';
 import {
-  NO_DATA, badgeFor, badgeTitle, hhmmUTC, noticeWord, splitNotices, validityText, whenUTC,
+  NO_DATA, TIER_WORD, badgeFor, badgeTitle, formatAge, hhmmUTC, noticeWord, splitNotices,
+  validityText, whenUTC,
 } from './format.js';
 import { INSTRUMENTS } from './instruments.js';
+import { auroraMeta, partState, snapshotOutage } from './state-sentence.js';
+import { subject } from './subjects.js';
 import type { SunPlaneCalibration } from '../scene/sun-plane.js';
 import { tileSpark } from './tile-spark.js';
 import { inlineSpark } from './sparkline.js';
@@ -104,6 +107,8 @@ export class Hud {
   private statusEl: HTMLElement;
   private perfEl: HTMLElement;
   private headlineEl: HTMLAnchorElement;
+  /** One line under the rail's head for a total outage, instead of thirteen alarms. */
+  private outageEl: HTMLElement;
   private copyEl: HTMLButtonElement;
   private downloadEl: HTMLButtonElement;
   private perfKey = '';
@@ -171,6 +176,10 @@ export class Hud {
     this.bodyEl.addEventListener('toggle', this.onSectionToggle, true);
     this.downloadEl.addEventListener('click', () => this.downloadBriefing());
     this.clockEl = document.getElementById('clock') as HTMLElement;
+    this.outageEl = document.createElement('p');
+    this.outageEl.className = 'rail-outage';
+    this.outageEl.hidden = true;
+    document.querySelector('.rail-head')?.after(this.outageEl);
     this.buildTiles();
     this.buildTabs();
     this.bindMargin();
@@ -258,47 +267,89 @@ export class Hud {
 
   /* ---------------- construction ---------------- */
 
+  /**
+   * Every tile has the same four lines — label, value, trend, meta — so the
+   * rail keeps one rhythm in every state. The meta line is the badge, the time
+   * the value was observed, and a detail; only the detail gives way when the
+   * line is too long, never the time.
+   */
   private buildTiles(): void {
     this.instrumentsEl.innerHTML = '';
-    for (const inst of INSTRUMENTS) {
+    const meta = '<span class="tile-meta"><span data-badge class="badge"></span>'
+      + '<time data-time></time><span class="tile-detail" data-detail></span></span>';
+    const tile = (id: string, label: string, value: string, onClick: () => void): HTMLElement => {
       const el = document.createElement('button');
       el.className = 'tile';
-      el.id = `tile-${inst.id}`;
+      el.id = `tile-${id}`;
       el.type = 'button';
       el.innerHTML = `
-        <span class="tile-label">${escapeHtml(inst.label)}</span>
-        <span class="tile-value"><span data-v>—</span><span class="tile-unit">${escapeHtml(inst.unit)}</span></span>
+        <span class="tile-label">${escapeHtml(label)}</span>
+        ${value}
         <span class="tile-spark" data-spark aria-hidden="true"></span>
-        <span class="tile-meta"><span data-badge class="badge">E</span><span data-time>—</span></span>`;
-      el.addEventListener('click', () => this.openDetail(inst.id));
-      this.tiles.set(inst.id, el);
+        ${meta}`;
+      el.addEventListener('click', onClick);
+      this.tiles.set(id, el);
       this.instrumentsEl.appendChild(el);
+      return el;
+    };
+    const valueSlot = (unit: string): string => `<span class="tile-value"><span data-v>—</span>${
+      unit ? `<span class="tile-unit">${escapeHtml(unit)}</span>` : ''}</span>`;
+
+    for (const inst of INSTRUMENTS) {
+      tile(inst.id, inst.label, valueSlot(inst.unit), () => this.openDetail(inst.id));
     }
+    // NOAA scales are three values, so they get their own shape. Like the
+    // aurora peak they have no detail of their own; both open the report.
+    tile('scales', 'NOAA scales', '<span class="tile-value scales-row" data-scales></span>',
+      () => this.selectTab('report'));
+    tile('aurora', 'Aurora peak', valueSlot('%'), () => this.selectTab('report'));
+  }
 
-    // NOAA scales are three values, so they get their own shape.
-    const scales = document.createElement('div');
-    scales.className = 'tile';
-    scales.id = 'tile-scales';
-    scales.innerHTML = `
-      <span class="tile-label">NOAA scales</span>
-      <span class="scales-row" data-scales></span>
-      <span class="tile-spark" aria-hidden="true"></span>
-      <span class="tile-meta"><span class="badge badge-d">D</span><span data-time>—</span></span>`;
-    this.tiles.set('scales', scales);
-    this.instrumentsEl.appendChild(scales);
+  /**
+   * Writes one tile's meta line and labels from its state. The time is shown
+   * whenever there is one, fresh or stale, because rule 3 puts a time beside
+   * every value; the detail says what the state is when the value cannot.
+   */
+  private writeMeta(
+    el: HTMLElement, meta: PartMeta | undefined, st: ValueStateResult, freshDetail: string,
+    retry: string | null, b: Badge = badgeFor(meta),
+  ): void {
+    const badge = el.querySelector('[data-badge]') as HTMLElement;
+    badge.textContent = b;
+    badge.className = `badge badge-${b.toLowerCase()}`;
+    badge.title = badgeTitle(meta) || TIER_WORD[b].replace(/^./, (c) => c.toUpperCase());
+    const time = el.querySelector('[data-time]') as HTMLTimeElement;
+    if (meta?.data_time && st.state !== 'loading') {
+      time.textContent = hhmmUTC(meta.data_time);
+      time.dateTime = meta.data_time;
+    } else {
+      time.textContent = '';
+      time.removeAttribute('datetime');
+    }
+    // The value slot already says "unavailable" or "no data"; the meta line
+    // does not say it again. A failure says when it is tried next instead.
+    (el.querySelector('[data-detail]') as HTMLElement).textContent =
+      st.state === 'fresh' ? freshDetail
+        : st.state === 'stale' ? st.short
+          : st.state === 'error' ? (retry ? `retry ${retry}` : 'retrying')
+            : st.state === 'loading' ? '…' : '';
+    el.setAttribute('data-state', st.state);
+  }
 
-    const aurora = document.createElement('button');
-    aurora.className = 'tile';
-    aurora.id = 'tile-aurora';
-    aurora.type = 'button';
-    aurora.innerHTML = `
-      <span class="tile-label">Aurora peak</span>
-      <span class="tile-value"><span data-v>—</span><span class="tile-unit">%</span></span>
-      <span class="tile-spark" aria-hidden="true"></span>
-      <span class="tile-meta"><span class="badge badge-d">D</span><span data-time>—</span></span>`;
-    aurora.addEventListener('click', () => this.selectTab('report'));
-    this.tiles.set('aurora', aurora);
-    this.instrumentsEl.appendChild(aurora);
+  /** "Wind speed 330 km/s, measured, 11:58 UTC" — the reading as it would be said. */
+  private ariaReading(
+    label: string, reading: string | null, meta: PartMeta | undefined, st: ValueStateResult,
+    action: string, b: Badge = badgeFor(meta),
+  ): string {
+    const when = meta?.data_time ? `, ${hhmmUTC(meta.data_time)} UTC` : '';
+    const tier = TIER_WORD[b];
+    const said = st.state === 'loading' ? `${label} loading`
+      // "unavailable · offline or blocked · next attempt 19:02 UTC", said as a list.
+      : st.state === 'error' ? `${label} ${st.label.replace(/ · /g, ', ')}`
+        : st.state === 'no-data' ? `${label} no data, ${tier}${when}`
+          : `${label} ${reading}, ${tier}${when}${
+            st.state === 'stale' && st.ageS !== null ? `, stale, ${formatAge(st.ageS)} old` : ''}`;
+    return `${said}. ${action}.`;
   }
 
   /**
@@ -507,12 +558,13 @@ export class Hud {
      * One state per value slot, from the machine in data/state.ts — loading,
      * no data, error, stale, fresh — written to a single `data-state`
      * attribute the CSS keys on. A slot shows a number in exactly one of
-     * them; the others say loading ("…"), "unavailable" (with the reason) or
-     * "no data" (the literal words).
+     * them; the others say loading ("…"), "unavailable" (with the retry time
+     * on the meta line) or "no data" (the literal words).
      */
     const snapshotLane = {
-      loading: state.lanes.snapshot, error: null, nextAttempt: null,
+      loading: state.lanes.snapshot, error: env ? null : state.lastError, nextAttempt: state.nextAttempt,
     };
+    const retry = state.nextAttempt ? hhmmUTC(state.nextAttempt) : null;
     for (const inst of INSTRUMENTS) {
       const el = this.tiles.get(inst.id)!;
       const meta: PartMeta | undefined = env?.parts?.[inst.part];
@@ -523,26 +575,23 @@ export class Hud {
       if ((st.state === 'fresh' || st.state === 'stale') && raw === NO_DATA) {
         st = { state: 'no-data', label: `no data · ${st.label}`, short: NO_DATA, ageS: st.ageS };
       }
-      el.setAttribute('data-state', st.state);
 
-      (el.querySelector('[data-v]') as HTMLElement).textContent = raw !== null ? raw
+      (el.querySelector('[data-v]') as HTMLElement).textContent = raw !== null && raw !== NO_DATA ? raw
         : st.state === 'loading' ? '…'
           : st.state === 'error' ? 'unavailable'
             : NO_DATA;
-      const badge = el.querySelector('[data-badge]') as HTMLElement;
-      const b = badgeFor(meta);
-      badge.textContent = b;
-      badge.className = `badge badge-${b.toLowerCase()}`;
-      const detail = st.state === 'fresh' ? inst.detail?.(d) ?? '' : '';
-      (el.querySelector('[data-time]') as HTMLElement).textContent = detail || st.short;
-      const valueTitle = raw !== null ? `${raw} ${inst.unit}`
+      // Before its feed has answered, the tile takes its tier from the registry,
+      // so a modelled reading never shows [E] while it loads.
+      const b = meta ? badgeFor(meta) : subject(inst.subject)?.tier ?? 'E';
+      this.writeMeta(el, meta, st, inst.detail?.(d) ?? '', retry, b);
+      const reading = `${raw} ${inst.unit}`.trim();
+      const valueTitle = st.state === 'fresh' || st.state === 'stale' ? reading
         : st.state === 'loading' ? 'loading'
           : st.state === 'error' ? `unavailable (${st.label})`
             : 'no data';
-      el.setAttribute('title', `${inst.label}: ${valueTitle} · ${st.label} · ${badgeTitle(meta)}`);
-      el.setAttribute('aria-label', st.state === 'fresh' || st.state === 'stale'
-        ? `${inst.label}: ${raw} ${inst.unit}, ${st.label}. Open detail.`
-        : `${inst.label}: ${st.state === 'error' ? `unavailable, ${st.label}` : st.state === 'loading' ? 'loading' : 'no data'}. Open detail.`);
+      el.setAttribute('title', `${inst.label}: ${valueTitle} · ${st.label} · ${badgeTitle(meta)}${
+        inst.title ? ` · ${inst.title}` : ''}`);
+      el.setAttribute('aria-label', this.ariaReading(inst.label, reading, meta, st, 'Open detail', b));
 
       // The trend behind the number. Redrawn on the store's cadence, not the
       // frame's, and marked aria-hidden because the value above it already
@@ -562,43 +611,47 @@ export class Hud {
     const scalesEl = this.tiles.get('scales')!;
     const row = scalesEl.querySelector('[data-scales]') as HTMLElement;
     const sc = d?.scales;
-    const scS = valueState({ lane: snapshotLane, received: !!state.now, meta: env?.parts?.scales, now });
-    row.innerHTML = sc
+    const scMeta = env?.parts?.scales;
+    let scS = valueState({ lane: snapshotLane, received: !!state.now, meta: scMeta, now });
+    // The feed answered without the scales: "no data", as on any other tile.
+    if (!sc && (scS.state === 'fresh' || scS.state === 'stale')) scS = { ...scS, state: 'no-data', short: NO_DATA };
+    row.innerHTML = sc && scS.state !== 'no-data'
       ? (['R', 'S', 'G'] as const).map((k) => {
         const n = sc[k].scale ?? null;
         return `<span class="scale-chip scale-${n ?? 'na'}" title="${k} — ${escapeHtml(sc[k].text ?? 'no data')}">${k}${n ?? '–'}</span>`;
       }).join('')
-      : scS.state === 'loading' ? '<span class="tile-loading-dots">…</span>' : NO_DATA;
-    (scalesEl.querySelector('[data-time]') as HTMLElement).textContent = scS.short;
-    scalesEl.setAttribute('title', `NOAA scales · ${scS.label}`);
-    scalesEl.setAttribute('data-state', scS.state);
+      // Failed is "unavailable", like every other tile — never "no data".
+      : scS.state === 'loading' ? '…'
+        : scS.state === 'error' ? 'unavailable' : NO_DATA;
+    this.writeMeta(scalesEl, scMeta, scS, '', retry, scMeta ? badgeFor(scMeta) : 'D');
+    scalesEl.setAttribute('title', `NOAA scales · ${scS.label} · ${badgeTitle(scMeta)}`);
+    scalesEl.setAttribute('aria-label', this.ariaReading('NOAA scales',
+      sc ? (['R', 'S', 'G'] as const).map((k) => `${k}${sc[k].scale ?? ' no data'}`).join(' ') : null,
+      scMeta, scS, 'Open report', scMeta ? badgeFor(scMeta) : 'D'));
 
-    // Aurora
+    // Aurora: its own lane, decided as the sentence decides it.
     const auEl = this.tiles.get('aurora')!;
     const au = state.aurora;
-    const auMeta: PartMeta | undefined = au
-      ? {
-        tier: 'modeled', source: au.source, source_url: au.source_url, model: au.model,
-        data_time: au.data?.observation_time ?? null, latency_s: au.latency_s,
-        stale_after_s: au.stale_after_s,
-        ...(state.laneErrors.aurora ? { error: state.laneErrors.aurora } : {}),
-      }
-      : undefined;
-    const auS = valueState({
-      lane: { loading: state.lanes.aurora, error: state.laneErrors.aurora, nextAttempt: state.nextAttempt },
-      received: !!au?.data, meta: auMeta, now,
-    });
+    const auMeta = auroraMeta(state);
+    const auS = partState(state, 'aurora', now);
     (auEl.querySelector('[data-v]') as HTMLElement).textContent =
       au?.data ? String(au.data.max_probability)
         : auS.state === 'loading' ? '…'
           : auS.state === 'error' ? 'unavailable' : NO_DATA;
-    (auEl.querySelector('[data-time]') as HTMLElement).textContent =
-      au?.data ? `valid ${hhmmUTC(au.data.forecast_time)}` : auS.short;
-    auEl.setAttribute('data-state', auS.state);
-    auEl.setAttribute('title', `Aurora peak · ${auS.label}`);
-    auEl.setAttribute('aria-label', au?.data
-      ? `Aurora peak: ${au.data.max_probability} percent, ${auS.label}. Open report.`
-      : `Aurora peak: ${auS.state === 'loading' ? 'loading' : auS.state === 'error' ? `unavailable, ${auS.label}` : 'no data'}. Open report.`);
+    // Observed at the time on the meta line; the forecast is for the time after it.
+    // A model's output whether or not it has arrived: [D] before its envelope does too.
+    this.writeMeta(auEl, auMeta, auS, au?.data ? `for ${hhmmUTC(au.data.forecast_time)}` : '', retry, 'D');
+    auEl.setAttribute('title', `Aurora peak · ${auS.label}${au?.data
+      ? ` · OVATION forecast for ${hhmmUTC(au.data.forecast_time)} UTC` : ''} · ${badgeTitle(auMeta)}`);
+    auEl.setAttribute('aria-label', this.ariaReading(
+      'Aurora peak', au?.data ? `${au.data.max_probability} percent` : null, auMeta, auS, 'Open report', 'D'));
+
+    // A total outage is said once, here and in the sentence; each tile keeps
+    // its one red "unavailable" and nothing more.
+    const outage = snapshotOutage(state);
+    this.outageEl.hidden = !outage;
+    this.outageEl.textContent = outage
+      ? `NOAA unreachable · retrying ${retry ? `${retry} UTC` : 'on the next refresh'}` : '';
 
     // Layer toggles carry the same four states: a layer whose data has not
     // landed is dimmed rather than pretending to be ready.
@@ -637,9 +690,19 @@ export class Hud {
     // "Live" is a claim: it needs at least one timestamp behind it. A
     // completed composite whose every feed failed has none.
     const gotAny = env ? Object.values(env.parts).some((p) => p.data_time) : false;
+    // "Live" also needs the readings to be current. A fetch that succeeds but
+    // brings back only old readings — a feed that has stopped upstream — is a
+    // live fetch of a stale page, and says so, in amber, with the newest age.
+    const ages = env ? [...new Set(INSTRUMENTS.map((i) => env.parts[i.part]))]
+      .filter((p) => p?.data_time)
+      .map((p) => ({ age: (now.getTime() - Date.parse(p.data_time!)) / 1000, after: p.stale_after_s })) : [];
+    const allStale = ages.length > 0 && ages.every((a) => a.age > a.after);
+    const newest = allStale ? Math.min(...ages.map((a) => a.age)) : null;
+    const quietlyStale = !state.lastError && !!env && !onMirror && newest !== null;
     this.statusEl.classList.toggle('is-error', !!state.lastError);
     this.statusEl.classList.toggle('is-mirror', !state.lastError && onMirror);
-    this.statusEl.classList.toggle('is-degraded', !state.lastError && !!env && !gotAny && !onMirror);
+    this.statusEl.classList.toggle('is-degraded',
+      !state.lastError && !!env && !onMirror && (!gotAny || quietlyStale));
     if (state.lastError) {
       this.statusEl.textContent =
         `Last refresh failed (${state.lastError}) at ${hhmmUTC(state.lastAttempt)} UTC. Showing last good data, ageing.`;
@@ -654,6 +717,10 @@ export class Hud {
       this.statusEl.textContent =
         `NOAA SWPC unreachable — nothing has loaded yet. Retrying${
           state.nextAttempt ? ` at ${hhmmUTC(state.nextAttempt)} UTC` : ''}.`;
+    } else if (env && quietlyStale) {
+      this.statusEl.textContent =
+        `Live fetch · NOAA SWPC · refreshed ${hhmmUTC(env.fetched_at)} UTC · newest reading ${
+          formatAge(newest!)} old`;
     } else if (env) {
       this.statusEl.textContent =
         `Live · NOAA SWPC · refreshed ${hhmmUTC(env.fetched_at)} UTC · DirectSource (stage A)`;
