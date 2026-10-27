@@ -7,7 +7,7 @@
 //   index.html        — minified, all CSS inlined (one request renders the page)
 //   assets/js/main.js — single minified bundle
 //   assets/fonts/     — self-hosted variable woff2 subsets
-//   assets/img/       — responsive AVIF/WebP hero layers, logo, banner, favicon, og card
+//   assets/img/       — responsive AVIF/WebP hero layers, logo, banner, favicons, og card
 //   assets/img/glyphs, assets/img/gomens — the Earth Star script, generated from
 //                       src/glyphs/ on every build (deterministic: seeded brush)
 //   assets/img/works/ — the Works shelf's posters (--images; see section 6)
@@ -57,13 +57,22 @@ for (const id of GOMEN_IDS) {
   const c = buildCartouche(id).ink;
   writeFileSync(p(`${GLYPHS}/cart-${id}.svg`), svgOf(c, { size: 52 }).replace('viewBox="0 0 52 52"', 'viewBox="0 0 28 52"'));
 }
-// The favicon: the script's star, gold on the night ground
+// The favicon: the script's star, gold on the night ground. Drawn on every
+// build, and with it the PNGs for what cannot read an SVG icon: a 32 px tab
+// icon, and the 180 px home-screen icon, square and edge to edge with the star
+// a little smaller, because iOS rounds the corners itself.
+const ICONS = ['favicon-32.png', 'apple-touch-icon.png'];
 {
   const f = pen('favicon', { w: 3, step: 1.5 });
   f.star(32, 33.5, 23);
-  writeFileSync(p('assets/img/favicon.svg'),
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#0e2117"/>`
-    + `<path fill="#e9b92c" d="${f.layers.ink.join('')}"/></svg>`);
+  const star = `<path fill="#e9b92c" d="${f.layers.ink.join('')}"/>`;
+  const icon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#0e2117"/>${star}</svg>`;
+  writeFileSync(p('assets/img/favicon.svg'), icon);
+  const sharp = (await import('sharp')).default;
+  const png = (svg, size) => sharp(Buffer.from(svg), { density: 72 * size / 64 }).resize(size, size);
+  await png(icon, 32).png({ compressionLevel: 9 }).toFile(p(`assets/img/${ICONS[0]}`));
+  await png(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="-5 -5 74 74">${star}</svg>`, 180)
+    .flatten({ background: '#0e2117' }).png({ compressionLevel: 9 }).toFile(p(`assets/img/${ICONS[1]}`));
 }
 const mask = (file) => `style="--m:url(${file})"`;
 
@@ -218,9 +227,10 @@ const scriptKey = `<div class="script-key">
   <p class="key-guide"><span class="badge" title="${esc(REG.D)}">D</span> <a href="field-guide/">Gomenata, a field guide to the adjacent life <span aria-hidden="true">↗</span></a>: ${inWords(guideCount.kingdoms)} kingdoms, ${inWords(guideCount.species)} species, ${inWords(guideCount.refs)} references</p>
 </div>`;
 html = html.replace('<!--BUILD:SCRIPT_KEY-->', scriptKey);
-// Section numerals, counted in beads, and the wayfinder's star
+// Section numerals, counted in beads, the wayfinder's star, and any other mark
 html = html.replace(/<!--BUILD:NUM (\d)-->/g, (_, n) => `<span class="glyph num" aria-hidden="true" ${mask(`${GLYPHS}/num-${n}.svg`)}></span>`);
 html = html.replace('<!--BUILD:STAR-->', `<span class="glyph" aria-hidden="true" ${mask(`${GLYPHS}/star.svg`)}></span>`);
+html = html.replace(/<!--BUILD:GLYPH ([\w-]+)-->/g, (_, id) => `<span class="glyph" aria-hidden="true" ${mask(`${GLYPHS}/${id}.svg`)}></span>`);
 
 // Section VI: the Works, from src/works.json: the field guide and the films on
 // a shelf, the Gomens in Blender beneath it, and 'a seed' beside the seed in
@@ -329,9 +339,10 @@ if (process.argv.includes('--images')) {
   const sharp = (await import('sharp')).default;
   const IMG = p('assets/img');
   // Clear the old rasters so a dropped size cannot linger, but keep the
-  // script's SVGs (glyphs/, gomens/, favicon.svg) written above in this run
+  // script's SVGs (glyphs/, gomens/, favicon.svg) and the icons drawn from
+  // them, written above in this run
   mkdirSync(IMG, { recursive: true });
-  for (const f of readdirSync(IMG)) if (/\.(avif|webp|jpg|png)$/.test(f)) rmSync(`${IMG}/${f}`);
+  for (const f of readdirSync(IMG)) if (/\.(avif|webp|jpg|png)$/.test(f) && !ICONS.includes(f)) rmSync(`${IMG}/${f}`);
 
   // The painting's five layers. `widths` serve screens wider than 2:3;
   // `portrait` serves the tall ones (src/index.html): a full-height, centred
@@ -382,7 +393,8 @@ if (process.argv.includes('--images')) {
     .composite([...paintStack, { input: logoBuf, left: 36, top: 36 }])
     .jpeg({ quality: 86 }).toFile(`${IMG}/og.jpg`);
 
-  // (The favicon is drawn by the script's brush on every build; see above.)
+  // (The favicon and its PNGs are drawn by the script's brush on every build;
+  // see above.)
 
   // The index page's Viewer screenshot card. Source is the Viewer's own og card
   // (`viewer/og.jpg`) so the two can never disagree, and it IS generated here

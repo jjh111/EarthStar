@@ -3,7 +3,10 @@
 // depths while a veil of ground colour rises over them (--sink, 0 → 1 over
 // the first screen), handing the background over to the automata.
 // Desktop: cursor drift while the cover is in view. Touch: scroll depth and
-// device tilt where available.
+// device tilt where available. A stilled ground (still.js) holds the layers
+// at rest; the veil still rises.
+
+import { isStill } from './still.js';
 
 const DEPTHS = [1, 5, 20, 50, 8];
 const SCALES = [1, 1, 1, 1.05, 1];
@@ -38,6 +41,11 @@ export function initParallax() {
 
   function apply() {
     rafId = null;
+    if (isStill()) {
+      // at rest, as the painting first paints and as reduced motion holds it
+      images.forEach((img) => { img.style.transform = ''; });
+      return;
+    }
     currentX += (targetX - currentX) * 0.15;
     currentY += (targetY - currentY) * 0.15;
     images.forEach((img, i) => {
@@ -86,6 +94,9 @@ export function initParallax() {
       schedule();
     });
   }, { passive: true });
+
+  // Stilled, the layers settle at rest; let go, they take up the scroll again
+  document.addEventListener('earthstar:still', schedule);
 
   // ── Device tilt (coarse pointers; Android fires without permission,
   //    iOS requires a permission prompt we deliberately don't push) ──

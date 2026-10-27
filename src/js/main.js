@@ -8,13 +8,15 @@ import { initSky } from './sky.js';
 import { initThread } from './thread.js';
 import { initWayfinder } from './wayfinder.js';
 import { initTheme } from './theme.js';
+import { initStill } from './still.js';
 import { initAutomata } from './automata.js';
 import { initSeedCopy } from './seed-copy.js';
 import { initGomens } from './gomens.js';
 import { initWorks, initWorksSearch } from './works.js';
 
-// Theme and time-of-day first — they change what the page looks like
+// Theme, stillness and time-of-day first — they change what the page looks like
 initTheme();
+initStill();
 initTimeOfDay();
 initSeedCopy();
 initGomens();

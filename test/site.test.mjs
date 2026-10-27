@@ -58,6 +58,11 @@ async function newPage(opts = {}) {
   const absent = [];
   for (const u of paint) if (!(await page.request.head(new URL(u, BASE + '/').href)).ok()) absent.push(u);
   check('every size of the painting resolves', paint.length > 0 && absent.length === 0, absent.join(', '));
+  // The PNG icons, which a browser may not fetch here at all
+  const icons = await page.evaluate(() => [...document.querySelectorAll('link[rel~="icon"], link[rel="apple-touch-icon"]')].map((l) => l.href));
+  const deadIcons = [];
+  for (const u of icons) if (!(await page.request.head(u)).ok()) deadIcons.push(u);
+  check('every icon resolves, the touch icon among them', icons.length === 3 && icons.some((u) => u.endsWith('apple-touch-icon.png')) && deadIcons.length === 0, deadIcons.join(', '));
   // Earth Star surfaces open in the same tab; only offsite links open new ones
   check('Viewer links open in the same tab', await page.locator('a[href^="/viewer/"][target]').count() === 0);
   check('title', (await page.title()).includes('Earth Star'));
@@ -114,6 +119,15 @@ async function newPage(opts = {}) {
   await page.waitForTimeout(1600);
   check('margin stars', await page.locator('.emoji-persistent').count() >= 3);
   check('constellation drawn', await page.locator('.constellation-line').count() >= 2);
+  // Stars sit in the middle of the gutter, clear of the text; a click in the
+  // column (or within its 8 px of grace) plants none
+  const textLeft = await page.evaluate(() => { const el = document.querySelector('.ideas-inner'); return el.getBoundingClientRect().left + parseFloat(getComputedStyle(el).paddingLeft); });
+  const starX = await page.$$eval('.emoji-persistent', (els) => els.map((e) => { const r = e.getBoundingClientRect(); return r.left + r.width / 2; }));
+  check('margin stars sit at the gutter centre', starX.every((x) => Math.abs(x - textLeft / 2) <= 2), `${starX.map(Math.round).join(',')} vs ${Math.round(textLeft / 2)}`);
+  await page.evaluate(() => document.getElementById('ideas').scrollIntoView());
+  await page.waitForTimeout(200);
+  await page.mouse.click(Math.ceil(textLeft) - 6, 500);
+  check('a click in the column plants no star', await page.locator('.emoji-persistent').count() === starX.length);
 
   await page.evaluate(() => window.scrollTo(0, 0));
   for (let i = 0; i < 6; i++) { await page.mouse.click(500 + i * 40, 400); await page.waitForTimeout(150); }
@@ -216,6 +230,93 @@ async function newPage(opts = {}) {
   await page.waitForTimeout(1200); // the thread counts sections once the page is idle
   const current = await page.evaluate(() => [...document.querySelectorAll('.wf-links a[aria-current]')].map((a) => a.getAttribute('href')));
   check('one wayfinder link marks the current section', current.length === 1 && current[0] === '#ideas', current.join(', '));
+  // Still the ground is the menu's last row on a phone, not a button in the bar
+  await page.locator('.wf-menu').click();
+  const row = page.locator('.wf-links .wf-still-row');
+  const inMenu = await row.isVisible() && !(await page.locator('.wf-end .wf-still').isVisible());
+  await row.click();
+  check('phone: Still the ground is in the Sections menu', inMenu && await row.getAttribute('aria-pressed') === 'true'
+    && await page.evaluate(() => document.documentElement.hasAttribute('data-still')));
+  await ctx.close();
+}
+
+{
+  // A touch screen plants no stars: a finger cannot aim at a margin, and a
+  // phone has none to spare. The garden says 'tap', and the seed's chain of
+  // marks never breaks across lines.
+  const { ctx, page } = await newPage({ viewport: { width: 360, height: 740 }, hasTouch: true, isMobile: true });
+  await page.goto(BASE + '/', { waitUntil: 'networkidle' });
+  await page.waitForTimeout(600);
+  check('touch: the garden says tap', await page.locator('.footer-garden-hint').textContent() === 'tap anywhere to plant…');
+  check('the seed chain keeps to one line at 360', await page.locator('.seed-chain').evaluate((el) => el.getClientRects().length) === 1);
+  await page.evaluate(() => document.querySelector('.gomen-lore').scrollIntoView({ block: 'center' }));
+  await page.waitForTimeout(200);
+  for (const x of [20, 50, 80, 290, 320, 350]) { await page.touchscreen.tap(x, 370); await page.waitForTimeout(100); }
+  await page.waitForTimeout(300);
+  check('touch: margin taps plant no stars', await page.locator('.emoji-persistent').count() === 0);
+  await ctx.close();
+}
+
+{
+  // Still the ground: the switch in the bar stops the automata and the cue,
+  // keeps the bar one row, and outlasts a reload
+  const { ctx, page } = await newPage();
+  await page.goto(BASE + '/', { waitUntil: 'networkidle' });
+  await page.waitForTimeout(600);
+  const snap = () => page.evaluate(() => {
+    const c = document.getElementById('bgAutomaton');
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    let hsh = 0; for (let i = 3; i < d.length; i += 4) hsh = (hsh * 31 + d[i]) | 0;
+    return hsh;
+  });
+  const toggle = page.locator('.wf-end .wf-still');
+  await toggle.click();
+  await page.waitForTimeout(100);
+  const g1 = await snap();
+  await page.waitForTimeout(2000);
+  check('still: the ground stops', g1 === await snap() && await toggle.getAttribute('aria-pressed') === 'true');
+  check('still: the cue rests', await page.locator('.cover-cue span').evaluate((el) => getComputedStyle(el).animationName) === 'none');
+  const row = await page.evaluate(() => {
+    const r = (sel) => document.querySelector(sel).getBoundingClientRect();
+    return { h: Math.round(r('.wayfinder').height), still: r('.wf-end .wf-still').top, theme: r('#themeToggle').top };
+  });
+  check('still: the switch sits in the bar\'s one row', row.h <= 58 && row.still === row.theme, JSON.stringify(row));
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(800);
+  const r1 = await snap();
+  await page.waitForTimeout(1500);
+  check('still: the choice persists', await page.evaluate(() => document.documentElement.hasAttribute('data-still'))
+    && await toggle.getAttribute('aria-pressed') === 'true' && r1 === await snap());
+  await ctx.close();
+}
+
+{
+  // The footer: nothing to clear in an empty garden; the plants are buttons
+  // in the tab order; the rule keeps to the column and the banner to its
+  // drawn 1200 px; the quotes are set
+  const { ctx, page } = await newPage({ viewport: { width: 1920, height: 1080 } });
+  await page.goto(BASE + '/', { waitUntil: 'networkidle' });
+  await page.waitForTimeout(600);
+  check('an empty garden has no Clear button', !(await page.locator('#clearGardenBtn').isVisible()));
+  await page.evaluate(() => localStorage.setItem('earthStarGarden', JSON.stringify({ footerGarden: [{ emoji: '🌱' }, { emoji: '🌳', isTree: true }] })));
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(600);
+  await page.locator('#clearGardenBtn').focus();
+  await page.keyboard.press('Shift+Tab');
+  check('garden plants are buttons in the tab order', await page.locator('button.emoji-footer').count() === 2
+    && await page.evaluate(() => document.activeElement.matches('button.emoji-footer[aria-label="Remove tree"]')));
+  const f = await page.evaluate(() => {
+    const r = (el) => el.getBoundingClientRect();
+    const logo = [...document.querySelectorAll('.footer-logo, .logo-day')].find((el) => el.getClientRects().length);
+    const inner = document.querySelector('.stage-inner');
+    const pad = parseFloat(getComputedStyle(inner).paddingLeft);
+    return { gap: r(logo).top - r(document.getElementById('clearGardenBtn')).bottom, rule: r(document.querySelector('.footer-garden')),
+      col: [r(inner).left + pad, r(inner).right - pad], banner: r(document.querySelector('.banner-footer img')).width, text: document.querySelector('footer').innerText };
+  });
+  check('Clear Garden stands clear of the logo', f.gap >= 16, `${f.gap}px`);
+  check('the footer rule keeps to the column, the banner to 1200 px', f.rule.left >= f.col[0] - 1 && f.rule.right <= f.col[1] + 1 && f.banner <= 1200,
+    `${Math.round(f.rule.left)}–${Math.round(f.rule.right)} in ${f.col.map(Math.round).join('–')}, banner ${f.banner}`);
+  check('the footer sets its quotes', !/["']/.test(f.text));
   await ctx.close();
 }
 
@@ -245,6 +346,7 @@ async function newPage(opts = {}) {
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   check('copy the seed keeps its lines', copied.includes('recursion.\nYour memory is soil.') && copied.split('\n').length >= 10,
     `${copied.split('\n').length} lines`);
+  check('copy the seed keeps the chain as written', copied.includes('Ourself(ves). 🌱 ⟶ 🧠 ⟶ 🌐 ⟶ 🜃\nEarth Star is live.'));
   await ctx.close();
 }
 

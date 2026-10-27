@@ -445,6 +445,12 @@ M['garden-tree'] = (p) => { R.tree(p, 24, 4, 42); R.roots(p, 24, 45, 5); };
 M['star'] = (p) => p.star(24, 25, 20);
 M['butterfly'] = (p) => G['cold-start'](p);
 M['spark'] = (p) => { p.star(24, 24, 12); p.dot(39, 11, 2.4).dot(9, 38, 1.8); };
+// still the ground: the stream's last ripple settling into level water
+M['still'] = (p) => {
+  R.stream(p, 7, 15, 41, 15, 4.4);
+  p.s([[7, 26], [24, 25.4], [41, 26]], { w: 2.8, tipIn: 0.5, tipOut: 0.4 });
+  p.s([[11, 36], [24, 35.6], [37, 36]], { w: 2.4, tipIn: 0.5, tipOut: 0.4 });
+};
 
 // numerals: counted in the logo's beads; five beads make a bar. The ink is
 // centred in the box, so a numeral set on a label's centre line sits on it.

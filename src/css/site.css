@@ -148,7 +148,7 @@ button { font: inherit; color: inherit; }
 @media (max-width: 480px) { .section-sub { flex-basis: 100%; font-size: 1.2em; } }
 
 /* Small uppercase labels, shared */
-.subtitle, .sky-label, .wf-links a, .wf-viewer, .wf-menu, .chip, .archive-card-kicker,
+.subtitle, .sky-label, .wf-links a, .wf-still-row, .wf-viewer, .wf-menu, .chip, .archive-card-kicker,
 .prov-kind, .thread-label, .coherence-meter-label {
   font-family: var(--sans); text-transform: uppercase; letter-spacing: 0.2em;
 }
@@ -165,7 +165,8 @@ button { font: inherit; color: inherit; }
 .sky-cta { background: var(--ink); color: var(--bg); }
 .sky-cta:hover { background: var(--ink-2); border-color: var(--ink-2); }
 .clear-garden-btn:hover { background: var(--bg-3); }
-.clear-garden-btn { font-size: 0.78em; padding: 8px 14px; border-color: var(--line-2); color: var(--ink-2); }
+.clear-garden-btn { font-size: 0.78em; padding: 8px 14px; margin-bottom: 20px; border-color: var(--line-2); color: var(--ink-2); }
+.clear-garden-btn[hidden] { display: none; }
 .link-btn-jewel { border: 0; padding: 6px 0; font-size: 0.78em; color: var(--ink-3); letter-spacing: 0.18em; }
 .link-btn-jewel:hover { color: var(--ink); }
 
@@ -427,6 +428,8 @@ h1 {
 .seed-phrase-label { display: block; font-size: 0.78em; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-2); }
 .seed-phrase p { margin-top: 8px; font-family: var(--mono); font-size: 0.95em; line-height: 1.85; color: var(--ink); }
 .equation-live { color: var(--gold-2); }
+/* the chain is one figure: it never leaves its last mark alone on a line */
+.seed-chain { white-space: nowrap; }
 /* phones: the copy button sits in the card's corner instead of taking a
    column, so the equations get the card's full width */
 @media (max-width: 640px) {
@@ -489,12 +492,24 @@ h1 {
 .wf-links .wf-top { display: none; }
 .wf-end { display: flex; align-items: center; gap: 6px; }
 .wf-viewer { color: var(--ink); }
-.wf-theme {
+.wf-theme, .wf-still {
   display: inline-grid; place-items: center; width: 34px; height: 34px;
   background: transparent; border: 1px solid var(--line); border-radius: var(--radius);
   color: var(--ink-2); cursor: pointer; font-size: 0.95em; line-height: 1;
 }
-.wf-theme:hover { border-color: var(--ink); color: var(--ink); }
+.wf-theme:hover, .wf-still:hover { border-color: var(--ink); color: var(--ink); }
+/* Still the ground (still.js): a switch, inked in while the page's ambient
+   motion is stopped. On narrow screens it is the Sections menu's last row,
+   its glyph in the same small box, inked the same way when pressed. */
+.wf-still .glyph { width: 20px; height: 20px; }
+.wf-still[aria-pressed="true"], .wf-still-row[aria-pressed="true"] .wf-still-box { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.wf-links .wf-still-row { display: none; }
+.wf-still-box {
+  display: inline-grid; place-items: center; flex: none; width: 28px; height: 28px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+}
+.wf-still-box .glyph { width: 17px; height: 17px; }
+:root:not(.js) .wf-still, :root:not(.js) .wf-still-row { display: none; }
 .wf-theme .t-dark, :root[data-theme="dark"] .wf-theme .t-light { display: none; }
 :root[data-theme="dark"] .wf-theme .t-dark { display: inline; }
 @media (prefers-color-scheme: dark) {
@@ -524,6 +539,8 @@ h1 {
 @media (min-width: 901px) and (max-width: 1100px) {
   .wayfinder { gap: 10px; }
   .wf-links a, .wf-viewer { padding-inline: 6px; letter-spacing: 0.14em; }
+  /* the still switch takes the room 'The' had */
+  .wf-viewer-long { display: none; }
 }
 /* The compact bar, for narrow screens and landscape phones: every control 34 px */
 @media (max-width: 900px), (max-height: 500px) and (orientation: landscape) and (min-width: 700px) {
@@ -548,6 +565,14 @@ h1 {
   .wf-links a:focus-visible { outline-offset: -3px; }
   .wf-links a[aria-current] { text-decoration: underline 1px var(--gold); text-underline-offset: 7px; }
   .wf-menu { display: inline-flex; }
+  .wf-end .wf-still { display: none; }
+  .wf-links .wf-still-row {
+    display: flex; align-items: center; gap: 12px; min-height: 48px; margin-top: 4px; padding: 0 var(--pad-x);
+    font-size: 0.8em; font-weight: 500; color: var(--ink-2); text-align: left;
+    background: none; border: 0; border-top: 1px solid var(--line); cursor: pointer;
+  }
+  .wf-links .wf-still-row:hover { color: var(--ink); }
+  .wf-links .wf-still-row:focus-visible { outline-offset: -3px; }
 }
 /* Without script the menu cannot open, so the links stay in a row of their own */
 @media (max-width: 900px) {
@@ -574,6 +599,10 @@ h1 {
   .wf-links a:focus-visible { outline-offset: 3px; }
   .wf-menu { display: none; }
   .wf-input { height: 32px; }
+  /* no menu to hold the still switch: it stays in the bar, in the room 'The' had */
+  .wf-links .wf-still-row { display: none; }
+  .wf-end .wf-still { display: inline-grid; }
+  .wf-viewer-long { display: none; }
 }
 
 /* ── Search results ──
@@ -1094,21 +1123,24 @@ body.is-searching .wf-search:not(.pop-open) .wf-status {
 }
 
 /* ── Footer / garden ── */
+/* The footer keeps the page's frame: its rule runs the width of the text
+   column above it, and the banner stops at its own drawn size */
 footer {
   background: var(--sheet);
-  padding: 56px 5% 72px; text-align: center; color: var(--ink-2);
+  padding: 56px var(--pad-x) 72px; text-align: center; color: var(--ink-2);
   font-size: 0.96em; letter-spacing: 0.03em; border-top: 1px solid var(--line);
 }
 .footer-garden {
   display: flex; justify-content: center; flex-wrap: wrap; gap: 8px;
-  margin-bottom: 24px; min-height: 40px; padding: 12px 0; border-bottom: 1px solid var(--line);
+  max-width: calc(var(--col) - 2 * var(--pad-x)); margin: 0 auto 24px;
+  min-height: 40px; padding: 12px 0; border-bottom: 1px solid var(--line);
 }
 .footer-garden-hint { font-size: 0.85em; color: var(--ink-3); font-style: italic; }
 .footer-logo { display: block; max-width: 150px; height: auto; margin: 0 auto 16px; }
 footer > p { margin-top: 4px; }
 .footer-tagline { font-family: var(--serif); font-style: italic; margin-top: 12px; font-size: 1.15em; color: var(--ink); }
 .footer-equation { margin-top: 14px; font-family: var(--mono); font-size: 0.9em; color: var(--ink-3); }
-.banner-footer { max-width: 80%; margin: 28px auto 0; }
+.banner-footer { max-width: min(80%, 1200px); margin: 28px auto 0; }
 .banner-footer img { width: 100%; height: auto; display: block; }
 
 /* The logo is white on transparent; by day it is masked into ink */
@@ -1145,7 +1177,11 @@ footer > p { margin-top: 4px; }
 @keyframes persistentFloat { 0%, 100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-8px) rotate(3deg); } }
 .emoji-fading { position: fixed; pointer-events: none; z-index: 9997; font-size: 28px; animation: fadeAway 0.8s ease-out forwards; }
 @keyframes fadeAway { 0% { transform: scale(1) translateY(0); opacity: 1; } 100% { transform: scale(0.5) translateY(-30px); opacity: 0; } }
-.emoji-footer { font-size: 26px; padding: 4px; cursor: pointer; transition: transform 0.2s; }
+.emoji-footer {
+  display: inline-grid; place-items: center; font-size: 26px; padding: 4px; cursor: pointer; transition: transform 0.2s;
+  background: none; border: 0; border-radius: var(--radius); color: inherit;
+}
+@media (pointer: coarse) { .emoji-footer { min-width: 44px; min-height: 44px; } }
 .emoji-footer.new { animation: footerAppear 0.5s ease-out forwards; }
 .emoji-footer.tree { font-size: 32px; animation: treeGrow 0.8s ease-out forwards; }
 .emoji-footer:hover { transform: scale(1.3); }
@@ -1193,12 +1229,14 @@ footer > p { margin-top: 4px; }
 .thread-label {
   position: absolute; left: 18px; top: 50%; transform: translateY(-50%); white-space: nowrap;
   font-size: 0.72rem; font-weight: 600; letter-spacing: 0.16em; color: var(--ink-2);
-  opacity: 0; transition: opacity 0.2s;
+  opacity: 0; transition: opacity 0.2s; pointer-events: none;
 }
-.thread-knot:hover .thread-label, .thread-knot:focus-visible .thread-label, .thread-knot.is-current .thread-label { opacity: 1; }
+/* A label takes the pointer only while it shows: hidden, it would be a link
+   no one can see, lying over the margin where the garden plants its stars */
+.thread-knot:hover .thread-label, .thread-knot:focus-visible .thread-label, .thread-knot.is-current .thread-label { opacity: 1; pointer-events: auto; }
 /* Until the margin is wide enough to hold a label clear of the text, the
    knot alone marks your place; hover or focus still names it */
-@media (max-width: 1399px) { .thread-knot.is-current:not(:hover):not(:focus-visible) .thread-label { opacity: 0; } }
+@media (max-width: 1399px) { .thread-knot.is-current:not(:hover):not(:focus-visible) .thread-label { opacity: 0; pointer-events: none; } }
 @media (max-width: 1100px) { .thread { display: none; } }
 
 /* ── Time of day: the painting breathes with the visitor's hour ── */
@@ -1246,6 +1284,9 @@ footer > p { margin-top: 4px; }
   .emoji-footer, .coherence-meter-fill, .gomen-say { transition: none !important; }
   .emoji-footer:hover { transform: none; }
 }
+/* Stilled by the visitor (still.js): what loops of its own accord stops;
+   what answers a click still answers it */
+:root[data-still] .cover-cue span, :root[data-still] .sky-value, :root[data-still] .emoji-persistent { animation: none; }
 
 /* ── Print: an open archive document prints like a document ── */
 @media print {

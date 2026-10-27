@@ -3,9 +3,11 @@
 // sweep rises up the viewport replacing the generation beneath it, with a
 // slightly brighter wavefront that settles as it passes, then the next sweep
 // begins from a new seed under the next rule. Atmosphere, not a feature.
-// Static under reduced motion, paused in hidden tabs.
+// Static under reduced motion and while the visitor has stilled the ground
+// (still.js), paused in hidden tabs.
 
 import { step } from './rule.js';
+import { isStill } from './still.js';
 
 const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -104,7 +106,7 @@ export function initAutomata() {
   }
 
   function start() {
-    if (running || REDUCED_MOTION) return;
+    if (running || REDUCED_MOTION || isStill()) return;
     running = true;
     rafId = requestAnimationFrame(frameTick);
   }
@@ -112,6 +114,13 @@ export function initAutomata() {
   function stop() {
     running = false;
     if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+  }
+
+  // Stilled mid-sweep, the crest settles where it is: the ground stops as a
+  // picture of itself, not as a frozen wave
+  function settle() {
+    for (const [r, i] of crest) paintRow(r, i);
+    crest = [];
   }
 
   function reset() {
@@ -139,4 +148,8 @@ export function initAutomata() {
   });
 
   document.addEventListener('earthstar:theme', () => { readTheme(); reset(); });
+  document.addEventListener('earthstar:still', (e) => {
+    if (e.detail.still) { stop(); settle(); }
+    else start();
+  });
 }

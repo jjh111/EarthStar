@@ -19,6 +19,8 @@ export function initTimeOfDay() {
 }
 
 // ── Constellations: 3+ margin stars on a side connect into a figure ──
+// garden.js says where each star is drawn now (in the middle of its gutter),
+// and only the stars it draws: a gutter too narrow for stars has no figure.
 
 let svg = null;
 
@@ -31,24 +33,38 @@ function ensureLayer() {
   return svg;
 }
 
-function drawSide(stars) {
-  if (stars.length < 3) return '';
-  let lines = '';
+// The segments of one side's figure, star to star, through each star's centre
+function segments(stars) {
+  const out = [];
+  if (stars.length < 3) return out;
   for (let i = 1; i < stars.length; i++) {
     const a = stars[i - 1], b = stars[i];
-    lines += `<line class="constellation-line" x1="${a.x}" y1="${a.y - 20}" x2="${b.x}" y2="${b.y - 20}" pathLength="1"/>`;
+    out.push([a.x, a.y - 20, b.x, b.y - 20]);
   }
-  return lines;
+  return out;
 }
 
 export function initConstellations() {
   document.addEventListener('earthstar:stars', (e) => {
-    const { left, right } = e.detail;
-    if (left.length < 3 && right.length < 3) {
+    const { left, right, moved } = e.detail;
+    const segs = [...segments(left), ...segments(right)];
+    if (!segs.length) {
       if (svg) svg.innerHTML = '';
       return;
     }
-    ensureLayer().innerHTML = drawSide(left) + drawSide(right);
+    const layer = ensureLayer();
+    const lines = layer.querySelectorAll('.constellation-line');
+    // The same figure, moved (the window changed shape): the lines follow
+    // without being drawn again
+    if (moved && lines.length === segs.length) {
+      segs.forEach(([x1, y1, x2, y2], i) => {
+        lines[i].setAttribute('x1', x1); lines[i].setAttribute('y1', y1);
+        lines[i].setAttribute('x2', x2); lines[i].setAttribute('y2', y2);
+      });
+      return;
+    }
+    layer.innerHTML = segs.map(([x1, y1, x2, y2]) =>
+      `<line class="constellation-line" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" pathLength="1"/>`).join('');
   });
 }
 
