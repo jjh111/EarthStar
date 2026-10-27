@@ -11,6 +11,7 @@ import { initTheme } from './theme.js';
 import { initAutomata } from './automata.js';
 import { initSeedCopy } from './seed-copy.js';
 import { initGomens } from './gomens.js';
+import { initWorks, initWorksSearch } from './works.js';
 
 // Theme and time-of-day first — they change what the page looks like
 initTheme();
@@ -18,10 +19,13 @@ initTimeOfDay();
 initSeedCopy();
 initGomens();
 
-// Archive and ideas immediately: deep links (#doc/…, #idea/…) must resolve on load
+// Archive, films and ideas immediately: deep links (#doc/…, #film/…, #idea/…)
+// must resolve on load. The films' Back listener goes before the ideas'.
 initArchive();
+initWorks();
 initIdeas();
 initSearch();
+initWorksSearch(); // its groups list after the page's own
 initWayfinder(); // listens before the thread names the first section
 
 // The live strip fetches after the page has painted — five requests must not

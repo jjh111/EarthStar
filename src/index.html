@@ -115,7 +115,7 @@
     </div>
     <span id="search-status" class="wf-status" aria-live="polite"></span>
   </div>
-  <!-- The six sections: a row on wide screens, the Sections menu on narrow ones.
+  <!-- The seven sections: a row on wide screens, the Sections menu on narrow ones.
        Top stands in for the star, which phones hide. -->
   <div class="wf-links" id="wfLinks">
     <a class="wf-top" href="#top">Top</a>
@@ -124,6 +124,7 @@
     <a href="#sky">Sky</a>
     <a href="#ideas">Ideas</a>
     <a href="#archive-section">Archive</a>
+    <a href="#works">Works</a>
     <a href="#begin">Onward</a>
   </div>
   <!-- Always in the bar: the door to the Viewer (↗: another Earth Star surface,
@@ -161,6 +162,7 @@
           </button>
         </div>
       </div>
+      <!--BUILD:SEED_FILM-->
     </div>
   </div>
 </section>
@@ -239,24 +241,33 @@
   </div>
 </section>
 
+<section id="works" class="works" data-thread="Works">
+  <div class="works-inner">
+    <h2 class="section-label"><span class="stage-no" title="VI"><!--BUILD:NUM 6--><span class="visually-hidden">VI</span></span> Works <span class="section-sub">what has been made of it</span></h2>
+    <!--BUILD:WORKS-->
+  </div>
+</section>
+
 <section id="begin" class="begin" data-thread="Onward">
   <div class="begin-inner">
-    <h2 class="section-label"><span class="stage-no" title="VI"><!--BUILD:NUM 6--><span class="visually-hidden">VI</span></span> Links out <span class="section-sub">where it leads</span></h2>
-    <div class="links">
-      <a href="https://earthstar111.substack.com" class="link-btn btn-readmore" target="_blank" rel="noopener">Read the Writings</a>
-      <a href="https://ko-fi.com/earthstar111" class="link-btn btn-stickers" target="_blank" rel="noopener">Stickers</a>
-      <a href="https://github.com/jjh111/EarthStar/tree/main" class="link-btn-small btn-github" target="_blank" rel="noopener">GitHub</a>
+    <h2 class="section-label"><span class="stage-no" title="VII"><!--BUILD:NUM 7--><span class="visually-hidden">VII</span></span> Onward <span class="section-sub">where it leads</span></h2>
+    <!-- Where it leads from here, once: the places elsewhere (each opens a new
+         tab, and says so), then the skills an agent can take away -->
+    <div class="onward">
+      <div class="onward-group">
+        <h3 class="onward-head" id="onwardElsewhere">Elsewhere</h3>
+        <ul class="onward-links" aria-labelledby="onwardElsewhere">
+          <li><a class="onward-card" href="https://earthstar111.substack.com" target="_blank" rel="noopener"><span class="onward-name">Writings <span aria-hidden="true">↗</span></span><span class="onward-sub">essays, on Substack</span><span class="visually-hidden"> (opens in a new tab)</span></a></li>
+          <li><a class="onward-card" href="https://github.com/jjh111/EarthStar/tree/main/plans" target="_blank" rel="noopener"><span class="onward-name">Plans <span aria-hidden="true">↗</span></span><span class="onward-sub">how this is being built</span><span class="visually-hidden"> (opens in a new tab)</span></a></li>
+          <li><a class="onward-card" href="https://github.com/jjh111/EarthStar/tree/main" target="_blank" rel="noopener"><span class="onward-name">GitHub <span aria-hidden="true">↗</span></span><span class="onward-sub">the code and the documents</span><span class="visually-hidden"> (opens in a new tab)</span></a></li>
+          <li><a class="onward-card" href="https://ko-fi.com/earthstar111" target="_blank" rel="noopener"><span class="onward-name">Stickers <span aria-hidden="true">↗</span></span><span class="onward-sub">on Ko-fi</span><span class="visually-hidden"> (opens in a new tab)</span></a></li>
+        </ul>
+      </div>
+      <div class="onward-group">
+        <h3 class="onward-head" id="onwardAgents">For agents</h3>
+        <ul class="skills" aria-labelledby="onwardAgents"><!--BUILD:SKILLS--></ul>
+      </div>
     </div>
-    <ul class="resources" aria-label="Resources">
-      <li><a href="/viewer/">The Viewer <span class="res-sub">live space weather</span></a></li>
-      <li><a href="#doc/earth-star-skill">Earth Star Framework <span class="res-sub">the framework, readable here</span></a>
-        <a class="res-dl" href="dist/earth-star.skill" download>take the .skill — for agents</a></li>
-      <li><a href="#doc/research-veracity">Research Veracity Protocol <span class="res-sub">the veracity protocol, readable here</span></a>
-        <a class="res-dl" href="dist/earth-star-research.skill" download>take the .skill — for agents</a></li>
-      <li><a href="#doc/heliosphere-data">Heliosphere Data Catalog <span class="res-sub">the verified data catalog, readable here</span></a>
-        <a class="res-dl" href="dist/heliosphere-data.skill" download>take the .skill — for agents</a></li>
-      <li><a href="https://github.com/jjh111/EarthStar/tree/main/plans" target="_blank" rel="noopener">Plans <span class="res-sub">how this is being built</span></a></li>
-    </ul>
   </div>
 </section>
 </div>
@@ -301,7 +312,7 @@
       <p>earth star is live</p>
       <p class="footer-tagline">"Plant the seed. Tend the soil."</p>
       <p class="footer-equation">Gomen'nasai — entropy's algorithmic antithesis</p>
-      <a href="https://www.johnhanacek.com" class="link-btn-jewel" target="_blank" rel="noopener">By JHDesign</a>
+      <a href="https://www.johnhanacek.com" class="link-btn-jewel" target="_blank" rel="noopener">By JHDesign<span class="visually-hidden"> (opens in a new tab)</span></a>
       <div class="banner-footer">
         <picture>
           <source type="image/avif" srcset="assets/img/banner-1200.avif">

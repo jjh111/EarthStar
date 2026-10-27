@@ -457,7 +457,7 @@ const NUM = (n) => (p) => {
   const xs = beads === 1 ? [24] : beads === 2 ? [17, 31] : beads === 3 ? [12, 24, 36] : [8.6, 19.2, 29.8, 40.4];
   for (const x of beads ? xs : []) p.dot(x, y0 + by, 3.6);
 };
-for (let n = 1; n <= 6; n++) M['num-' + n] = NUM(n);
+for (let n = 1; n <= 7; n++) M['num-' + n] = NUM(n);
 
 // the key: the radicals, each on its own
 const KEY = {

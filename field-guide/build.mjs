@@ -414,6 +414,11 @@ main { max-width: 1120px; margin: 0 auto; padding: 0 28px 80px; }
 h1, h2, h3, h4 { font-weight: 500; line-height: 1.1; margin: 0; }
 p { margin: .5em 0; }
 
+/* the way back: home, and the Viewer (another Earth Star surface, same tab) */
+.crumbs { max-width: 1120px; margin: 0 auto; padding: 14px 28px 0; display: flex; justify-content: space-between; gap: 18px; font-variant: small-caps; letter-spacing: .08em; }
+.crumbs a { color: var(--sepia); text-decoration: none; }
+.crumbs a:hover, .crumbs a:focus-visible { color: var(--oxblood); text-decoration: underline; text-underline-offset: 3px; }
+
 /* title page */
 .title { min-height: 92vh; display: grid; place-content: center; text-align: center; padding: 60px 0 40px; border-bottom: 1px solid rgba(42,29,18,.25); }
 .title .rule { width: 220px; height: 1px; background: var(--ink); margin: 18px auto; opacity: .5; }
@@ -529,6 +534,7 @@ svg .thin { stroke-width: .8; opacity: .7; }
 .foot { text-align: center; color: var(--faded); font-style: italic; padding: 30px 0 0; }
 
 @media print {
+  .crumbs { display: none; }
   .title { min-height: auto; break-after: page; padding-top: 120px; }
   #systema, #returns, #orders, #references, .kingdom > h2 { break-before: page; }
   .species { break-inside: avoid; }
@@ -539,6 +545,7 @@ svg .thin { stroke-width: .8; opacity: .7; }
 @media (max-width: 760px) {
   html { font-size: 18px; }
   main { padding: 0 16px 60px; }
+  .crumbs { padding-inline: 16px; }
   .cols { grid-template-columns: 1fr; gap: 6px; }
   .plate-svg.wide { display: none; }
   .plate-svg.narrow { display: block; }
@@ -548,6 +555,7 @@ svg .thin { stroke-width: .8; opacity: .7; }
 </style>
 </head>
 <body>
+<nav class="crumbs" aria-label="Earth Star"><a href="/"><span aria-hidden="true">← </span>Earth Star</a><a href="/viewer/">The Viewer <span aria-hidden="true">↗</span></a></nav>
 <main>
   <header class="title">
     <p class="smallcaps">Earth Star · field notes</p>

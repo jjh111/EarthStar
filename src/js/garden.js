@@ -246,7 +246,7 @@ function handleBodyClick(e) {
 function isInteractive(target) {
   return !!target.closest(
     'a, button, input, textarea, select, summary, [role="button"], ' +
-    '.archive-card, .archive-panel, .archive-panel-overlay, ' +
+    '.archive-card, .archive-panel, .archive-panel-overlay, dialog, ' +
     '.emoji-footer, .footer-garden, .coherence-meter, .gomen-pic'
   );
 }

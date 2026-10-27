@@ -1,0 +1,61 @@
+{
+  "note": "Section VI, the Works: what has been made of Earth Star. build.mjs renders the shelf and the search index from this file, reads each film's size from disk and the field guide's counts from field-guide/taxonomy.json, and with --images draws every poster (a film's from its own render(t), at `still` seconds). The films are [M]: drawn in code, signed by Claude. The guide and the Blender figures are [D]: designs, not devices. `place: seed` sets a film in the seed row (Section I) instead of on the shelf.",
+  "guide": {
+    "id": "field-guide",
+    "title": "Gomenata",
+    "about": "a field guide to the adjacent life, plate by plate",
+    "prov": "every claim carries its register",
+    "href": "field-guide/",
+    "plate": "snowmakers",
+    "register": "D"
+  },
+  "films": [
+    {
+      "id": "a-seed",
+      "title": "a seed",
+      "about": "what Earth Star is: the prime directive, the five scales, the Gomens",
+      "seconds": 30,
+      "file": "film/renders/earth-star-a-seed.mp4",
+      "render": "seed",
+      "still": 21,
+      "place": "seed"
+    },
+    {
+      "id": "the-loom",
+      "title": "the loom",
+      "about": "a tapestry woven from garbage, year 0 to the dream",
+      "seconds": 48,
+      "file": "film/renders/earth-star-the-loom.mp4",
+      "render": "loom",
+      "still": 30
+    },
+    {
+      "id": "the-loom-lifted",
+      "title": "the loom, lifted",
+      "about": "the same weave in 3D: Flatland, the lift, the accretion disk",
+      "seconds": 60,
+      "file": "film/renders/earth-star-the-loom-lifted.mp4",
+      "tall": "film/renders/earth-star-the-loom-lifted-tall.mp4",
+      "render": "lifted",
+      "still": 58.5
+    },
+    {
+      "id": "gomenata",
+      "title": "Gomenata",
+      "about": "the field guide on a desk, its fifteen plates drawing themselves",
+      "seconds": 114,
+      "file": "film/renders/earth-star-gomenata.mp4",
+      "render": "guide",
+      "still": 31.2
+    }
+  ],
+  "filmProv": "drawn in code · signed by Claude",
+  "portraits": {
+    "id": "gomens-lineup",
+    "src": "blender/renders/gomens-lineup.jpg",
+    "title": "The five Gomens",
+    "caption": "rendered in Blender: a design, not a photograph",
+    "panels": ["clearers", "shorewalkers", "circle", "weavers", "gleaners"],
+    "register": "D"
+  }
+}

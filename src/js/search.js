@@ -1,8 +1,9 @@
 // One search over everything on the page. Ideas and archive documents filter
 // in place as you type, by one rule (match.js); and what was found opens under
-// the field wherever you are, grouped (Ideas, Gomens, Documents), with the
-// words it matched marked. Structure is the floor — no model, no network but
-// the documents' own text, which loads on first focus.
+// the field wherever you are, grouped (Ideas, Gomens, Documents, then the
+// Works and the field guide's species), with the words it matched marked.
+// Structure is the floor — no model, no network but the documents' own text
+// and the works' index, which load on first focus.
 // `/` focuses the box. ↓ and ↑ move through the list and Enter opens; with
 // nothing chosen, Enter opens the first idea, else the first document. Escape
 // closes the list, then clears the field. ?q= keeps the query in the address.
@@ -20,8 +21,11 @@ const groups = [];
 // about } — the words are matched in `text`, and the line under the title is
 // cut from `about` — or a function of the query that returns { id, title,
 // snippet } already matched. `open(id, q)` takes the visitor to it.
-export function registerSearchGroup(name, items, open) {
-  groups.push({ name, items, open });
+// The last argument puts the group's finds in the count line, for a kind the
+// page does not filter in a list of its own (the Gomens, the works, the
+// species): `count` is its word, [one, many], `where` the section holding them.
+export function registerSearchGroup(name, items, open, { count, where } = {}) {
+  groups.push({ name, items, open, count, where });
 }
 
 function find(q) {
@@ -45,8 +49,8 @@ function marked(text, words) {
 
 const smooth = () => (window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
 
-// The three groups on the page now; the Works and the field guide's species
-// join through registerSearchGroup when they arrive
+// The three groups on the page; the Works and the field guide's species join
+// through registerSearchGroup (works.js)
 function registerPageGroups(input) {
   // Ideas: the tiles the page is showing, which the query and the lens have
   // already filtered by the same rule, so the list and the count agree
@@ -76,7 +80,7 @@ function registerPageGroups(input) {
     card.scrollIntoView({ block: 'center', behavior: smooth() });
     const name = card.querySelector('.gomen-name');
     if (name) { name.tabIndex = -1; name.focus({ preventScroll: true }); }
-  });
+  }, { count: ['Gomen', 'Gomens'], where: '#scales' });
 
   // Documents: the catalogue and, once loaded, every document's text; opened
   // in the reader at the first place the words appear. Focus comes back to
@@ -135,16 +139,17 @@ export function initSearch() {
     list.hidden = options.length === 0;
     setActive(was ? options.findIndex((o) => o.group.name === was.group.name && o.id === was.id) : -1);
 
+    // ideas and documents as the page shows them; then whatever else was found
     const ideas = document.querySelectorAll('.idea:not([hidden])').length;
     const docs = document.querySelectorAll('#archiveGrid .archive-card').length;
-    const gomens = found.find((g) => g.name === 'Gomens')?.hits.length || 0;
-    const n = (k, one) => `${k} ${one}${k === 1 ? '' : 's'}`;
-    const line = q ? [n(ideas, 'idea'), gomens ? n(gomens, 'Gomen') : '', n(docs, 'document')].filter(Boolean).join(' · ') : '';
+    const more = found.filter((g) => g.count);
+    const n = (k, one, many = one + 's') => `${k} ${k === 1 ? one : many}`;
+    const line = q ? [n(ideas, 'idea'), ...more.map((g) => n(g.hits.length, ...g.count)), n(docs, 'document')].join(' · ') : '';
     if (status && line !== said) status.textContent = said = line;
-    const none = ideas + docs + gomens === 0;
+    const none = ideas + docs + more.length === 0;
     count.textContent = none ? 'Nothing here matches — try fewer words' : line;
     all.hidden = none;
-    all.setAttribute('href', ideas ? '#ideas' : docs ? '#archive-section' : '#scales');
+    all.setAttribute('href', ideas ? '#ideas' : docs ? '#archive-section' : more[0]?.where || '#scales');
   }
 
   // The list opens under the bar wherever you are; on the cover the bar has
@@ -257,10 +262,10 @@ export function initSearch() {
   search.addEventListener('focusout', (e) => { if (isOpen() && e.relatedTarget && !search.contains(e.relatedTarget)) closeList(); });
   document.addEventListener('click', (e) => { if (isOpen() && !search.contains(e.target)) closeList(); });
 
-  // (not while the archive reader is open: the page behind it is inert)
+  // (not while the archive reader or a film is open: the page behind is inert)
   document.addEventListener('keydown', (e) => {
     if (e.key !== '/' || e.target.closest('input, textarea, select, [contenteditable]')) return;
-    if (document.body.classList.contains('panel-open')) return;
+    if (document.body.classList.contains('panel-open') || document.querySelector('dialog[open]')) return;
     e.preventDefault();
     input.focus({ preventScroll: true });
     input.select();

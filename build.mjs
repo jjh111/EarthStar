@@ -10,12 +10,15 @@
 //   assets/img/       — responsive AVIF/WebP hero layers, logo, banner, favicon, og card
 //   assets/img/glyphs, assets/img/gomens — the Earth Star script, generated from
 //                       src/glyphs/ on every build (deterministic: seeded brush)
+//   assets/img/works/ — the Works shelf's posters (--images; see section 6)
+//   assets/data/search.json — what search finds that the page does not hold as
+//                       text: the works and the field guide's species
 //   archive/<id>.html — pre-rendered document fragments, fetched on demand
 //
 // Filenames are not content-hashed on purpose: GitHub Pages serves everything
 // with max-age=600 regardless, so hashing would add churn without cache benefit.
 
-import { readFileSync, writeFileSync, mkdirSync, rmSync, cpSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, rmSync, cpSync, readdirSync, statSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { marked } from 'marked';
 import { transform } from 'esbuild';
@@ -31,6 +34,8 @@ const p = (rel) => ROOT + rel;
 const manifest = JSON.parse(readFileSync(p('src/archive/manifest.json'), 'utf8'));
 const concepts = JSON.parse(readFileSync(p('src/concepts.json'), 'utf8'));
 const gomenLore = JSON.parse(readFileSync(p('src/gomens.json'), 'utf8'));
+const works = JSON.parse(readFileSync(p('src/works.json'), 'utf8'));
+const taxonomy = JSON.parse(readFileSync(p('field-guide/taxonomy.json'), 'utf8'));
 
 // ── The script: every glyph, figure and mark on the page, drawn by the brush ──
 // Shipped as SVG files used as CSS masks, so each layer takes the theme's ink
@@ -197,21 +202,117 @@ const gomenLi = (g) => `<li class="scale" id="scale-${esc(g.scale.toLowerCase())
   </div>
   <p class="gomen-line">${esc(g.lore)}</p>${g.link ? `
   <a class="scale-live" href="${esc(g.link.href)}">${esc(g.link.label)}</a>` : ''}
+  <a class="scale-guide" href="field-guide/#${esc(g.id)}">the plate in the field guide <span aria-hidden="true">↗</span></a>
 </li>`;
 html = html.replace('<!--BUILD:GOMENS-->', gomenLore.gomens.map(gomenLi).join('\n'));
+// The field guide's counts, read from its own taxonomy and said in words
+const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve',
+  'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+const TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+const inWords = (n) => (n < 20 ? WORDS[n] : TENS[Math.floor(n / 10)] + (n % 10 ? '-' + WORDS[n % 10] : ''));
+const guideCount = { kingdoms: taxonomy.kingdoms.length, species: taxonomy.species.length, refs: Object.keys(taxonomy.references).length };
 const scriptKey = `<div class="script-key">
   <p class="key-lede"><span class="badge" title="${esc(REG.M)}">M</span> ${esc(gomenLore.key.lede)}</p>
   <ul class="key-row" aria-label="Key to the script">${RADICALS.map((r) =>
     `<li><span class="glyph" aria-hidden="true" ${mask(`${GLYPHS}/radical-${r}.svg`)}></span><span><b>${esc(r)}</b><small>${esc(gomenLore.key.radicals[r] || '')}</small></span></li>`).join('')}</ul>
+  <p class="key-guide"><span class="badge" title="${esc(REG.D)}">D</span> <a href="field-guide/">Gomenata, a field guide to the adjacent life <span aria-hidden="true">↗</span></a>: ${inWords(guideCount.kingdoms)} kingdoms, ${inWords(guideCount.species)} species, ${inWords(guideCount.refs)} references</p>
 </div>`;
 html = html.replace('<!--BUILD:SCRIPT_KEY-->', scriptKey);
 // Section numerals, counted in beads, and the wayfinder's star
 html = html.replace(/<!--BUILD:NUM (\d)-->/g, (_, n) => `<span class="glyph num" aria-hidden="true" ${mask(`${GLYPHS}/num-${n}.svg`)}></span>`);
 html = html.replace('<!--BUILD:STAR-->', `<span class="glyph" aria-hidden="true" ${mask(`${GLYPHS}/star.svg`)}></span>`);
 
+// Section VI: the Works, from src/works.json: the field guide and the films on
+// a shelf, the Gomens in Blender beneath it, and 'a seed' beside the seed in
+// Section I. A film's card is a link to its file, which works.js opens in the
+// film dialog instead. Its length is written by hand and its size read from
+// the file, so no card states a size the file does not have. The posters are
+// drawn with --images (section 6).
+const WORKS = 'assets/img/works';
+const megabytes = (file) => `${(statSync(p(file)).size / 1e6).toFixed(1)} MB`;
+const kilobytes = (file) => `${(statSync(p(file)).size / 1e3).toFixed(1)} KB`;
+const runtime = (s) => (s < 60 ? `${s} s` : `${Math.floor(s / 60)} min${s % 60 ? ` ${s % 60} s` : ''}`);
+const badge = (r) => `<span class="badge" title="${esc(REG[r])}">${r}</span>`;
+const poster = (id, sizes) => `<picture class="work-media">
+    <source type="image/avif" srcset="${WORKS}/${id}-640.avif 640w, ${WORKS}/${id}-1280.avif 1280w" sizes="${sizes}">
+    <source type="image/webp" srcset="${WORKS}/${id}-640.webp 640w, ${WORKS}/${id}-1280.webp 1280w" sizes="${sizes}">
+    <img src="${WORKS}/${id}-640.webp" width="640" height="360" alt="" loading="lazy" decoding="async">
+  </picture>`;
+// a card on the shelf is 78vw on a phone, half the column on a tablet, a
+// quarter of it from 1001 px (≈264 px at the 1200 px column, 21vw beyond)
+const SHELF = '(max-width: 640px) 78vw, (max-width: 1000px) 48vw, (min-width: 1440px) 21vw, 280px';
+// beside the seed it is at most 520 px; under it, a poster beside the words
+const SEED_ROW = '(min-width: 1100px) 520px, (max-width: 480px) 140px, 320px';
+const filmSize = (f) => `${runtime(f.seconds)} · ${megabytes(f.file)}`;
+const filmCard = (f, tag, sizes) => `<${tag} class="work work-film" id="work-${f.id}">
+  ${poster(f.id, sizes)}
+  <div class="work-body">
+    <p class="work-kicker">${badge('M')} ${filmSize(f)}</p>
+    <h3 class="work-title"><a class="work-open" href="${f.file}" data-film="${f.id}" data-poster="${WORKS}/${f.id}-1280.webp"${f.tall ? ` data-tall="${f.tall}"` : ''}>${esc(f.title)}<span class="visually-hidden">: play the film</span></a></h3>
+    <p class="work-about">${esc(f.about)}</p>
+    <p class="work-prov">${esc(works.filmProv)}</p>
+  </div>
+</${tag}>`;
+const G = works.guide, L = works.portraits;
+const guideCard = `<li class="work work-guide" id="work-${G.id}">
+  ${poster(G.id, SHELF)}
+  <div class="work-body">
+    <p class="work-kicker">${badge(G.register)} ${guideCount.species} species · ${guideCount.refs} references</p>
+    <h3 class="work-title"><a class="work-open" href="${G.href}">${esc(G.title)} <span aria-hidden="true">↗</span></a></h3>
+    <p class="work-about">${esc(G.about)}</p>
+    <p class="work-prov">${esc(G.prov)}</p>
+  </div>
+</li>`;
+// The lineup's five panels are equal fifths; each figure opens its plate. It
+// spans the column, or from 1101 px stands beside its caption, at most 1400 px
+// (≈874 px at 1440, 1287 at 1920; see .works-portraits)
+const gomenById = Object.fromEntries(gomenLore.gomens.map((g) => [g.id, g]));
+const portraits = `<figure class="works-portraits" id="work-${L.id}">
+  <div class="portraits">
+    <img src="${WORKS}/${L.id}-960.webp" srcset="${WORKS}/${L.id}-960.webp 960w, ${WORKS}/${L.id}-1920.webp 1920w" sizes="(min-width: 1101px) min(1400px, 70vw - 120px), calc(100vw - 32px)" width="1920" height="484" alt="" loading="lazy" decoding="async">
+    <ul class="portrait-links" aria-label="${esc(L.title)} in the field guide">${L.panels.map((id) =>
+      `<li><a href="field-guide/#${id}"><span class="portrait-name">${esc(gomenById[id].name)}</span><span class="visually-hidden">: the plate in the field guide</span></a></li>`).join('')}</ul>
+  </div>
+  <figcaption>${badge(L.register)} <b>${esc(L.title)}</b>, ${esc(L.caption)}. Each opens its plate in the field guide <span aria-hidden="true">↗</span></figcaption>
+</figure>`;
+const shelfFilms = works.films.filter((f) => f.place !== 'seed');
+html = html.replace('<!--BUILD:WORKS-->', `<ul class="works-shelf">${guideCard}\n${shelfFilms.map((f) => filmCard(f, 'li', SHELF)).join('\n')}</ul>\n${portraits}`);
+html = html.replace('<!--BUILD:SEED_FILM-->', works.films.filter((f) => f.place === 'seed').map((f) => filmCard(f, 'div', SEED_ROW)).join('\n'));
+
+// Section VII: for agents, each document's .skill with its size, read from dist/
+html = html.replace('<!--BUILD:SKILLS-->', manifest.docs.filter((d) => d.agents?.skill).map((d) =>
+  `<li><a class="skill" href="${esc(d.agents.skill)}" download><span class="skill-name">${esc(d.agents.skill.split('/').pop())}</span> · <span class="skill-size">${kilobytes(d.agents.skill)}</span><span class="skill-sep"> · </span><span class="skill-holds">the ${esc(d.title)}</span></a></li>`).join('\n'));
+
 // Mock fixture for ?mock=1 and tests — never consulted by the live path
 mkdirSync(p('assets/data'), { recursive: true });
 cpSync(p('src/data/now.mock.json'), p('assets/data/now.mock.json'));
+
+// What search finds beyond the page's own text (works.js fetches it on first
+// focus): the works, and the field guide's fifteen species by name, binomial,
+// order and its mathematics, what each eats, and the work it cites (so
+// 'Kuramoto' finds the Lung-Sweepers)
+const lower1 = (s) => s.charAt(0).toLowerCase() + s.slice(1);
+const searchIndex = {
+  works: [
+    { id: G.id, title: `${G.title}, the field guide`, href: G.href,
+      text: `${G.title} field guide ${G.about} ${taxonomy.title} ${taxonomy.subtitle} plates species`,
+      about: `Field guide · ${guideCount.species} species · ${guideCount.refs} references · ${G.about}` },
+    ...works.films.map((f) => ({ id: f.id, title: f.title, film: f.id,
+      text: `${f.title} film ${f.about} ${works.filmProv}`, about: `Film · ${filmSize(f)} · ${f.about}` })),
+    { id: L.id, title: `${L.title}, in Blender`, href: `#work-${L.id}`,
+      text: `${L.title} Blender portraits ${L.panels.map((id) => gomenById[id].name).join(' ')}`,
+      about: `${L.panels.map((id) => gomenById[id].name).join(', ')}: ${L.caption}` },
+  ],
+  species: taxonomy.species.map((s) => {
+    const o = taxonomy.orders.find((x) => x.id === s.order);
+    const order = o.name.charAt(0) + o.name.slice(1).toLowerCase();
+    const cited = [...new Set([...(o.refs || []), ...(s.how || []).flatMap((h) => h.refs || [])])].map((k) => taxonomy.references[k]);
+    return { id: s.id, title: s.common, href: `field-guide/#${s.id}`,
+      text: [s.common, s.binomial, order, o.math, s.waste_tag, s.eats, ...cited].join(' '),
+      about: `${s.binomial} · ${order}, ${lower1(o.math)} · ${s.eats}` };
+  }),
+};
+writeFileSync(p('assets/data/search.json'), JSON.stringify(searchIndex));
 
 // Conservative HTML minify: strip comments and leading indentation only —
 // never touches intra-line whitespace, so inline elements are safe.
@@ -292,6 +393,35 @@ if (process.argv.includes('--images')) {
     await sharp(p('viewer/og.jpg')).resize({ width: w }).jpeg({ quality: 84, mozjpeg: true })
       .toFile(`${IMG}/viewer-og-${w}.jpg`);
     console.log(`viewer-og-${w} jpg`);
+  }
+
+  // The Works shelf (src/works.json). A film's poster is one frame of the film,
+  // drawn by its own render(t) through film/render.mjs --stills, which needs
+  // Chromium (CHROMIUM); the still is a step on the way and is not kept. The
+  // field guide's is its frontispiece plate, whole, on the guide's paper. All
+  // 16:9 at 640 and 1280 px, AVIF and WebP; the Blender lineup at 960 and
+  // 1920 px, WebP.
+  const WORKS_IMG = p(WORKS);
+  rmSync(WORKS_IMG, { recursive: true, force: true });
+  mkdirSync(WORKS_IMG, { recursive: true });
+  const writePoster = async (img, id, fit = 'cover') => {
+    for (const w of [640, 1280]) {
+      const r = img.clone().resize({ width: w, height: Math.round(w * 9 / 16), fit, background: '#efe4c8' });
+      await r.clone().avif({ quality: 55, effort: 6 }).toFile(`${WORKS_IMG}/${id}-${w}.avif`);
+      await r.clone().webp({ quality: 80 }).toFile(`${WORKS_IMG}/${id}-${w}.webp`);
+      console.log(`works/${id}-${w} avif+webp`);
+    }
+  };
+  for (const f of works.films) {
+    execFileSync(process.execPath, [p('film/render.mjs'), f.render, '--stills', String(f.still)], { stdio: 'inherit' });
+    const still = p(`film/renders/${f.render}-${String(f.still).replace('.', '_')}.jpg`);
+    await writePoster(sharp(still), f.id);
+    rmSync(still);
+  }
+  await writePoster(sharp(p(`field-guide/plates/${works.guide.plate}.webp`)).flatten({ background: '#efe4c8' }), works.guide.id, 'contain');
+  for (const w of [960, 1920]) {
+    await sharp(p(works.portraits.src)).resize({ width: w }).webp({ quality: 80 }).toFile(`${WORKS_IMG}/${works.portraits.id}-${w}.webp`);
+    console.log(`works/${works.portraits.id}-${w} webp`);
   }
 
   console.log('images done');

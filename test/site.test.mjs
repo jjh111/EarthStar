@@ -220,6 +220,22 @@ async function newPage(opts = {}) {
 }
 
 {
+  // A landscape phone keeps the seven sections in the bar's one row, clear of
+  // the Viewer door
+  const { ctx, page } = await newPage({ viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true });
+  await page.goto(BASE + '/', { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.scrollTo(0, innerHeight * 1.5));
+  await page.waitForTimeout(300);
+  const row = await page.evaluate(() => {
+    const links = [...document.querySelectorAll('.wf-links a:not(.wf-top)')].map((a) => a.getBoundingClientRect());
+    return { h: document.querySelector('.wayfinder').getBoundingClientRect().height, n: links.filter((r) => r.width > 0).length,
+      tops: new Set(links.map((r) => Math.round(r.top))).size, end: Math.max(...links.map((r) => r.right)), door: document.querySelector('.wf-viewer').getBoundingClientRect().left };
+  });
+  check('landscape phone: seven sections in one row', row.h <= 44 && row.n === 7 && row.tops === 1 && row.end <= row.door, JSON.stringify(row));
+  await ctx.close();
+}
+
+{
   // Copying the seed keeps the phrase's lines: they are <br>s in the page,
   // which textContent alone would run together
   const { ctx, page } = await newPage({ permissions: ['clipboard-read', 'clipboard-write'] });
@@ -303,6 +319,116 @@ async function newPage(opts = {}) {
   await page.goto(BASE + '/?lens=economics', { waitUntil: 'networkidle' });
   check('?lens=economics opens with that lens pressed', await page.locator('.chip[data-lens="economics"]').getAttribute('aria-pressed') === 'true'
     && await shown() < 16);
+  await ctx.close();
+}
+
+{
+  // The whole body of work can be reached: each Gomen opens its plate in the
+  // field guide, and the guide leads back; the sitemap lists all three
+  // surfaces. The Works carry the honesty grammar: a register on every card,
+  // and a length or a size on every one.
+  const { ctx, page } = await newPage();
+  await page.goto(BASE + '/', { waitUntil: 'networkidle' });
+  const guide = await (await page.request.get(BASE + '/field-guide/')).text();
+  const ids = new Set([...guide.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
+  const plates = await page.$$eval('.scale-guide', (as) => as.map((a) => a.getAttribute('href')));
+  const lost = plates.filter((h) => !h.startsWith('field-guide/#') || !ids.has(h.split('#')[1]));
+  check('every Gomen opens its plate in the field guide', plates.length === 5 && lost.length === 0, lost.join(', ') || plates.join(' '));
+  check('the field guide leads back to the splash and the Viewer', /<a href="\/">/.test(guide) && /<a href="\/viewer\/">/.test(guide));
+  const sitemap = await (await page.request.get(BASE + '/sitemap.xml')).text();
+  check('the sitemap lists the splash, the Viewer and the field guide', (sitemap.match(/<loc>/g) || []).length === 3 && sitemap.includes('/field-guide/'));
+
+  const cards = await page.$$eval('.work, .works-portraits', (els) => els.map((el) => ({
+    id: el.id, badge: el.querySelector('.badge')?.textContent, words: el.querySelector('.work-kicker, figcaption').textContent,
+  })));
+  const ungraded = cards.filter((c) => (c.id.startsWith('work-the-loom') || c.id === 'work-a-seed' || c.id === 'work-gomenata' ? c.badge !== 'M' : c.badge !== 'D'));
+  const unmeasured = cards.filter((c) => c.id !== 'work-gomens-lineup' && !/\d+(\.\d)? MB|\d+ s\b|\d+ min|\d+ species/.test(c.words));
+  check('every work carries its register, and a length or a size', cards.length === 6 && !ungraded.length && !unmeasured.length,
+    [...ungraded, ...unmeasured].map((c) => c.id).join(', ') || cards.map((c) => `${c.id} ${c.badge}`).join(' · '));
+  // every poster size the page offers, not only those this viewport fetches
+  const posters = await page.evaluate(() => [...new Set([...document.querySelectorAll('.work-media source, .work-media img, .portraits img')]
+    .flatMap((el) => (el.getAttribute('srcset') || el.getAttribute('src') || '').split(',').map((c) => c.trim().split(/\s+/)[0]).filter(Boolean)))]);
+  const absent = [];
+  for (const u of posters) if (!(await page.request.head(new URL(u, BASE + '/').href)).ok()) absent.push(u);
+  check('every poster of the Works resolves', posters.length >= 22 && absent.length === 0, absent.join(', ') || `${posters.length} files`);
+
+  // Onward leads out once: the places elsewhere, which say they open a new
+  // tab, and the skills, each with its size; the Viewer is not repeated there
+  const onward = await page.evaluate(() => {
+    const sec = document.getElementById('begin');
+    return {
+      viewer: sec.querySelectorAll('a[href^="/viewer/"]').length,
+      tabs: [...sec.querySelectorAll('a[target="_blank"]')].every((a) => a.textContent.includes('(opens in a new tab)')),
+      skills: [...sec.querySelectorAll('a[href$=".skill"]')].map((a) => a.textContent),
+      loose: sec.querySelectorAll('a:not(.onward-card):not(.skill)').length,
+    };
+  });
+  check('Onward: every .skill shows its size, and no Viewer card', onward.viewer === 0 && onward.skills.length === 3
+    && onward.skills.every((t) => /\.skill · \d+(\.\d)? KB · \S/.test(t)), onward.skills.join(' | '));
+  check('Onward: new tabs say so, and every link is a card', onward.tabs && onward.loose === 0);
+  await ctx.close();
+}
+
+{
+  // A film plays in its own dialog, opened by a click or by Enter, and never
+  // by itself: nothing of the film is fetched until play. It is one history
+  // entry, so Escape and Back both close it, and focus returns to the card.
+  const { ctx, page } = await newPage();
+  const mp4 = [];
+  page.on('request', (r) => { if (/\.mp4(\?|$)/.test(r.url())) mp4.push(r.url()); });
+  await page.goto(BASE + '/#works', { waitUntil: 'networkidle' });
+  await page.locator('#work-the-loom').click({ position: { x: 60, y: 40 } });
+  await page.waitForSelector('dialog.film-dialog[open]', { timeout: 3000 }).catch(() => {});
+  const video = await page.evaluate(() => {
+    const v = document.querySelector('dialog.film-dialog[open] video');
+    return v && { preload: v.getAttribute('preload'), autoplay: v.autoplay || v.hasAttribute('autoplay'), paused: v.paused,
+      sources: [...v.querySelectorAll('source')].map((s) => s.getAttribute('src')), hash: location.hash,
+      title: document.getElementById('filmTitle').textContent };
+  });
+  await page.waitForTimeout(800);
+  check('a click on a film card opens it in the film dialog', video?.title === 'the loom' && video.hash === '#film/the-loom', JSON.stringify(video));
+  check('the film waits: preload=none, no autoplay, no mp4 fetched before play',
+    video?.preload === 'none' && !video.autoplay && video.paused && mp4.length === 0, `${mp4.length} mp4 request(s)`);
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('dialog.film-dialog[open]'), null, { timeout: 2000 }).catch(() => {});
+  const back = await page.evaluate(() => ({ open: !!document.querySelector('dialog[open]'), focus: document.activeElement?.dataset.film, hash: location.hash }));
+  check('Escape closes the film and focus returns to its card', !back.open && back.focus === 'the-loom' && back.hash === '#works', JSON.stringify(back));
+
+  await page.locator('a[data-film="the-loom-lifted"]').focus();
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('dialog.film-dialog[open]', { timeout: 3000 }).catch(() => {});
+  const tall = await page.$$eval('dialog.film-dialog video source', (ss) => ss.map((s) => `${s.getAttribute('media') || ''} ${s.getAttribute('src')}`.trim()));
+  check('Enter opens a film; the lifted film offers its tall cut to portrait screens', tall.length === 2
+    && tall[0] === '(orientation: portrait) film/renders/earth-star-the-loom-lifted-tall.mp4', tall.join(' | '));
+  await page.goBack();
+  await page.waitForFunction(() => !document.querySelector('dialog.film-dialog[open]'), null, { timeout: 2000 }).catch(() => {});
+  check('Back closes the film', await page.locator('dialog.film-dialog[open]').count() === 0 && page.url().endsWith('#works'), page.url());
+  check('still no mp4 fetched', mp4.length === 0, mp4.join(', '));
+  await ctx.close();
+}
+
+{
+  // Search reaches the works and the field guide's species, fetched the first
+  // time search is used: a word from a species' mathematics finds it, and a
+  // film's name finds the films
+  const { ctx, page } = await newPage({ viewport: { width: 1280, height: 800 } });
+  await ctx.route((u) => !/^(localhost|127\.0\.0\.1)$/.test(u.hostname), (r) => r.abort('internetdisconnected'));
+  await page.goto(BASE + '/', { waitUntil: 'networkidle' });
+  const listed = async (q) => {
+    await page.locator('#siteSearch').fill(q);
+    await page.waitForTimeout(600);
+    return page.evaluate(() => Object.fromEntries([...document.querySelectorAll('#searchResults [role="group"]')]
+      .map((g) => [g.querySelector('.sr-head').firstChild.textContent.trim(), [...g.querySelectorAll('.sr-title')].map((o) => o.textContent)])));
+  };
+  const kura = await listed('Kuramoto');
+  check("'Kuramoto' finds the Lung-Sweepers in the field guide", kura['Field guide']?.includes('The Lung-Sweepers'), JSON.stringify(kura));
+  const loom = await listed('loom');
+  check("'loom' finds the films", loom.Works?.includes('the loom') && loom.Works?.includes('the loom, lifted'), JSON.stringify(loom));
+  check("'loom' is counted", /2 works/.test(await page.locator('#search-status').textContent()), await page.locator('#search-status').textContent());
+  await page.locator('#siteSearch').press('ArrowDown');
+  await page.locator('#siteSearch').press('Enter');
+  await page.waitForSelector('dialog.film-dialog[open]', { timeout: 3000 }).catch(() => {});
+  check('a film found by search opens in the film dialog', await page.locator('#filmTitle').textContent().catch(() => '') === 'the loom');
   await ctx.close();
 }
 
