@@ -86,3 +86,21 @@ describe('writing an address', () => {
     });
   });
 });
+
+describe('the help', () => {
+  it('has an address of its own, so Back closes it and a link opens it', () => {
+    expect(parseHash('#help')).toEqual({ help: true, layers: {} });
+    expect(formatHash({ ...plain, help: true })).toBe('#help');
+  });
+
+  it('opens over whatever else the address names', () => {
+    expect(formatHash({ ...plain, view: 'polar', tab: 'sun', help: true })).toBe('#v=polar&t=sun&help');
+    expect(parseHash('#v=polar&t=sun&help')).toEqual({
+      view: 'polar', tab: 'sun', help: true, layers: {},
+    });
+  });
+
+  it('leaves the plain page plain when it is closed', () => {
+    expect(formatHash({ ...plain, help: false })).toBe('');
+  });
+});

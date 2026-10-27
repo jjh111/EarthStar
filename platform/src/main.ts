@@ -26,6 +26,8 @@ import { errorReason } from './data/state.js';
 import { TIER_WORD, whenUTC } from './hud/format.js';
 import { SubjectCard } from './hud/subject-card.js';
 import { bodySubjectId, subject } from './hud/subjects.js';
+import { Help } from './hud/help.js';
+import { SceneNames } from './hud/scene-names.js';
 import {
   DEFAULT_LAYERS, formatHash, parseHash, type LayerId, type Route,
 } from './hud/route.js';
@@ -190,10 +192,12 @@ function syncStageNote(): void {
   const retry = (gap: NonNullable<ImageryGap>): string => (gap === 'no-data'
     ? '' : ` · retrying ${whenUTC(gap.retryAt)}`);
   if (disk) {
+    // The placeholder's tier is the registry's, as the help's key shows it.
+    const tier = subject('layer.sun-placeholder')?.tier ?? 'M';
     const badge = document.createElement('span');
-    badge.className = 'badge badge-m';
-    badge.title = TIER_WORD.M.replace(/^./, (c) => c.toUpperCase());
-    badge.textContent = 'M';
+    badge.className = `badge badge-${tier.toLowerCase()}`;
+    badge.title = TIER_WORD[tier].replace(/^./, (c) => c.toUpperCase());
+    badge.textContent = tier;
     stageNote.replaceChildren(
       `${missing('Solar imagery', disk)} — the Sun is drawn as the unobserved placeholder `,
       badge, retry(disk));
@@ -363,6 +367,7 @@ const btnAurora = btn('aurora-toggle');
 const btnWind = btn('wind-toggle');
 const btnCme = btn('cme-toggle');
 const btnCoast = btn('coast-toggle');
+const btnNames = btn('names-toggle');
 
 /**
  * The view buttons are generated from the same list the camera reads, so a
@@ -559,6 +564,90 @@ function setCoast(on: boolean): void {
 }
 btnCoast.addEventListener('click', () => setCoast(!viewer.coastOverlayOn));
 
+/* ---------------- names in the scene ---------------- */
+
+/**
+ * The Names layer. On by default from 861 px, where the stage has room for
+ * them beside what they name; off on a phone, whose band is too small to name
+ * six things without covering them. Like the rail and Motion it is the
+ * reader's setting for this device, remembered here and not in the address:
+ * a shared link says what to look at, not how this screen should letter it.
+ */
+const NAMES_KEY = 'viewer.names';
+const names = new SceneNames(document.getElementById('scene-names') as HTMLElement, canvas);
+
+function setNames(on: boolean, remember = true): void {
+  names.setOn(on);
+  btnNames.setAttribute('aria-pressed', String(on));
+  if (!remember) return;
+  try { localStorage.setItem(NAMES_KEY, on ? 'on' : 'off'); } catch {
+    // Private browsing: the choice applies for the session only.
+  }
+  announce(on ? 'Names shown in the scene.' : 'Names hidden.');
+}
+
+(function initNames(): void {
+  let saved: string | null = null;
+  try { saved = localStorage.getItem(NAMES_KEY); } catch { /* fall through */ }
+  setNames(saved !== null ? saved === 'on' : window.matchMedia('(min-width: 861px)').matches, false);
+})();
+
+btnNames.addEventListener('click', () => setNames(!names.shown));
+// After each frame, so a name follows what it names through a camera move.
+viewer.onFrame = () => { if (names.shown) names.update(viewer.sceneNames()); };
+
+/* ---------------- the help ---------------- */
+
+/**
+ * `?`, the two buttons and the chip all open the help as a step of its own,
+ * so Back closes it. Closed by its own means — Escape, its ×, a click outside
+ * — it takes that step back again, so the next Back is not a dead one; opened
+ * from a link, there is no step to take back, and the address is rewritten
+ * without it instead.
+ */
+const help = new Help({ onClosed: helpClosed });
+let helpPushed = false;
+
+function openHelp(): void {
+  dismissChip();
+  if (help.isOpen) return;
+  help.open();
+  helpPushed = true;
+  writeHash(true);
+}
+
+function helpClosed(): void {
+  if (!parseHash(location.hash)?.help) return;
+  if (helpPushed && ownEntry()) { helpPushed = false; history.back(); }
+  else writeHash(false);
+}
+
+for (const id of ['help-open', 'help-open-foot']) btn(id).addEventListener('click', openHelp);
+
+/**
+ * The chip, once: on a first visit only, and never as a dialog over the page.
+ * Recorded as soon as it is shown, so a reload does not show it again; it
+ * stays until it is put away or the help is opened.
+ */
+const CHIP_KEY = 'viewer.helpChip';
+const chipEl = document.getElementById('help-chip') as HTMLElement;
+function dismissChip(): void { chipEl.hidden = true; }
+(function initChip(): void {
+  let seen = false;
+  try {
+    seen = localStorage.getItem(CHIP_KEY) !== null;
+    if (!seen) localStorage.setItem(CHIP_KEY, 'shown');
+  } catch { /* no storage: shown on this visit, as on a first */ }
+  if (seen) return;
+  // A phone has no ? key to press, only the button.
+  if (window.matchMedia('(hover: none)').matches) {
+    (document.getElementById('help-chip-verb') as HTMLElement).textContent = 'Tap';
+  }
+  chipEl.hidden = false;
+})();
+btn('help-chip-open').addEventListener('click', openHelp);
+btn('help-chip-close').addEventListener('click', dismissChip);
+
 /* ---------------- the address ---------------- */
 
 /**
@@ -597,6 +686,7 @@ function writeHash(push: boolean): void {
   if (routing) return;
   const hash = formatHash({
     view, scale: viewer.scaleMode, tab: hud.activeTab, detail: hud.activeDetail, layers: layersNow(),
+    help: help.isOpen,
   });
   if (hash === location.hash && ownEntry()) return;
   const url = `${location.pathname}${location.search}${hash}`;
@@ -615,6 +705,8 @@ function applyRoute(r: Route, scene: boolean, immediate: boolean): boolean {
   const was = routing;
   routing = true;
   try {
+    // The help opens over whatever else the address names, and Back closes it.
+    if (r.help) { help.open(); dismissChip(); } else help.close(true);
     if (scene) {
       const scale = r.scale ?? 'globe';
       const v = r.view ?? 'deck';
@@ -650,6 +742,7 @@ function applyRoute(r: Route, scene: boolean, immediate: boolean): boolean {
 function onAddress(): void {
   const r = parseHash(location.hash);
   if (!r) return;
+  if (!r.help) helpPushed = false;
   const moved = applyRoute(r, !ownEntry(), false);
   writeHash(false);
   if (moved) hud.scrollToPanel();
@@ -661,6 +754,7 @@ btnMotion.addEventListener('click', () => motion.setOverride(!motion.reduced));
 
 motion.subscribe((reduced) => {
   viewer.setReducedMotion(reduced);
+  names.setStill(reduced);
   btnMotion.setAttribute('aria-pressed', String(!reduced));
   syncNarration();
 });
@@ -676,6 +770,7 @@ installKeyboard({
   toggleRail: () => setRail(!railOpenNow()),
   refresh: () => { announce('Refreshing.'); void store.refresh(); },
   focusReport: () => hud.selectTab('report'),
+  help: openHelp,
 });
 
 // The header notice opens every notice, verbatim. Its href is the Notices

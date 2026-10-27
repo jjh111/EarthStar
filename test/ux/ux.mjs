@@ -69,7 +69,9 @@ export const BREAKPOINTS = [
 // whose content stops half-way down is not content all the way down.
 export const LAYERS = {
   viewer: [
-    ['#scene', 1],
+    // The names are the scene's own lettering, so they share its layer: a
+    // name is not furniture over the stage, and the stage it stands on is open.
+    ['#scene, .scene-name.is-shown', 1],
     ['header.top', 2], ['aside.margin', 2], ['.rail', 2], ['.subject-card', 2],
     ['#instruments', 1], ['.margin-body', 1, { toLastChild: true }], ['#clock', 1], ['.headline-alert', 1], ['#ticker', 1],
     ['.scale-note, .stage-note', 1], ['.rail-outage', 1], ['.as-of', 1],
@@ -78,6 +80,8 @@ export const LAYERS = {
     // #perf is chrome inside chrome: listed so that classify's regions say
     // whether it was up at the moment of measuring (see perfNotice).
     ['.margin-actions', 2], ['#status', 2], ['#perf', 2],
+    // The way in to the help, and the first visit's hint to it.
+    ['.help-toggle', 2], ['.help-chip', 2],
   ],
   splash: [
     ['.hero', 3],
@@ -195,7 +199,7 @@ function firstScreen() {
   out.headerH = Math.round(header.getBoundingClientRect().height);
   // Rows by the centres of the header's parts: two parts within 12 px of each
   // other share a row, and any real second row sits a control's height lower.
-  const centres = [...header.querySelectorAll('.brand-block, .headline-alert, .controls-toggle, .ctl-set')]
+  const centres = [...header.querySelectorAll('.brand-block, .headline-alert, .controls-toggle, .ctl-set, .help-toggle')]
     .map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0)
     .map((r) => r.top + r.height / 2).sort((a, b) => a - b);
   out.headerRows = centres.filter((c, i) => i === 0 || c - centres[i - 1] > 12).length;
@@ -334,7 +338,7 @@ export async function measure(browser, surface, bp, out, state = STATE) {
       fold = summarise(m.counts);
       if (surface === 'viewer') {
         ({ scaleNote, ...first } = await page.evaluate(firstScreen));
-        const scene = LAYERS.viewer.findIndex(([sel]) => sel === '#scene');
+        const scene = LAYERS.viewer.findIndex(([sel]) => sel.startsWith('#scene'));
         const earth = discCover(m.regions, first.earth, bp.width, bp.height, scene);
         const sun = discCover(m.regions, first.sun, bp.width, bp.height, scene);
         // The render-scale notice comes and goes with the frame rate, and under

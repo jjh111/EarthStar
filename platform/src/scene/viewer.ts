@@ -12,7 +12,7 @@
 import {
   AmbientLight, Color, PointLight, Scene, Vector3, WebGLRenderer,
 } from 'three';
-import { Earth } from './earth.js';
+import { ATMOSPHERE_RADIUS, Earth } from './earth.js';
 import { Sun } from './sun.js';
 import {
   calibrateCoronagraph, calibrateDiskPlane, type SunPlaneCalibration,
@@ -33,7 +33,7 @@ import { ActiveRegions } from './active-regions.js';
 import { CmeCones } from './cmes.js';
 import type { SpacecraftPos } from '../data/ephemerides.js';
 import type { QuakeFeature } from '../data/earth-quakes.js';
-import { SpacecraftMarkers } from './spacecraft.js';
+import { MARKER_SIZE_PER_DISTANCE, SpacecraftMarkers } from './spacecraft.js';
 import { calibrateDisk } from './disk-calibration.js';
 import {
   isClick, pickAt, pickLayerAt, type Candidate, type LayerPick, type Pick,
@@ -41,7 +41,7 @@ import {
 import { Pickables } from './pickables.js';
 import { activeCmes, type Cme } from '../data/cme.js';
 import type { ActiveRegion } from '../data/swpc.js';
-import { magnetopause } from '../models/shue1998.js';
+import { magnetopause, shueRadius, type Magnetopause } from '../models/shue1998.js';
 import { gastDegrees } from '../models/ephemeris.js';
 import type { PlanetName } from '../models/ephemeris.js';
 import type { AuroraNow, Now } from '../contract/types.js';
@@ -200,6 +200,43 @@ export interface FrameStats {
   megapixels: number;
 }
 
+/**
+ * Something in the scene on screen: its centre in CSS px from the viewport's
+ * top-left, its drawn radius in px (0 for a point), and its distance from the
+ * camera, so whatever stands nearer can be found.
+ */
+export interface ScreenSpot { x: number; y: number; r: number; depth: number }
+
+/**
+ * A thing the scene names, and the places on screen its name could go, in the
+ * order they are wanted: one for a body or a marker, a spread over the
+ * surface for a boundary. A body's name is set beside its disc, below it
+ * first; anything else's to its right.
+ */
+export interface SceneName {
+  key: string;
+  label: string;
+  spots: ScreenSpot[];
+  body?: boolean;
+  /** Named only when there is room once the others have theirs. */
+  minor?: boolean;
+}
+
+/**
+ * Something drawn that no name may cover: every body's disc and every
+ * marker. A body's disc also hides whatever stands behind it.
+ */
+export interface SceneDisc extends ScreenSpot { key: string; occludes: boolean }
+
+/**
+ * Where a boundary's name may go: the nose first, then further round the
+ * flank, toward the frame's top at each step. Degrees from the Sun line. Both
+ * surfaces are drawn out to 100°, but past 75° a name hangs in open sky over
+ * ribs too faint to see it belongs to.
+ */
+const NAME_THETAS_DEG = [0, 25, 50, 75];
+const NAME_PHI_STEPS = 12;
+
 export class Viewer {
   readonly scene = new Scene();
   readonly rig: CameraRig;
@@ -238,6 +275,10 @@ export class Viewer {
   onLayerSelect: ((p: LayerPick | null) => void) | null = null;
   onHover: ((p: Pick | null) => void) | null = null;
   onSelect: ((p: Pick) => void) | null = null;
+  /** After each frame is drawn, for whatever follows the scene on screen. */
+  onFrame: (() => void) | null = null;
+  /** The Shue solution and Sun direction the boundaries were last drawn from; null while they are not. */
+  private shieldDrawn: { mp: Magnetopause; sunDir: Vector3; earthRadius: number } | null = null;
   private shieldVisible = true;
   private windVisible = true;
   private sunDirEarthFixed = new Vector3(1, 0, 0);
@@ -586,18 +627,101 @@ export class Viewer {
    * so it can open on the far side of a click from the planet.
    */
   earthScreen(): { x: number; y: number; r: number } | null {
+    const s = this.onScreen(this.earth.group.position, radiusToScene('Earth', this.mode),
+      this.canvas.getBoundingClientRect());
+    return s && { x: s.x, y: s.y, r: s.r };
+  }
+
+  /**
+   * A point and a radius in the scene, on screen, or null while it is behind
+   * the camera. Earth's place for the card and every name in the scene come
+   * through here, so a name stands where the card thinks its subject is.
+   */
+  private onScreen(pos: Vector3, radius: number, cv: DOMRect): ScreenSpot | null {
     const cam = this.rig.camera;
-    const pos = this.earth.group.position;
     const p = pos.clone().project(cam);
     if (p.z > 1) return null;
-    const cv = this.canvas.getBoundingClientRect();
-    const radius = radiusToScene('Earth', this.mode);
-    const ang = Math.asin(Math.min(1, radius / pos.distanceTo(cam.position)));
+    const depth = pos.distanceTo(cam.position);
+    const ang = Math.asin(Math.min(1, radius / depth));
     return {
       x: cv.left + ((p.x + 1) / 2) * cv.width,
       y: cv.top + ((1 - p.y) / 2) * cv.height,
       r: (Math.tan(ang) / Math.tan((cam.fov * Math.PI) / 360)) * (cv.height / 2),
+      depth,
     };
+  }
+
+  /**
+   * What the scene names, where it stands on screen this frame: Earth, the Sun
+   * and the Moon at the places picking found them, the L1 monitors at their
+   * markers, and the two boundaries as spots over the surfaces actually drawn.
+   * Nothing is named that is not drawn: with no measured wind there are no
+   * boundaries, and with the field off there are no monitors either.
+   */
+  sceneNames(): { names: SceneName[]; discs: SceneDisc[] } {
+    const cv = this.canvas.getBoundingClientRect();
+    const out: SceneName[] = [];
+    const discs: SceneDisc[] = [];
+    const spot = (pos: Vector3, r: number) => this.onScreen(pos, r, cv);
+    const body = (key: string, label: string | null, pos: Vector3, r: number) => {
+      const s = spot(pos, r);
+      if (!s) return;
+      discs.push({ key, occludes: true, ...s });
+      if (label) out.push({ key, label, spots: [s], body: true });
+    };
+    // Earth's disc for the names runs to its glowing rim, which is drawn
+    // past the surface: a name at the bare limb sat in the glow.
+    body('earth', 'Earth', this.earth.group.position, radiusToScene('Earth', this.mode) * ATMOSPHERE_RADIUS);
+    for (const c of this.candidates) {
+      // The planets are not named, but no name may cover one either.
+      if (c.kind === 'sun' || c.kind === 'moon') body(c.kind, c.label, c.position, c.radius);
+      else if (c.kind === 'planet' && c.id !== 'Earth') body(c.id, null, c.position, c.radius);
+    }
+    if (this.spacecraft.group.visible) {
+      const active = new Set(this.spacecraftPos.filter((p) => p.active).map((p) => p.source));
+      const cam = this.rig.camera.position;
+      for (const c of this.candidates) {
+        if (c.kind !== 'spacecraft') continue;
+        // The marker's own size on screen, so its name clears the diamond.
+        const s = spot(c.position, c.position.distanceTo(cam) * MARKER_SIZE_PER_DISTANCE);
+        if (!s) continue;
+        const key = `l1-${c.id}`;
+        discs.push({ key, occludes: false, ...s });
+        // The one feeding the panel is L1's name; the others stand beside it.
+        out.push(active.has(c.id)
+          ? { key, label: `L1 · ${c.id}`, spots: [s] }
+          : { key, label: c.id, spots: [s], minor: true });
+      }
+    }
+    const shield = this.shieldDrawn;
+    if (shield && this.shieldVisible) {
+      const surface = (key: string, label: string, r0: number, alpha: number) => {
+        const spots: ScreenSpot[] = [];
+        const axis = shield.sunDir.clone().normalize();
+        const up = Math.abs(axis.y) > 0.9 ? new Vector3(1, 0, 0) : new Vector3(0, 1, 0);
+        const e1 = new Vector3().crossVectors(axis, up).normalize();
+        const e2 = new Vector3().crossVectors(axis, e1).normalize();
+        for (const deg of NAME_THETAS_DEG) {
+          const th = (deg * Math.PI) / 180;
+          const r = shueRadius(r0, alpha, th) * shield.earthRadius;
+          const ring: ScreenSpot[] = [];
+          for (let j = 0; j < (deg === 0 ? 1 : NAME_PHI_STEPS); j++) {
+            const ph = (j / NAME_PHI_STEPS) * Math.PI * 2;
+            const dir = axis.clone().multiplyScalar(Math.cos(th))
+              .addScaledVector(e1, Math.sin(th) * Math.cos(ph))
+              .addScaledVector(e2, Math.sin(th) * Math.sin(ph));
+            const s = spot(this.earth.group.position.clone().addScaledVector(dir, r), 0);
+            if (s) ring.push(s);
+          }
+          spots.push(...ring.sort((a, b) => a.y - b.y));
+        }
+        out.push({ key, label, spots });
+      };
+      surface('magnetopause', 'Magnetopause', shield.mp.r0Re, shield.mp.alpha);
+      // Drawn with the Shue law scaled to its own standoff (magnetosphere.ts).
+      surface('bow-shock', 'Bow shock', shield.mp.bowShockRe, shield.mp.alpha * 0.92);
+    }
+    return { names: out, discs };
   }
 
   private frame = (): void => {
@@ -691,6 +815,7 @@ export class Viewer {
       this.magnetosphere.setScale(earthRadius);
       this.magnetosphere.update(mp, sunDir);
     }
+    this.shieldDrawn = this.shieldVisible && mp ? { mp, sunDir, earthRadius } : null;
 
     // The monitors sit in the same Earth-centred frame as the shield, and are
     // shown with it: they are the instruments the shield's numbers come from.
@@ -750,6 +875,7 @@ export class Viewer {
     this.rig.update();
     const updateDone = performance.now();
     this.renderer.render(this.scene, this.rig.camera);
+    this.onFrame?.();
 
     push(this.updateTimes, updateDone - t);
     push(this.cpuTimes, performance.now() - t);

@@ -22,6 +22,12 @@ import { l1DistanceToScene, type ScaleMode } from './scales.js';
 const ACTIVE = new Color(0.62, 0.94, 1.0);
 const INACTIVE = new Color(0.52, 0.56, 0.64);
 
+/**
+ * A marker's size as a fraction of its distance from the camera, so it keeps
+ * one size on screen (see `update`). The names in the scene keep clear of it.
+ */
+export const MARKER_SIZE_PER_DISTANCE = 0.011;
+
 /** Reused so the per-frame marker sizing allocates nothing. */
 const SCRATCH = new Vector3();
 
@@ -150,7 +156,7 @@ export class SpacecraftMarkers {
       // every frame, because it follows the camera rather than the data.
       const world = c.group.getWorldPosition(SCRATCH);
       const size = cameraPos
-        ? cameraPos.distanceTo(world) * 0.011
+        ? cameraPos.distanceTo(world) * MARKER_SIZE_PER_DISTANCE
         : this.scale * 0.26;
       c.marker.scale.setScalar(size);
     }

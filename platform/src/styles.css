@@ -239,6 +239,13 @@ header.top {
 :where(button, a, summary, [tabindex]):focus-visible {
   outline: 2px solid var(--accent); outline-offset: 1px;
 }
+/* The help, at the row's utility end: a square button with the one key that
+   opens it from anywhere. The foot's copy stands in where the row is full. */
+.help-toggle {
+  flex: none; min-width: 1.7rem; border-radius: 4px;
+  font-weight: 500; text-align: center;
+}
+.help-foot { display: none; min-width: 1.6rem; }
 
 /* ---------- stage: instruments over the scene ---------- */
 .stage {
@@ -500,6 +507,37 @@ header.top {
 }
 .scale-flip:hover { color: var(--ink); }
 .scale-flip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The stage takes focus so the scene's keys can be put in scope; its ring is
+   drawn inside it, where the header and the margin cannot hide it. */
+.stage:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+
+/* The first visit's one hint: the help is its button, and the x puts it away
+   for good. It stands at the foot of the panel's text, in the body's own grid
+   cell, so it moves nothing; it was first a note on the stage, and there it
+   pushed the other notes over Earth on a phone. On the phone page it rides
+   the screen's foot while the panel is in view. */
+.help-chip {
+  grid-area: body; align-self: end; justify-self: end; z-index: 3;
+  margin: 0 0.9rem 0.5rem 0;
+  display: flex; align-items: center; gap: 0.15rem; padding: 0 0 0 0.5rem;
+  font: max(10px, 0.62rem)/1.35 var(--sans); color: var(--ink);
+  background: rgba(9, 14, 24, 0.96);
+  border: 1px solid rgba(127, 212, 193, 0.5); border-radius: 3px;
+  box-shadow: 0 0.4rem 1.2rem rgba(0, 0, 0, 0.45);
+}
+.help-chip button {
+  font: inherit; color: inherit; background: none; border: 0; cursor: pointer;
+  min-height: 24px; padding: 0.15rem 0;
+}
+.help-chip-open:hover { color: var(--accent); }
+.help-chip-close {
+  color: var(--ink-dim); font-size: 0.9rem; line-height: 1; min-width: 24px;
+}
+.help-chip-close:hover { color: var(--ink); }
+kbd {
+  font-family: var(--mono); font-size: 0.92em; font-weight: 700;
+  border: 1px solid var(--line-strong); border-radius: 3px; padding: 0 0.28em;
+}
 
 /* ---------- margin column ----------
    Tabs, the body that scrolls, and a foot of one row: the status line, then
@@ -700,32 +738,43 @@ header.top {
    something up. It gives up the legends first — SCALE / VIEW / LAYERS name
    clusters whose buttons already say Globe, Deck, Field — and then a little
    padding, then the notice's time, and last the notice itself, whose words the
-   ticker carries. The header is one row at every desktop width. */
-@media (max-width: 1500px) {
+   ticker carries. The header is one row at every desktop width. Each step
+   stands about 100 px higher than it first did, since the Names layer and the
+   help's button joined the row. */
+@media (max-width: 1600px) {
   .ctl-legend { display: none; }
   .controls { gap: 0.5rem; }
   .ctl-set { gap: 0; }
+}
+@media (max-width: 1500px) {
+  .ctl { padding: 0.3rem 0.4rem; font-size: 0.64rem; }
+  .controls { gap: 0.42rem; }
+  header.top { gap: 0.6rem; }
 }
 /* The notice's time goes before its words do: at 1280 the words were being
    cut to make room for a time the ticker below states anyway. */
 @media (max-width: 1300px) {
   .headline-alert .alert-time { display: none; }
 }
-@media (max-width: 1180px) {
-  .ctl { padding: 0.3rem 0.4rem; font-size: 0.64rem; }
-  .controls { gap: 0.42rem; }
-  header.top { gap: 0.6rem; }
-}
 /* Below here the notice has spent its shrink and the row cannot hold it and
    the clusters both. It leaves rather than wrapping the header to a second
    row: its words are the ticker's first item, on the stage below, so a row
-   of chrome bought nothing the page did not already say. Brand 145 px plus
-   controls about 690 px then fits 900 px with a little padding given up. */
-@media (min-width: 861px) and (max-width: 1090px) {
+   of chrome bought nothing the page did not already say. */
+@media (min-width: 861px) and (max-width: 1200px) {
   header.top { flex-wrap: nowrap; }
   .headline-alert { display: none; }
+}
+/* Brand 145 px plus controls about 740 px then fits 900 px with a little
+   padding given up, and the help's button does not: below 970 px it stands
+   in the margin's foot instead. */
+@media (min-width: 861px) and (max-width: 1090px) {
   .ctl { padding: 0.3rem 0.34rem; }
   .controls { gap: 0.3rem; }
+}
+@media (min-width: 861px) and (max-width: 969px) {
+  .ctl { padding: 0.3rem 0.24rem; }
+  header.top .help-toggle { display: none; }
+  .help-foot { display: inline-block; }
 }
 
 .controls-toggle { display: none; align-items: center; gap: 0.35rem; }
@@ -882,6 +931,7 @@ header.top {
   }
   /* One scroll region on a phone, and it is the page. */
   .margin-body { overflow: visible; min-height: 0; }
+  .help-chip { position: sticky; bottom: 0.5rem; align-self: flex-end; margin: 0 0.5rem 0.5rem 0; }
   /* The mobile header wraps, so its height is a measurement rather than a
      constant; main.ts writes it here on resize. Pinning the tabs to the
      desktop value would slide them under the header. */
@@ -891,6 +941,18 @@ header.top {
     z-index: 12; background: var(--bg);
   }
   .tab { padding: 0.6rem 0.2rem; }
+}
+
+/* Under 420 px the header's notice is its word alone. With the help's button
+   beside Controls its words had about 30 px left, "Ele…", which said nothing;
+   they are the ticker's first item, just under the band, and stay in the
+   link's name. */
+@media (max-width: 420px) {
+  .headline-alert { flex: none; }
+  .headline-alert .alert-text {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
 }
 
 /* A phone's ticker: each notice's word stands over its time, and the words
@@ -996,6 +1058,16 @@ header.top {
   /* Links too: the mark goes home and the notice opens the notices, and a
      23-pixel target is a miss waiting to happen. */
   .mark, .headline-alert { min-height: 44px; align-items: center; }
+  .help-toggle { min-width: 44px; }
+  /* The chip's buttons grow their targets, not the chip: an invisible 44 px
+     band round each, as the scale note's button does, so the hint stays one
+     slim line over the text it covers. */
+  .help-chip button { position: relative; }
+  .help-chip button::after {
+    content: ''; position: absolute; left: -0.2rem; right: -0.2rem;
+    top: calc(50% - 22px); height: 44px;
+  }
+  .help-chip-close::after { left: 0; right: auto; width: 44px; }
   /* Taller for a finger, not wider: the rail's width is the meta line's, and
      side padding only takes it from the time and the detail. */
   .tile { padding: 0.5rem 0.26rem; }
@@ -1352,3 +1424,92 @@ text.l1-idle { fill: var(--ink-faint); }
   color: var(--ink-faint);
 }
 .subject-links em { color: var(--ink-faint); font-style: italic; }
+
+/* ---------- names in the scene ----------
+   Small, in the serif that names things everywhere else, and lit only enough
+   to read over the field lines. Under the page's own furniture, never over
+   it; hud/scene-names.ts keeps them to the open stage and off every disc. A
+   name fades in where it is wanted and leaves at once, so a name never
+   lingers over a planet that has moved under it; with Motion off it does not
+   fade at all. */
+.scene-names {
+  position: fixed; inset: 0; z-index: 5; pointer-events: none; overflow: hidden;
+}
+.scene-name {
+  position: absolute; left: 0; top: 0; white-space: nowrap;
+  font-family: var(--serif); font-size: 0.86rem; font-weight: 500; line-height: 1.1;
+  letter-spacing: 0.02em; color: var(--ink-dim);
+  text-shadow: 0 0 3px var(--bg), 0 0 6px var(--bg);
+  opacity: 0;
+}
+.scene-name.is-shown { opacity: 0.92; transition: opacity 0.35s ease; }
+.scene-name.is-minor { color: var(--ink-faint); font-size: 0.76rem; }
+.scene-names.is-still .scene-name { transition: none; }
+
+/* ---------- the help ----------
+   A modal dialog over the page, the card's surface at reading width. Its
+   body scrolls under a fixed head; on a phone it is the whole screen. */
+.help {
+  width: min(44rem, calc(100vw - 2rem)); max-width: none;
+  max-height: min(88vh, 56rem); padding: 0;
+  background: rgba(9, 14, 24, 0.97); color: var(--ink);
+  border: 1px solid var(--line-strong); border-radius: 0.5rem;
+  box-shadow: 0 1.4rem 3rem rgba(0, 0, 0, 0.55);
+  font-size: 0.86rem; line-height: 1.5;
+}
+.help[open] { display: flex; flex-direction: column; }
+.help::backdrop { background: rgba(5, 7, 13, 0.62); }
+.help-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.6rem;
+  padding: 0.55rem 0.6rem 0.45rem 1.1rem; border-bottom: 1px solid var(--line);
+}
+.help-head h2 { margin: 0; font-family: var(--serif); font-weight: 500; font-size: 1.45rem; line-height: 1.15; }
+.help-close {
+  background: none; border: 0; color: var(--ink-dim); cursor: pointer;
+  font-size: 1.3rem; line-height: 1; min-width: 36px; min-height: 36px; border-radius: 4px;
+}
+.help-close:hover { color: var(--ink); }
+.help-body { overflow-y: auto; padding: 0 1.1rem 1.2rem; }
+.help-body h3 {
+  font-family: var(--sans); font-size: 0.62rem; font-weight: 500; letter-spacing: 0.13em;
+  text-transform: uppercase; color: var(--ink-dim); margin: 1.1rem 0 0.35rem;
+}
+.help-body p { margin: 0.35rem 0; color: var(--ink-dim); }
+.help-body ul, .help-body ol { margin: 0.4rem 0; padding: 0; }
+.help-body li { margin: 0.3rem 0; }
+.help-tiers, .help-key, .help-about { list-style: none; }
+.help-tiers .badge, .help-mark .badge { margin-right: 0.2rem; }
+.help-aside { font-size: 0.8rem; }
+.help-key li { display: grid; grid-template-columns: 1.5rem minmax(0, 1fr); gap: 0.55rem; align-items: start; }
+.help-src { display: block; color: var(--ink-faint); font-size: 0.78rem; }
+/* The swatches: a stroke for what is drawn as lines, a dot for the wind, a
+   diamond for the monitors, a disc for the Sun, a band for the oval. */
+.help-swatch { display: block; justify-self: center; margin-top: 0.62em; background: var(--sw); }
+.help-swatch.is-line { width: 1.5rem; height: 2px; }
+.help-swatch.is-band { width: 1.5rem; height: 6px; margin-top: 0.5em; border-radius: 3px; }
+.help-swatch.is-dot { width: 5px; height: 5px; border-radius: 50%; box-shadow: 7px 0 0 var(--sw), -7px 0 0 var(--sw); }
+.help-swatch.is-diamond { width: 8px; height: 8px; transform: rotate(45deg); margin-top: 0.45em; }
+.help-swatch.is-disc { width: 0.9rem; height: 0.9rem; border-radius: 50%; margin-top: 0.3em; }
+.help-moves, .help-keys { margin: 0.4rem 0; }
+.help-moves div { display: grid; grid-template-columns: 5.2rem minmax(0, 1fr); gap: 0.5rem; margin: 0.3rem 0; }
+.help-moves dt {
+  font-family: var(--sans); font-size: 0.62rem; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--ink-faint); padding-top: 0.2em;
+}
+.help-moves dd, .help-keys dd { margin: 0; color: var(--ink-dim); }
+.help-keys { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: 0.15rem 1rem; }
+.help-keys div { display: grid; grid-template-columns: 2.6rem minmax(0, 1fr); gap: 0.4rem; align-items: baseline; }
+.help-body .help-rules { padding-left: 1.3rem; color: var(--ink-dim); }
+.help-about a { color: var(--accent); text-underline-offset: 0.2em; }
+.help-about a:hover { color: var(--ink); }
+@media (max-width: 600px) {
+  .help {
+    width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0;
+    border: 0; border-radius: 0;
+  }
+  .help-moves div { grid-template-columns: minmax(0, 1fr); gap: 0; }
+}
+@media (pointer: coarse) {
+  .help-close { min-width: 44px; min-height: 44px; }
+}
+

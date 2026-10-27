@@ -32,6 +32,9 @@ import { gastDegrees } from '../models/ephemeris.js';
  * Full daylight a little past the boundary. This is a real angular range, not
  * an arbitrary softness.
  */
+/** The atmospheric rim's shell, in Earth radii: the drawn planet's real edge. */
+export const ATMOSPHERE_RADIUS = 1.05;
+
 const TWILIGHT_START = -0.309;
 const TWILIGHT_END = 0.087;
 
@@ -256,7 +259,7 @@ export class Earth {
       transparent: true, blending: AdditiveBlending,
       depthWrite: false, side: BackSide,
     });
-    this.atmosphere = new Mesh(new SphereGeometry(radius * 1.05, 64, 48), this.atmosphereMat);
+    this.atmosphere = new Mesh(new SphereGeometry(radius * ATMOSPHERE_RADIUS, 64, 48), this.atmosphereMat);
     this.group.add(this.atmosphere);
   }
 

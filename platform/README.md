@@ -47,7 +47,11 @@ src/hud/route.ts        the address: view, scale, layers, tab and detail in the 
                         fragment (#v=polar&t=sun, #d=inst.speed), so a reading can be linked
 src/hud/live.ts         the panel's clock-bound words (ages, the time), filled on a 30 s
                         tick, so the panel is rebuilt only when what it says changes
-src/a11y/        reduced motion, keyboard rig
+src/hud/help.ts         the help behind `?` (#help): tiers, the scene's key from the
+                        registry, moving and keys, the six rules, the way home
+src/hud/scene-names.ts  the names in the scene (Earth, the Sun, the Moon, L1, the two
+                        boundaries), seated each frame off every disc and the chrome
+src/a11y/        reduced motion, keyboard rig (keys act on the scene only; `?` anywhere)
 vendor/          source of truth for the models: IGRF-14 coefficients (IAGA),
                  Tsyganenko's t89c.f and t96.f — see vendor/README.md
 scripts/         gen-igrf.mjs, gen-t89.mjs, gen-t96.mjs — vendor/ → src/models/*-coeffs.ts

@@ -61,7 +61,7 @@ export interface CardHost {
   earthScreen?: () => { x: number; y: number; r: number } | null;
 }
 
-interface Box { left: number; right: number; top: number; bottom: number }
+export interface Box { left: number; right: number; top: number; bottom: number }
 
 const rem = (): number => parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
 
@@ -71,8 +71,11 @@ function boxOf(el: Element | null): DOMRect | null {
   return r && r.width > 0 && r.height > 0 ? r : null;
 }
 
-/** The stage's open area, in viewport px: inside its chrome, less the gap. */
-function stageBox(): Box {
+/**
+ * The stage's open area, in viewport px: inside its chrome, less the gap. The
+ * names in the scene keep to it too.
+ */
+export function stageBox(): Box {
   const railCollapsed = document.getElementById('rail')?.classList.contains('is-collapsed');
   const railEdge = boxOf(document.querySelector(railCollapsed ? '.rail-toggle' : '#instruments'));
   const left = (railEdge?.right ?? 0) + GAP_PX;

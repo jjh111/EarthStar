@@ -25,12 +25,16 @@
   <meta name="twitter:image" content="https://earthstar.space/viewer/og.jpg" />
 
   <link rel="preconnect" href="https://services.swpc.noaa.gov" crossorigin />
-  <script type="module" crossorigin src="/viewer/assets/index-BbWUYD28.js"></script>
-  <link rel="stylesheet" crossorigin href="/viewer/assets/index-CaDm6UyB.css">
+  <script type="module" crossorigin src="/viewer/assets/index-D7cjDOJc.js"></script>
+  <link rel="stylesheet" crossorigin href="/viewer/assets/index-U5Btqvbn.css">
 </head>
 <body>
   <a class="skip-link" href="#margin-body">Skip to the Situation Report</a>
   <canvas id="scene" aria-hidden="true"></canvas>
+  <!-- The names in the scene: Earth, the Sun, the Moon, L1, the boundaries.
+       Seated every frame by hud/scene-names.ts, and hidden from assistive
+       technology like the canvas they annotate. -->
+  <div class="scene-names" id="scene-names" aria-hidden="true"></div>
 
   <div class="shell">
     <header class="top">
@@ -38,7 +42,7 @@
            row no width, which is what the notice beside it needed. -->
       <div class="brand-block">
         <h1 class="brand">
-          <a class="mark" href="https://earthstar.space/" title="Earth Star">
+          <a class="mark" href="/" title="Earth Star — home">
             <img src="logo.webp" width="480" height="196" alt="Earth Star" decoding="async">
           </a>
           <span class="brand-word">Viewer</span>
@@ -86,15 +90,26 @@
               title="Analysed CME cones propagating from the Sun">CMEs</button>
             <button class="ctl" id="coast-toggle" aria-pressed="false"
               title="Natural Earth vector coastlines and graticule, drawn over the surface imagery">Coast</button>
+            <button class="ctl" id="names-toggle" aria-pressed="true"
+              title="Names in the scene: Earth, the Sun, the Moon, L1 and the two boundaries">Names</button>
             <button class="ctl" id="motion-toggle" aria-pressed="false"
               title="Freeze all animation; the spatial information stays">Motion</button>
           </span>
         </span>
       </nav>
 
+      <!-- The way in to everything else: what the tiers, colours and marks
+           mean, the keys, the rules. Between 861 and 1090 px the row has no
+           room for it, and the one in the margin's foot stands in. -->
+      <button class="ctl help-toggle" id="help-open" type="button" aria-haspopup="dialog"
+        aria-keyshortcuts="?" title="What you are seeing, and the keys (?)"><span
+        aria-hidden="true">?</span><span class="sr-only">Help</span></button>
     </header>
 
-    <main class="stage">
+    <!-- Focusable, so a keyboard reader can put the scene's keys in scope:
+         they act only here, on the scene or on the page itself. -->
+    <main class="stage" tabindex="0" aria-label="Scene"
+      aria-keyshortcuts="1 2 3 4 5 S M F A W C T R">
       <!-- The instrument tiles live in a rail at the left edge of the scene,
            not stacked across its top: thirteen readings are a column of
            marginal notes beside the planet, and a grid across the sky was
@@ -135,6 +150,12 @@
            to be able to reach it to scroll it. The skip link lands here too. -->
       <div class="margin-body" id="margin-body" role="tabpanel" tabindex="0"
            aria-labelledby="tab-report"></div>
+      <!-- Once, on a first visit, and then remembered: a hint at the foot of
+           the panel's text, over the words rather than the scene, so the stage
+           and Earth stay as open as they were. -->
+      <p class="help-chip" id="help-chip" hidden><button type="button" class="help-chip-open"
+        id="help-chip-open"><span id="help-chip-verb">Press</span> <kbd>?</kbd> for what you are seeing</button><button
+        type="button" class="help-chip-close" id="help-chip-close" aria-label="Dismiss">×</button></p>
       <!-- The foot is one row: the status line, then the actions beside it.
            On a phone the status moves up under the tabs instead. The chip is
            the render scale, shown only while the renderer is trading
@@ -148,6 +169,10 @@
                 title="Copy the whole panel as Markdown, with every timestamp and source">Copy briefing</button>
         <button class="ctl ctl-sm" id="brief-download" type="button"
                 title="Download the briefing as a Markdown file">.md</button>
+        <button class="ctl ctl-sm help-toggle help-foot" id="help-open-foot" type="button"
+                aria-haspopup="dialog" aria-keyshortcuts="?"
+                title="What you are seeing, and the keys (?)"><span
+                aria-hidden="true">?</span><span class="sr-only">Help</span></button>
       </div>
     </aside>
   </div>

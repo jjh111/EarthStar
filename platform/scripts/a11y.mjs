@@ -86,7 +86,14 @@ async function run(name, viewport) {
     await p.mouse.click(Math.round(earth.x), Math.round(earth.y));
     await p.waitForTimeout(600);
     total += await scan('scene card');
+    await p.keyboard.press('Escape');
   }
+  // And the help, opened the way a reader opens it: ? from the page.
+  await p.evaluate(() => document.activeElement?.blur());
+  await p.keyboard.press('Shift+Slash');
+  await p.waitForTimeout(400);
+  if (await p.evaluate(() => document.getElementById('help')?.open)) total += await scan('help');
+  else { console.log('  help: did not open'); total += 1; }
   console.log(`  TOTAL violations: ${total}`);
   if (total > 0) FAILED = true;
   await p.close();

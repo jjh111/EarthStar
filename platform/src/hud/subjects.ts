@@ -593,7 +593,28 @@ const LAYERS: Subject[] = [
       + 'part of each frame beyond the limb is corona, not surface, and is shown on a '
       + 'separate card rather than smeared onto the sphere.',
     sources: [{ name: 'GOES SUVI / SDO (NOAA SWPC)' }],
-    related: ['layer.coronagraph', 'layer.active-regions', 'inst.xray', 'body.sun'],
+    related: ['layer.coronagraph', 'layer.active-regions', 'inst.xray', 'body.sun',
+      'layer.sun-placeholder'],
+    scene: ['sun-disc'],
+  },
+  {
+    // The imagery's no-data state, as the scene draws it. The note on the
+    // stage and the help's key both name it from here.
+    id: 'layer.sun-placeholder',
+    kind: 'layer', tier: 'M', label: 'Unobserved Sun',
+    oneLine: 'The plain disc drawn while no solar imagery has arrived: it marks where the Sun is, and nothing about it.',
+    meaning: 'The scene needs the Sun in its place even when no telescope frame has reached '
+      + 'the page: the Sun–Earth line, the wind and the scale are all drawn from it. So a '
+      + 'plain disc stands in, and it stays plain on purpose. Its plainness is the statement '
+      + 'that nothing of the Sun is being shown.',
+    howMade: 'The Sun’s sphere at its computed position and scaled size, in one flat colour, '
+      + 'until a SUVI frame has been measured and projected onto it.',
+    limits: 'Carries nothing observed: not the Sun’s brightness, its activity, its regions or '
+      + 'its rotation. The imagery replaces it as soon as a usable frame arrives, and while it '
+      + 'is up the stage says so.',
+    keyedTo: null,
+    sources: [],
+    related: ['layer.sun-disc', 'body.sun'],
     scene: ['sun-disc'],
   },
   {
@@ -1030,4 +1051,12 @@ export const TIER_LABEL: Record<Tier, string> = {
   E: 'Measured',
   D: 'Modelled',
   M: 'Ambient',
+};
+
+/** What each tier claims, in a sentence, for the help's key. */
+export const TIER_SENTENCE: Record<Tier, string> = {
+  E: 'Read from an instrument, with the time it was read and how late it is.',
+  D: 'Computed from measured inputs by a named, cited model.',
+  M: 'Drawn for the eye. Some of it carries a real number, the wind’s rate and speed; '
+    + 'some carries none, like the stars.',
 };

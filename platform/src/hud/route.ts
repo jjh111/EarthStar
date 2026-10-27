@@ -4,11 +4,15 @@
  * be linked to, survives a reload, and Back closes what was opened.
  *
  *   #v=polar&s=true&t=sun&d=inst.bz&l=-wind,+coast
+ *   #help
  *
  * Only what differs from the plain page is written: Deck, Globe, the Now tab
  * and the layers as they open make the empty fragment, so the plain Viewer is
  * still /viewer/. Unknown keys and values are ignored rather than guessed at;
  * an old link opens what it still names and nothing else.
+ *
+ * `help` is a bare key: the help dialog is open, over whatever else the
+ * address names, so Back closes it and a link can open it.
  *
  * The splash links in through this: /viewer/#d=inst.kp, #d=inst.speed,
  * #d=inst.xray and #t=report (test/route.test.ts holds those four).
@@ -38,6 +42,8 @@ export interface Route {
   detail?: string;
   /** Only the layers the address names; the others are as the page opens them. */
   layers: Partial<Record<LayerId, boolean>>;
+  /** The help dialog is open. */
+  help?: true;
 }
 
 /** Everything the address can say, as it is now. */
@@ -47,9 +53,10 @@ export interface RouteState {
   tab: TabId;
   detail: string | null;
   layers: Record<LayerId, boolean>;
+  help?: boolean;
 }
 
-const KEYS = new Set(['v', 's', 't', 'd', 'l']);
+const KEYS = new Set(['v', 's', 't', 'd', 'l', 'help']);
 
 function decode(s: string): string {
   try { return decodeURIComponent(s); } catch { return ''; }
@@ -91,6 +98,8 @@ export function parseHash(hash: string): Route | null {
         if (sign === '+' || sign === ' ') route.layers[id] = true;
         else if (sign === '-' || sign === '−') route.layers[id] = false;
       }
+    } else if (k === 'help') {
+      route.help = true;
     }
   }
   return route;
@@ -106,5 +115,6 @@ export function formatHash(s: RouteState): string {
   const layers = LAYER_IDS.filter((id) => s.layers[id] !== DEFAULT_LAYERS[id])
     .map((id) => `${s.layers[id] ? '+' : '-'}${id}`);
   if (layers.length) out.push(`l=${layers.join(',')}`);
+  if (s.help) out.push('help');
   return out.length ? `#${out.join('&')}` : '';
 }
