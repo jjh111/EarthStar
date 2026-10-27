@@ -469,8 +469,8 @@ export class Hud {
   /**
    * Every tile has the same four lines — label, value, trend, meta — so the
    * rail keeps one rhythm in every state. The meta line is the badge, the time
-   * the value was observed, and a detail; only the detail gives way when the
-   * line is too long, never the time.
+   * the value was observed, and a detail; a detail too long for the line takes
+   * one of its own below them, and nothing on it is cut.
    */
   private buildTiles(): void {
     this.instrumentsEl.innerHTML = '';

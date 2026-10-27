@@ -19,7 +19,7 @@ import { igrfCitation } from '../models/igrf14.js';
 import { coverageBands, type SunPlaneCalibration } from '../scene/sun-plane.js';
 import {
   NO_DATA, badgeFor, badgeTitle, hhmmUTC, inForce, noticeWord, stalenessOf,
-  validityText, whenUTC,
+  WORDS, abbr, tierBadge, validityText, whenUTC,
 } from './format.js';
 import { ageHtml, liveAge, liveHtml } from './live.js';
 import { valueState } from '../data/state.js';
@@ -124,7 +124,7 @@ function linkSubjects(escaped: string, ids: string[]): string {
 function sectionLimits(ids: string[]): string {
   const rows = ids.map((id) => subject(id)).filter((s): s is Subject => !!s)
     .map((s) => `<li><button type="button" class="subject-link" data-subject="${
-      escapeHtml(s.id)}"><span class="badge badge-${s.tier.toLowerCase()}">${s.tier}</span>
+      escapeHtml(s.id)}">${tierBadge(s.tier)}
       ${escapeHtml(s.label)}</button> — ${escapeHtml(firstLimit(s))}</li>`).join('');
   return rows
     ? `<details class="limits"><summary>What this does not say</summary>
@@ -191,7 +191,7 @@ export function renderDrawnIndex(narration: SceneNarration): string {
   const body = groups.map(([tier, title]) => {
     const rows = drawn.filter((s) => s.tier === tier).map((s) => `
       <li><button type="button" class="subject-link" data-subject="${escapeHtml(s.id)}">
-        <span class="badge badge-${tier.toLowerCase()}">${tier}</span>
+        ${tierBadge(tier)}
         ${escapeHtml(s.label)}</button> — ${escapeHtml(s.oneLine)}${
         s.keyedTo ? ` <em>Keyed to ${escapeHtml(s.keyedTo)}.</em>` : ''}</li>`).join('');
     return rows ? `<h4 class="index-tier">${escapeHtml(title)}</h4>
@@ -254,11 +254,11 @@ export function renderForecast(
 
   return `
     <h2>Ahead</h2>
-    <p>Everything below is <span class="badge badge-d">D</span> NOAA's own forecast, not ours.
+    <p>Everything below is ${tierBadge('D')} NOAA's own forecast, not ours.
     Where the forecaster wrote prose, it is reproduced verbatim — a summary of a forecast is
     a different claim from the forecast.</p>
 
-    <h3>Planetary K, observed and predicted</h3>
+    <h3>Planetary K index (Kp), observed and predicted</h3>
     ${kpBars(f)}
 
     ${odds ? `<h3>Flare probability, next 24 h</h3>
@@ -329,7 +329,7 @@ function enlilSection(
 
   return section('fc-enlil', 'WSA-Enlil — the wind at Earth', `
     <p>A magnetohydrodynamic simulation of the inner heliosphere sampled at Earth
-    <span class="badge badge-d">D</span>, run by NOAA from solar magnetograms and the
+    ${tierBadge('D')}, run by NOAA from solar magnetograms and the
     analysed CME cones. It is the only forecast here that solves the physics rather than
     extrapolating, and unlike our own cone propagation it accounts for drag.</p>
 
@@ -406,7 +406,7 @@ function metaRow(key: string, m: PartMeta): string {
   const b = badgeFor(m);
   return `<tr>
     <td>${escapeHtml(key)}</td>
-    <td><span class="badge badge-${b.toLowerCase()}" title="${escapeHtml(badgeTitle(m))}">${b}</span></td>
+    <td>${tierBadge(b, badgeTitle(m))}</td>
     <td><a href="${m.source_url}" rel="noreferrer noopener" target="_blank">${escapeHtml(m.source)}</a>${
       m.model ? `<br><span class="tile-meta">${escapeHtml(m.model.name)}</span>` : ''}</td>
     <td class="num">${m.data_time ? hhmmUTC(m.data_time) : NO_DATA}</td>
@@ -434,7 +434,7 @@ export function renderSources(
   const earthRow = (kind: string, source: string, url: string, period: string, note: string, on: boolean): string =>
     `<tr>
       <td>${kind}</td>
-      <td><span class="badge badge-e">E</span></td>
+      <td>${tierBadge('E')}</td>
       <td><a href="${url}" rel="noreferrer noopener" target="_blank">${source}</a>
         <br><span class="tile-meta">${note}</span></td>
       <td class="num">${period}</td>
@@ -453,7 +453,7 @@ export function renderSources(
   const au = state.aurora;
   const auRow = au ? `<tr>
     <td>aurora</td>
-    <td><span class="badge badge-d">D</span></td>
+    <td>${tierBadge('D')}</td>
     <td><a href="${au.source_url}" rel="noreferrer noopener" target="_blank">${escapeHtml(au.source)}</a>
       <br><span class="tile-meta">${escapeHtml(au.model?.name ?? '')}</span></td>
     <td class="num">${au.data ? hhmmUTC(au.data.observation_time) : NO_DATA}</td>
@@ -482,7 +482,7 @@ export function renderSources(
       <table class="prov">
         <thead><tr><th>Element</th><th>Tier</th><th>Source</th><th>Acquired</th><th>On screen</th></tr></thead>
         <tbody>${earthRows}
-          <tr><td>coastlines</td><td><span class="badge badge-m">M</span></td>
+          <tr><td>coastlines</td><td>${tierBadge('M')}</td>
             <td>Natural Earth 110m land (vector), optional overlay</td>
             <td class="num">static</td><td class="num">${earth.coast ? 'on' : 'off'}</td></tr>
         </tbody>
@@ -492,17 +492,17 @@ export function renderSources(
       false, remembered)}
     ${section('prov-monitors', 'The monitors', monitors, false, remembered)}
     ${section('prov-tiers', 'What the tiers mean', `
-      <p><span class="badge badge-e">E</span> Measured — read from an instrument, shown with its
+      <p>${tierBadge('E', '', false)} Measured — read from an instrument, shown with its
       timestamp and latency.<br>
-      <span class="badge badge-d">D</span> Modelled — computed from measured inputs by a named,
+      ${tierBadge('D', '', false)} Modelled — computed from measured inputs by a named,
       cited model.<br>
-      <span class="badge badge-m">M</span> Ambient — artwork. Parameter-driven, sometimes by real
+      ${tierBadge('M', '', false)} Ambient — artwork. Parameter-driven, sometimes by real
       values, but never itself a measurement.</p>`, false, remembered)}
     ${section('prov-models', 'Models cited', `
       <p class="fine">Each opens what it does — and what it does not.</p>
       <ul class="subject-links">${subjectsOfKind('model').map((m) => `
         <li><button type="button" class="subject-link" data-subject="${escapeHtml(m.id)}">
-          <span class="badge badge-${m.tier.toLowerCase()}">${m.tier}</span>
+          ${tierBadge(m.tier)}
           ${escapeHtml(m.label)}</button> — ${escapeHtml(m.oneLine)}</li>`).join('')}</ul>
       <p class="fine">${escapeHtml(igrfCitation(new Date()))}</p>`, false, remembered)}
     ${section('prov-drawn', 'What is drawn', `
@@ -510,7 +510,7 @@ export function renderSources(
       their dimensions carries a real number and which is invented.</p>
       <ul class="subject-links">${subjectsOfKind('layer').map((l) => `
         <li><button type="button" class="subject-link" data-subject="${escapeHtml(l.id)}">
-          <span class="badge badge-${l.tier.toLowerCase()}">${l.tier}</span>
+          ${tierBadge(l.tier)}
           ${escapeHtml(l.label)}</button> — ${escapeHtml(l.oneLine)}</li>`).join('')}</ul>`,
       false, remembered)}`;
 }
@@ -550,7 +550,7 @@ export function renderMonitors(list: SpacecraftPos[], speedKms: number | null): 
   const offAxis = active
     ? `<p>${escapeHtml(active.source)} is
        ${(active.distanceRe * RE_KM / 1e6).toFixed(2)} million km upstream and
-       <b>${active.offAxisRe.toFixed(1)} Rₑ off the Sun–Earth line</b> —
+       <b>${active.offAxisRe.toFixed(1)} Earth radii (Rₑ) off the Sun–Earth line</b> —
        ${active.offAxisDeg.toFixed(1)}° away from the direction the wind actually has to
        travel to reach us.${transit}</p>
        <p class="fine">The solar wind is structured on scales smaller than that offset, so
@@ -563,7 +563,7 @@ export function renderMonitors(list: SpacecraftPos[], speedKms: number | null): 
     <p class="fine caption">Looking sunward along the Sun–Earth line. Nothing here is
     compressed — Earth, the Moon’s orbit and the spacecraft offsets are one scale.</p>
     <table class="prov l1-table">
-      <thead><tr><th>Craft</th><th>Rₑ out</th><th>Rₑ off</th><th>Angle</th></tr></thead>
+      <thead><tr><th>Craft</th><th>${abbr('Rₑ')} out</th><th>${abbr('Rₑ')} off</th><th>Angle</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
     ${offAxis}
@@ -702,7 +702,7 @@ function solarCyclePanel(
         for ${escapeHtml(now.month)}` : 'Latest month unavailable'}${
       c.allTimeMax ? ` · record <b class="sentence-num">${c.allTimeMax.ssn.toFixed(0)}</b>
         in ${escapeHtml(c.allTimeMax.month)}` : ''}.
-      <span class="badge badge-e">E</span> NOAA SWPC solar-cycle indices.</p>`;
+      ${tierBadge('E')} NOAA SWPC solar-cycle indices.</p>`;
 }
 
 export function renderSun(
@@ -808,7 +808,7 @@ function diskSection(sun: SunState): string {
       <div class="sun-stamp">${sunStamp(f.time)}</div>
     </div>
     <div class="sun-transport">${transport}</div>
-    <p><span class="badge badge-e">E</span> ${escapeHtml(instrument)}. ${escapeHtml(L.describes)}</p>
+    <p>${tierBadge('E')} ${escapeHtml(instrument)}. ${escapeHtml(L.describes)}</p>
     ${diskCardNote(sun)}
     <p class="tile-meta">${L.skippedDropouts > 0
       ? `The newest ${L.skippedDropouts} frame${L.skippedDropouts > 1 ? 's were' : ' was'} a
@@ -908,7 +908,7 @@ function coronaPanel(sun: SunState): string {
            data-alt="${escapeHtml(L.instrument)} coronagraph image at ${hhmmUTC(f.time)} UTC"></div>
       <div class="sun-stamp">${sunStamp(f.time)}</div>
     </div>
-    <p><span class="badge badge-e">E</span> ${escapeHtml(L.instrument)}.
+    <p>${tierBadge('E')} ${escapeHtml(L.instrument)}.
       ${escapeHtml(L.describes)}</p>
     <p class="tile-meta">${geometry}</p>`;
 }
@@ -965,7 +965,7 @@ export function renderSubjectProse(id: string): string {
     const r = subject(rid);
     return r
       ? `<li><button type="button" class="subject-link" data-subject="${escapeHtml(r.id)}">
-          <span class="badge badge-${r.tier.toLowerCase()}">${r.tier}</span>
+          ${tierBadge(r.tier)}
           ${escapeHtml(r.label)}</button> — ${escapeHtml(r.oneLine)}</li>`
       : '';
   };
@@ -1000,7 +1000,7 @@ export function renderSubject(id: string): string {
   if (!s) return '<p>Nothing here explains that yet.</p>';
   return `
     <h2>${escapeHtml(s.label)}</h2>
-    <p class="tile-meta"><span class="badge badge-${s.tier.toLowerCase()}">${s.tier}</span>
+    <p class="tile-meta">${tierBadge(s.tier, '', false)}
       ${escapeHtml(TIER_LABEL[s.tier])}</p>
     <p>${escapeHtml(s.oneLine)}</p>
     ${renderSubjectProse(id)}`;
@@ -1045,7 +1045,7 @@ export function renderBody(name: string, now: Date): string {
       ${f.arcsecFromEarth !== null
         ? row('Apparent diameter', `${f.arcsecFromEarth.toFixed(1)}″`) : ''}
     </tbody></table>
-    <p class="tile-meta"><span class="badge badge-d">D</span> Positions and distances from
+    <p class="tile-meta">${tierBadge('D')} Positions and distances from
     astronomy-engine at ${hhmmUTC(now.toISOString())} UTC — computed, not tabulated, so they
     move with the scene.</p>
     ${renderSubjectProse(bodySubjectId(name))}`;
@@ -1093,7 +1093,7 @@ export function renderNotices(
   return `
     <p><button type="button" class="subject-link" data-back="report">‹ Situation Report</button></p>
     <h2>NOAA notices</h2>
-    <p class="tile-meta"><span class="badge badge-e" title="Measured — NOAA SWPC">E</span>
+    <p class="tile-meta">${tierBadge('E', 'Measured — NOAA SWPC')}
       NOAA SWPC products/alerts.json · ${state}</p>
     ${status.error ? '' : items.length
       ? `<p class="fine">Newest first. A chain of extensions or continuations shows as its
@@ -1153,10 +1153,12 @@ export function renderDetail(
 
   return `
     <h2>${escapeHtml(inst.label)}</h2>
-    <p class="tile-value" style="font-size:1.9rem">
-      <span>${escapeHtml(raw)}</span><span class="tile-unit">${escapeHtml(inst.unit)}</span>
+    <p class="tile-value detail-value">
+      <span>${escapeHtml(raw)}</span><span class="tile-unit">${escapeHtml(inst.unit)}</span>${
+        // The unit is the reading's first use on this page, so its words stand beside it.
+        WORDS[inst.unit] ? `<span class="unit-words">${WORDS[inst.unit]}</span>` : ''}
     </p>
-    <p class="tile-meta"><span class="badge badge-${b.toLowerCase()}">${b}</span>
+    <p class="tile-meta">${tierBadge(b, badgeTitle(meta))}
       ${liveHtml(escapeHtml(s.label))}</p>
     ${detailSpark(inst, state)}
     <h3>Provenance</h3>

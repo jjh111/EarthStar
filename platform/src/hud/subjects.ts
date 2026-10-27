@@ -828,7 +828,8 @@ const MEASUREMENTS: Subject[] = [
     related: ['inst.speed', 'inst.mpause', 'model.shue1998', 'layer.solar-wind'],
   },
   {
-    id: 'inst.xray', kind: 'measurement', tier: 'E', label: 'X-ray class',
+    // The tile's label, so the tile, its detail and every link to it agree.
+    id: 'inst.xray', kind: 'measurement', tier: 'E', label: 'X-ray 0.1–0.8 nm',
     oneLine: 'Flare brightness in soft X-rays, on the A–B–C–M–X scale. Arrives at light speed.',
     meaning: 'Solar soft X-ray flux measured by GOES, expressed on the NOAA flare scale. '
       + 'Each letter is ten times the one before: A, B, C, M, X. M and X class flares '
@@ -859,7 +860,7 @@ const MEASUREMENTS: Subject[] = [
     related: ['concept.reconnection', 'inst.xray', 'body.moon', 'inst.electrons'],
   },
   {
-    id: 'inst.electrons', kind: 'measurement', tier: 'E', label: 'Electron flux',
+    id: 'inst.electrons', kind: 'measurement', tier: 'E', label: 'Electrons ≥2 MeV',
     oneLine: 'High-energy electrons that bury themselves in satellite insulation over days.',
     meaning: 'Integral electron flux above 2 MeV at geostationary orbit. Sustained flux '
       + 'above 1000 particle flux units drives deep dielectric charging — electrons bury '

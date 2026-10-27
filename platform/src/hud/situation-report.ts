@@ -12,7 +12,7 @@ import type { SpacecraftPos } from '../data/ephemerides.js';
 import { hhmmUTC } from '../contract/types.js';
 import type { AuroraNow, Envelope } from '../contract/types.js';
 import type { Cme } from '../data/cme.js';
-import { splitNotices, stalenessOf, whenUTC } from './format.js';
+import { WORDS, kpLabel, minus, splitNotices, stalenessOf, whenUTC } from './format.js';
 import { liveAge, liveClock, liveSubsolar, liveText } from './live.js';
 import { errorReason, valueState } from '../data/state.js';
 import { ALERT_LIMIT } from '../data/swpc.js';
@@ -182,6 +182,20 @@ export function buildReportLines(
   const say = (section: ReportSectionId, live: string, ...subjects: string[]): void => {
     acc.push({ text: liveText(live, now), live, section, subjects });
   };
+  /**
+   * A code in words the first time the report says it, the symbol kept beside
+   * them, and the symbol alone after: "0.21 particle flux units (pfu)", then
+   * "962 pfu". The report is read from the top, and the briefing with it, so
+   * first in the build is first on the page — whichever feeds arrived.
+   */
+  const told = new Set<string>();
+  const code = (c: string): string => {
+    if (told.has(c)) return c;
+    told.add(c);
+    return `${WORDS[c]} (${c})`;
+  };
+  /** A number as the panel writes one: U+2212 for its minus. */
+  const num = (v: number, digits: number): string => minus(v.toFixed(digits));
   const at = `${liveClock()} UTC`;
 
   /**
@@ -232,9 +246,10 @@ export function buildReportLines(
         : bz < 0 ? 'southward'
         : 'northward, which keeps the magnetosphere relatively closed';
       say('wind', 
-        `Solar wind at L1, measured by ${sw.spacecraft ?? 'the active spacecraft'}: ` +
-        `Bz ${bz === null ? 'no data' : `${bz.toFixed(1)} nanotesla`} (${dirn}); ` +
-        `total field ${sw.bt === null ? 'no data' : `${sw.bt.toFixed(1)} nT`}; ` +
+        `Solar wind at L1, the Lagrange point between the Sun and Earth, measured by ` +
+        `${sw.spacecraft ?? 'the active spacecraft'}: ` +
+        `Bz ${bz === null ? 'no data' : `${num(bz, 1)} ${code('nT')}, ${dirn}`}; ` +
+        `total field ${sw.bt === null ? 'no data' : `${sw.bt.toFixed(1)} ${code('nT')}`}; ` +
         `speed ${sw.speed === null ? 'no data' : `${Math.round(sw.speed)} kilometres per second`}; ` +
         `density ${sw.density === null ? 'no data' : `${sw.density.toFixed(1)} protons per cubic centimetre`}. ` +
         `Measured [E], timestamped ${hhmmUTC(sw.time)} UTC` +
@@ -261,7 +276,7 @@ export function buildReportLines(
         `roughly an hour to arrive. NOAA propagates it to the bow shock nose [D · NOAA]: ` +
         `what is reaching Earth right now was observed at ` +
         `${hhmmUTC(d.propagated.observed_at)} UTC, with Bz ` +
-        `${d.propagated.bz === null ? 'no data' : `${d.propagated.bz.toFixed(1)} nT`} and ` +
+        `${d.propagated.bz === null ? 'no data' : `${num(d.propagated.bz, 1)} ${code('nT')}`} and ` +
         `speed ${d.propagated.speed === null ? 'no data' : `${Math.round(d.propagated.speed)} km/s`}. ` +
         (lead !== null && lead > 0
           ? `There are about ${Math.round(lead)} minutes of already-measured wind still in ` +
@@ -276,18 +291,18 @@ export function buildReportLines(
     if (gs && gs.total_nt !== null) {
       const standoff = d.magnetopause?.standoff_re ?? null;
       say('geomagnetic', 
-        `GOES-${gs.satellite ?? '?'} measures ${gs.total_nt.toFixed(0)} nT at geostationary ` +
-        `orbit, 6.6 Earth radii out [E], ${hhmmUTC(gs.time)} UTC` +
+        `GOES-${gs.satellite ?? '?'} measures ${gs.total_nt.toFixed(0)} ${code('nT')} at geostationary ` +
+        `orbit, 6.6 ${code('Rₑ')} out [E], ${hhmmUTC(gs.time)} UTC` +
         (gs.arcjet ? ' — though its thruster was firing, so the reading is suspect' : '') +
         `. That is ${gs.deficit_nt !== null && gs.deficit_nt > 0
-          ? `${gs.deficit_nt.toFixed(0)} nT below` : 'about'} the dipole value for that ` +
+          ? `${gs.deficit_nt.toFixed(0)} ${code('nT')} below` : 'about'} the dipole value for that ` +
         `distance; the difference is the ring current and magnetopause currents subtracting ` +
         `from Earth's own field. ` +
         (standoff !== null
           ? standoff <= 6.6
-            ? 'With the modelled boundary inside 6.6 Rₑ, the spacecraft should be out in ' +
+            ? `With the modelled boundary inside 6.6 ${code('Rₑ')}, the spacecraft should be out in ` +
               'the solar wind — that is a claim this measurement can falsify.'
-            : 'The modelled boundary is outside 6.6 Rₑ, so the spacecraft should be inside ' +
+            : `The modelled boundary is outside 6.6 ${code('Rₑ')}, so the spacecraft should be inside ` +
               'the magnetosphere, which is what this field says.'
           : ''),
         'inst.geosync', 'inst.mpause', 'model.igrf14',
@@ -302,12 +317,12 @@ export function buildReportLines(
       say('geomagnetic', 
         `Energetic particles at geostationary orbit, measured by GOES [E], ` +
         `${hhmmUTC(pt.time)} UTC: protons above 10 MeV at ` +
-        `${pt.proton_10mev === null ? 'no data' : `${pt.proton_10mev.toFixed(2)} pfu`}, ` +
+        `${pt.proton_10mev === null ? 'no data' : `${pt.proton_10mev.toFixed(2)} ${code('pfu')}`}, ` +
         `radiation storm level ${sTxt}` +
         (pt.s_scale !== null && pt.s_scale >= 3
           ? ' — at this level aviation crews on polar routes take real dose.' : '.') +
         ` Electrons above 2 MeV at ` +
-        `${pt.electron_2mev === null ? 'no data' : `${Math.round(pt.electron_2mev)} pfu` }` +
+        `${pt.electron_2mev === null ? 'no data' : `${Math.round(pt.electron_2mev)} ${code('pfu')}` }` +
         (pt.electron_2mev !== null && pt.electron_2mev >= 1000
           ? ', above NOAA\u2019s alert level for satellite charging.'
           : ', below the level that charges satellites.'),
@@ -326,8 +341,12 @@ export function buildReportLines(
         ? `Planetary K index: unavailable (${errorReason(p.kp.error)}). ${nextAttemptText(lanes)}`
         : 'Planetary K index: no data.', 'inst.kp');
     } else {
+      // NOAA's 1-minute estimate to one decimal, as the tile and the splash
+      // write it, and NOAA's own label in thirds beside it.
+      const thirds = kpLabel(d.kp.kp);
       say('geomagnetic', 
-        `Planetary K index ${d.kp.estimated_kp === null ? 'no data' : d.kp.estimated_kp.toFixed(2)} — ` +
+        `Planetary K index (Kp) ${d.kp.estimated_kp === null ? 'no data' : d.kp.estimated_kp.toFixed(1)}` +
+        `${thirds ? `, NOAA Kp ${thirds}` : ''} — ` +
         `geomagnetic conditions are ${kpWord(d.kp.estimated_kp)}. Measured [E], ` +
         `${hhmmUTC(d.kp.time)} UTC${ks.state === 'stale' ? ' — STALE' : ''}.`,
         'inst.kp',
@@ -343,7 +362,7 @@ export function buildReportLines(
     } else {
       const ahead = d.dst.lead_minutes;
       say('geomagnetic', 
-        `Ring current index Dst ${d.dst.value_nt === null ? 'no data' : `${d.dst.value_nt.toFixed(0)} nanotesla`} — ` +
+        `Ring current index Dst (disturbance storm time) ${d.dst.value_nt === null ? 'no data' : `${num(d.dst.value_nt, 0)} ${code('nT')}`} — ` +
         `${d.dst.level ?? 'unclassified'}. This is how much a torus of trapped ions ` +
         `drifting around Earth is subtracting from the surface field; it is the ` +
         `single number that best tracks the size of a storm. Modelled [D] by NOAA's ` +
@@ -580,7 +599,7 @@ export function buildReportLines(
     const far = scene.fieldLines.far === true;
     const external = scene.fieldLines.external ?? null;
     const tilt = scene.fieldLines.tiltDeg ?? null;
-    const tiltSaid = tilt === null ? '—' : `${tilt.toFixed(1)}°`;
+    const tiltSaid = tilt === null ? '—' : `${num(tilt, 1)}°`;
     const cut = scene.fieldLines.truncated ?? 0;
 
     // Three different claims about the sky, so three different sentences — and
@@ -609,8 +628,8 @@ export function buildReportLines(
       const beyond = t96OutOfRange(i);
       externalSaid =
         `Added to it is ${t96Citation()} [D], driven by ${i.pdynNPa.toFixed(2)} nPa of ` +
-        `dynamic pressure, Dst ${i.dstNt.toFixed(0)} nT and an IMF of By ` +
-        `${i.byNt.toFixed(1)}, Bz ${i.bzNt.toFixed(1)} nT, at a dipole tilt of ${tiltSaid}. ` +
+        `dynamic pressure, Dst ${num(i.dstNt, 0)} ${code('nT')} and an IMF of By ` +
+        `${num(i.byNt, 1)}, Bz ${num(i.bzNt, 1)} nT, at a dipole tilt of ${tiltSaid}. ` +
         `That is what compresses the dayside, stretches the nightside into lobes and ` +
         `inflates the inner region: the shape is the field's, integrated, not a surface ` +
         `drawn around a dipole. Because T96 has an IMF term, the Bz above is doing ` +
@@ -638,7 +657,7 @@ export function buildReportLines(
             ? `either they crossed T96's own magnetopause, where what a line joins is the ` +
               `solar wind's field rather than ours, or they ran past the arc length the ` +
               `tail is drawn to.`
-            : `T89 is fitted inside 70 Rₑ and has no magnetopause, so the trace stops at ` +
+            : `T89 is fitted inside 70 ${code('Rₑ')} and has no magnetopause, so the trace stops at ` +
               `the edge of what the model describes — down the tail, and 20 Rₑ sunward.`)
         : '') +
       ` The boundary surfaces stop at 100° ` +

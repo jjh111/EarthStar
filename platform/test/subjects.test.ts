@@ -98,6 +98,10 @@ describe('the registry and the app cannot come apart', () => {
     }
   });
 
+  it('calls a reading by one name on its tile, its detail and every link to it', () => {
+    for (const inst of INSTRUMENTS) expect(subject(inst.subject)!.label, inst.id).toBe(inst.label);
+  });
+
   it('gives every body the scene can show a subject', () => {
     // The names are the scene's own spelling, from scales.ts and the picker.
     for (const name of ['Sun', 'Mercury', 'Venus', 'Earth', 'Mars', 'Jupiter',

@@ -20,7 +20,7 @@
 import { SCENE_KEYS } from '../a11y/keyboard.js';
 import { escapeHtml } from './margin.js';
 import { TIER_LABEL, TIER_SENTENCE, subject, type Tier } from './subjects.js';
-import { TIER_WORD } from './format.js';
+import { tierBadge } from './format.js';
 
 /**
  * The marks in the scene, in the order a reader meets them, with the colours
@@ -58,12 +58,6 @@ const RULES = [
   'Scale is stated: Globe compresses distance and says so on the stage, and True is one click away.',
 ];
 
-/** A tier badge, with its word for a reader who hears it rather than sees it. */
-function badge(t: Tier): string {
-  return `<span class="badge badge-${t.toLowerCase()}" title="${TIER_LABEL[t]}">${t}`
-    + `<span class="sr-only"> ${TIER_WORD[t]}</span></span>`;
-}
-
 function swatch(colours: Rgb[], shape: string): string {
   const [a, b] = colours.map(css);
   const fill = b ? `linear-gradient(90deg, ${a} 0 50%, ${b} 50% 100%)` : a!;
@@ -81,10 +75,10 @@ function provenance(id: string): string {
 
 export function helpHtml(): string {
   const tiers = (['E', 'D', 'M'] as Tier[]).map((t) => `
-    <li>${badge(t)} <strong>${TIER_LABEL[t]}.</strong> ${escapeHtml(TIER_SENTENCE[t])}</li>`).join('');
+    <li>${tierBadge(t, '', false)} <strong>${TIER_LABEL[t]}.</strong> ${escapeHtml(TIER_SENTENCE[t])}</li>`).join('');
   const marks = KEY.map(({ id, colours, shape }) => {
     const s = subject(id)!;
-    return `<li>${swatch(colours, shape)}<span class="help-mark">${badge(s.tier)}
+    return `<li>${swatch(colours, shape)}<span class="help-mark">${tierBadge(s.tier)}
       <strong>${escapeHtml(s.label)}.</strong> ${escapeHtml(s.oneLine)}
       <span class="help-src">${escapeHtml(provenance(id))}</span></span></li>`;
   }).join('');

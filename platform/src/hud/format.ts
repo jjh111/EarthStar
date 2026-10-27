@@ -58,6 +58,44 @@ export function kpLabel(s: string | null | undefined): string | null {
 /** The tier in words, for a label that is read rather than seen. */
 export const TIER_WORD: Record<Badge, string> = { E: 'measured', D: 'modelled', M: 'ambient' };
 
+/**
+ * The panel's codes and symbols in words — the ones a reader cannot read off
+ * the page, not km/s or a percent sign. A code is written out where the
+ * panel first uses it, with the symbol kept beside it ("0.21 particle flux
+ * units (pfu)"), and stands alone after that; where a symbol has to stand
+ * alone from the start — the sentence, a reading's unit — its words are its
+ * title, and a reading's unit says them beside it.
+ */
+export const WORDS: Record<string, string> = {
+  nT: 'nanotesla',
+  pfu: 'particle flux units',
+  'Rₑ': 'Earth radii',
+  Kp: 'planetary K index',
+  Dst: 'disturbance storm time index',
+  'nT Dst': 'nanotesla, disturbance storm time index',
+};
+
+/** A symbol that stands alone, with its words for a pointer: `<abbr title="nanotesla">nT</abbr>`. */
+export function abbr(code: string): string {
+  const words = WORDS[code];
+  return words ? `<abbr title="${words}">${code}</abbr>` : code;
+}
+
+/**
+ * A tier badge, as both surfaces write one: the mono capital in its hairline
+ * box, its word in the title for a pointer and in visually-hidden text for a
+ * reader who hears the page, so it is heard as "measured" and not as "E".
+ * `title` says more where the caller knows more (the feed, the model); a
+ * badge whose word is already written beside it (`spoken` false) says it once.
+ */
+export function tierBadge(t: Badge, title = '', spoken = true): string {
+  const word = TIER_WORD[t];
+  const attr = (title || word.replace(/^./, (c) => c.toUpperCase()))
+    .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  return `<span class="badge badge-${t.toLowerCase()}" title="${attr}">${t}${
+    spoken ? `<span class="sr-only"> ${word}</span>` : ''}</span>`;
+}
+
 export interface Staleness {
   state: 'fresh' | 'stale' | 'no-data';
   ageS: number | null;

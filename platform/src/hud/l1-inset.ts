@@ -21,9 +21,12 @@ export function l1Inset(list: SpacecraftPos[]): string {
   const maxOff = list.reduce((m, s) => Math.max(m, s.offAxisRe), 0);
   // Always show the Moon's orbit, and grow past it if a craft ever wanders out.
   const span = Math.max(MOON_ORBIT_RE * 1.12, maxOff * 1.25);
-  const R = 78;                    // px from centre to `span` Rₑ
+  // Drawn at the size it is shown (240 px), one unit to the pixel, so the
+  // lettering's 10 px is 10 px on screen and never the 8 px a scaled-up
+  // smaller drawing gave it.
+  const R = 98;                    // px from centre to `span` Rₑ
   const k = R / span;              // px per Earth radius
-  const cx = 96, cy = 92;
+  const cx = 120, cy = 115;
 
   const dots = list.map((s) => {
     // GSE +Y is duskward, +Z ecliptic north. Screen: +Y right, +Z up — the
@@ -32,19 +35,19 @@ export function l1Inset(list: SpacecraftPos[]): string {
     const x = cx + s.gse.y / 6371.2 * k;
     const y = cy - s.gse.z / 6371.2 * k;
     const cls = s.active ? 'l1-active' : 'l1-idle';
-    return `<circle class="${cls}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${s.active ? 4 : 3}" />
-      <text class="l1-label ${cls}" x="${(x + 7).toFixed(1)}" y="${(y + 3.5).toFixed(1)}">${escapeHtml(s.source)}</text>`;
+    return `<circle class="${cls}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${s.active ? 5 : 3.8}" />
+      <text class="l1-label ${cls}" x="${(x + 8).toFixed(1)}" y="${(y + 3.5).toFixed(1)}">${escapeHtml(s.source)}</text>`;
   }).join('');
 
-  return `<svg class="l1-inset" viewBox="0 0 192 184" role="img"
+  return `<svg class="l1-inset" viewBox="0 0 240 230" role="img"
       aria-label="Cross-section looking along the Sun–Earth line: the L1 monitors plotted at their true distance from the line, against the Moon's orbit for scale.">
     <circle class="l1-moon" cx="${cx}" cy="${cy}" r="${(MOON_ORBIT_RE * k).toFixed(1)}" />
-    <text class="l1-tick" x="${cx}" y="${(cy + MOON_ORBIT_RE * k + 10).toFixed(1)}">Moon’s orbit</text>
+    <text class="l1-tick" x="${cx}" y="${(cy + MOON_ORBIT_RE * k + 13).toFixed(1)}">Moon’s orbit</text>
     <line class="l1-cross" x1="${cx - R}" y1="${cy}" x2="${cx + R}" y2="${cy}" />
     <line class="l1-cross" x1="${cx}" y1="${cy - R}" x2="${cx}" y2="${cy + R}" />
-    <circle class="l1-earth" cx="${cx}" cy="${cy}" r="${Math.max(1.1, k).toFixed(2)}" />
+    <circle class="l1-earth" cx="${cx}" cy="${cy}" r="${Math.max(1.4, k).toFixed(2)}" />
     ${dots}
-    <text class="l1-axis" x="${cx + R}" y="${cy + 12}" text-anchor="end">dusk</text>
-    <text class="l1-axis" x="${cx}" y="14" text-anchor="middle">ecliptic north</text>
+    <text class="l1-axis" x="${cx + R}" y="${cy + 15}" text-anchor="end">dusk</text>
+    <text class="l1-axis" x="${cx}" y="16" text-anchor="middle">ecliptic north</text>
   </svg>`;
 }

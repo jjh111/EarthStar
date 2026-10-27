@@ -18,6 +18,7 @@
 
 import { TIER_LABEL, subject } from './subjects.js';
 import { escapeHtml } from './margin.js';
+import { tierBadge } from './format.js';
 import { PAGE_LAYOUT } from './hud.js';
 
 /*
@@ -64,6 +65,13 @@ export interface CardHost {
 export interface Box { left: number; right: number; top: number; bottom: number }
 
 const rem = (): number => parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+/**
+ * A rem of the card's measure: the root's, grown as the card's type grows on
+ * a large screen (styles.css, --grow), so its lines keep their length there.
+ * The card is set in --t-5, which is 0.9 rem before it grows.
+ */
+const cardRem = (card: HTMLElement): number =>
+  rem() * Math.max(1, parseFloat(getComputedStyle(card).fontSize) / (0.9 * rem()) || 1);
 
 /** A box, when the element is laid out and visible. */
 function boxOf(el: Element | null): DOMRect | null {
@@ -184,7 +192,7 @@ export class SubjectCard {
       // scene — and without it the card offers the reader the same word twice.
       return r
         ? `<li><button type="button" class="subject-link" data-card-subject="${escapeHtml(r.id)}">
-            <span class="badge badge-${r.tier.toLowerCase()}">${r.tier}</span>
+            ${tierBadge(r.tier)}
             ${escapeHtml(r.label)}</button> — ${escapeHtml(r.oneLine)}</li>`
         : '';
     }).join('');
@@ -195,7 +203,7 @@ export class SubjectCard {
         <button type="button" class="card-close" data-card-close
           aria-label="Close">×</button>
       </div>
-      <p class="tile-meta"><span class="badge badge-${s.tier.toLowerCase()}">${s.tier}</span>
+      <p class="tile-meta">${tierBadge(s.tier, '', false)}
         ${escapeHtml(TIER_LABEL[s.tier])}</p>
       <p class="card-one">${escapeHtml(s.oneLine)}</p>
       <p class="card-meaning">${escapeHtml(s.meaning)}</p>
@@ -234,8 +242,8 @@ export class SubjectCard {
     if (window.matchMedia(PAGE_LAYOUT).matches) return true;
     const stage = stageBox();
     const box = clearNotes(stage, stage.left, stage.right);
-    return box.right - box.left >= MIN_CARD_REM * rem()
-      && box.bottom - box.top >= MIN_CARD_HEIGHT_REM * rem();
+    return box.right - box.left >= MIN_CARD_REM * cardRem(this.el)
+      && box.bottom - box.top >= MIN_CARD_HEIGHT_REM * cardRem(this.el);
   }
 
   /**
@@ -260,7 +268,8 @@ export class SubjectCard {
     }
     this.el.classList.remove('is-sheet');
     const stage = stageBox();
-    const minW = MIN_CARD_REM * rem();
+    const u = cardRem(this.el);
+    const minW = MIN_CARD_REM * u;
     const earth = this.host.earthScreen?.() ?? null;
 
     // The room beside Earth on one side, within the stage.
@@ -279,7 +288,7 @@ export class SubjectCard {
       if (other[1] - other[0] >= minW) { toRight = !away; span = other; }
       else { span = [stage.left, stage.right]; flush = true; }
     }
-    const w = Math.min(flush ? minW : CARD_REM * rem(), span[1] - span[0]);
+    const w = Math.min(flush ? minW : CARD_REM * u, span[1] - span[0]);
     const clampX = (x: number) => Math.min(Math.max(x, span[0]), span[1] - w);
     const x = flush
       ? (toRight ? span[1] - w : span[0])

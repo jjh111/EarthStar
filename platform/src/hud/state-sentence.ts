@@ -20,7 +20,7 @@
 import type { PartMeta } from '../data/source.js';
 import type { StoreState } from '../data/store.js';
 import { valueState, type ValueStateResult } from '../data/state.js';
-import { hhmmUTC, minus, whenUTC } from './format.js';
+import { abbr, hhmmUTC, minus, whenUTC } from './format.js';
 import { agesAt, type Ages } from './live.js';
 import { inlineSpark } from './sparkline.js';
 
@@ -136,10 +136,12 @@ function reading(
   const stale = st.state === 'stale';
   const text = typeof v === 'number' ? minus(v.toFixed(digits)) : v;
   // A real space before the unit, so the sentence reads (and copies) as
-  // "330 km/s"; none before a percent sign, which binds to its number.
+  // "330 km/s"; none before a percent sign, which binds to its number. A
+  // code (nT, Kp, pfu, Rₑ) carries its words as its title; the report below
+  // writes them out where it first uses each one.
   const u = !unit ? ''
     : unit === '%' ? '<span class="sentence-unit tight">%</span>'
-      : ` <span class="sentence-unit">${unit}</span>`;
+      : ` <span class="sentence-unit">${abbr(unit)}</span>`;
   return `<b class="sentence-num${stale ? ' is-stale' : ''}">${text}</b>${u}`
     + (stale && at ? ` <span class="sentence-age">(${ages(at)} old)</span>` : '');
 }
@@ -199,7 +201,8 @@ export function stateSentence(state: StoreState, now = new Date(), ages: Ages = 
   const mp = live(mS) ? d?.magnetopause?.standoff_re ?? null : null;
   const mpWord = mp === null ? ''
     : mp < 8 ? ', compressed' : mp > 11.5 ? ', expanded' : '';
-  out.push(`${head('shield', 'shield')} ${read('', value(mp, 1, 'R⊕', mS, 'magnetopause'))}${mpWord}.`);
+  // Rₑ, as the tile and the report write it: the sentence alone had R⊕.
+  out.push(`${head('shield', 'shield')} ${read('', value(mp, 1, 'Rₑ', mS, 'magnetopause'))}${mpWord}.`);
 
   /* --- geomagnetic response at the ground --- */
   const kS = partState(state, 'kp', now);

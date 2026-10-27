@@ -538,6 +538,43 @@ function railOpenNow(): boolean {
 
 railToggle.addEventListener('click', () => setRail(!railOpenNow()));
 
+/**
+ * How many tiles are below the rail's foot, said at the foot itself while
+ * any are: the rail has no scrollbar, and a tile cut in half there was the
+ * only sign that twelve more readings could be scrolled up. A tile counts
+ * as below until its whole box is in view. A click brings the next of them
+ * up, a rail's height less one tile at a time.
+ */
+const instrumentsEl = document.getElementById('instruments') as HTMLElement;
+const railMore = btn('rail-more');
+function countBelow(): void {
+  const foot = instrumentsEl.getBoundingClientRect().bottom + 1;
+  const below = railOpenNow()
+    ? [...instrumentsEl.children].filter((t) => t.getBoundingClientRect().bottom > foot).length : 0;
+  // The count leaves once the last tile is up; a reader who pressed it from
+  // the keyboard goes on from that tile rather than from nowhere.
+  if (below === 0 && document.activeElement === railMore) {
+    (instrumentsEl.lastElementChild as HTMLElement | null)?.focus({ preventScroll: true });
+  }
+  railMore.hidden = below === 0;
+  const text = `${below} more ↓`;
+  if (below > 0 && railMore.textContent !== text) {
+    railMore.textContent = text;
+    railMore.setAttribute('aria-label', `${below} more reading${below === 1 ? '' : 's'} below: scroll the tiles`);
+  }
+}
+instrumentsEl.addEventListener('scroll', countBelow, { passive: true });
+// The rail's box, and each tile's: a tile is a line taller while its detail
+// wraps, and the rail folding or the window resizing moves the foot.
+const railSizes = new ResizeObserver(countBelow);
+for (const el of [instrumentsEl, ...instrumentsEl.children]) railSizes.observe(el);
+railMore.addEventListener('click', () => {
+  const tile = instrumentsEl.firstElementChild?.getBoundingClientRect().height ?? 0;
+  instrumentsEl.scrollBy({
+    top: Math.max(tile, instrumentsEl.clientHeight - tile), behavior: motion.reduced ? 'auto' : 'smooth',
+  });
+});
+
 btnScaleGlobe.addEventListener('click', () => setScale('globe'));
 btnScaleTrue.addEventListener('click', () => setScale('true'));
 btnScaleFlip.addEventListener('click', () => setScale(viewer.scaleMode === 'globe' ? 'true' : 'globe'));

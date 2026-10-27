@@ -7,6 +7,9 @@
  * document that silently changes shape between versions is worse than one that
  * never improved — so the text is held against a fixture, generated on the day
  * the sections were introduced and proven identical to the code before them.
+ * It has changed once since, on purpose: each code written in words where the
+ * report first uses it (nanotesla (nT), particle flux units (pfu), Earth radii
+ * (Rₑ), L1), Kp to one decimal with NOAA's thirds, and U+2212 for a minus.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -67,6 +70,32 @@ describe('the briefing export', () => {
     // briefing are describing different skies.
     const structured = buildReportLines(env, scene, NOW, null, [], []).map((l) => l.text);
     expect(structured).toEqual(buildSituationReport(env, scene, NOW, null, [], []));
+  });
+});
+
+describe('the report in words', () => {
+  const text = buildSituationReport(env, scene, NOW, null, [], []).join(' ');
+  const count = (needle: string): number => text.split(needle).length - 1;
+
+  it('writes each code out once, where it is first used, and keeps the symbol', () => {
+    for (const first of ['nanotesla (nT)', 'particle flux units (pfu)', 'Earth radii (Rₑ)']) {
+      expect(count(first), first).toBe(1);
+    }
+    expect(text.indexOf('nanotesla (nT)')).toBeLessThan(text.indexOf(' nT;'));
+    expect(text.indexOf('particle flux units (pfu)')).toBeLessThan(text.indexOf('1400 pfu'));
+    expect(text).toContain('Solar wind at L1, the Lagrange point between the Sun and Earth');
+    expect(text).toContain('Ring current index Dst (disturbance storm time)');
+  });
+
+  it('writes Kp to one decimal with NOAA\'s thirds, as the tile and the splash do', () => {
+    expect(text).toContain('Planetary K index (Kp) 5.3, NOAA Kp 5+');
+    expect(text).not.toContain('5.33');
+  });
+
+  it('writes a negative number with U+2212', () => {
+    expect(text).toContain('Bz \u22129.1 nanotesla');
+    expect(text).toContain('Dst (disturbance storm time) \u221264 nT');
+    expect(text).not.toMatch(/Bz -\d/);
   });
 });
 

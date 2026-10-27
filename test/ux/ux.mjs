@@ -82,6 +82,8 @@ export const LAYERS = {
     ['.margin-actions', 2], ['#status', 2], ['#perf', 2],
     // The way in to the help, and the first visit's hint to it.
     ['.help-toggle', 2], ['.help-chip', 2],
+    // The rail's count of the tiles below its foot, over the one cut there.
+    ['.rail-more', 2],
   ],
   splash: [
     ['.hero', 3],
