@@ -25,11 +25,14 @@ import type { SunPlaneCalibration } from '../scene/sun-plane.js';
 import { tileSpark } from './tile-spark.js';
 import { inlineSpark } from './sparkline.js';
 import {
-  BODY_PREFIX, NOTICES_DETAIL, NOTICES_SUBJECT, TABS, escapeHtml, renderChecks, renderDetail,
-  renderForecast, renderReport, renderSources, renderSun, type SunState, type TabId,
+  BODY_PREFIX, NOTICES_DETAIL, TABS, detailFor, detailSubject, escapeHtml, renderChecks,
+  renderDetail, renderForecast, renderReport, renderSources, renderSun, sunStamp,
+  type SunState, type TabId,
 } from './margin.js';
 import { buildSituationReport, type SceneNarration } from './situation-report.js';
 import { briefingFilename, buildBriefing } from './briefing.js';
+import { fillLive } from './live.js';
+import { announce } from '../a11y/keyboard.js';
 
 export interface HudCallbacks {
   onSelectLoop(id: string): void;
@@ -45,7 +48,70 @@ export interface HudCallbacks {
   onSunPlanes?(on: boolean): void;
   /** A detail, or the report from its tile, has just been put in front of the reader. */
   onOpenDetail?(id: string): void;
+  /**
+   * The reader moved to a tab or a detail, for the router to record. A detail
+   * is given by its registry id (`detailSubject`), or 'notices'. The router
+   * ignores the calls its own applying of an address makes.
+   */
+  onNavigate?(tab: TabId, detailId: string | null): void;
 }
+
+/** What the status line is saying, in the four kinds a reader must tell apart. */
+export type StatusKind = 'live' | 'mirror' | 'degraded' | 'error';
+
+/**
+ * Same element, same attributes — except a `<details>`'s `open`, which belongs
+ * to the reader: the panel writes the remembered state, the reader may have
+ * changed it since, and a rebuild must not take it back.
+ */
+function sameShell(a: Element, b: Element): boolean {
+  if (a.tagName !== b.tagName) return false;
+  const names = (e: Element): string[] =>
+    e.getAttributeNames().filter((n) => !(n === 'open' && e.tagName === 'DETAILS'));
+  const na = names(a);
+  const nb = names(b);
+  return na.length === nb.length && na.every((n) => a.getAttribute(n) === b.getAttribute(n));
+}
+
+/**
+ * Bring `live` from what `was` describes to what `next` describes, replacing
+ * only what differs. `was` and `next` are parsed and never shown; `live` was
+ * built from `was`, so where their shapes agree a child of one is the same
+ * child of the other, and a paragraph whose words did not change is left in
+ * place — with the reader's focus, selection and screen-reader position in it.
+ * Where the shapes part, that level is rebuilt whole: always correct, merely
+ * less gentle. The panel's out-of-band writes — the live spans' words, a
+ * cached Sun frame in its slot — sit only where `was` and `next` agree, so
+ * they are never compared and never lost.
+ */
+function morph(live: Node, was: Node, next: Node): void {
+  const L = live.childNodes;
+  const W = was.childNodes;
+  const N = next.childNodes;
+  if (L.length !== W.length || W.length !== N.length) {
+    (live as Element).replaceChildren(...[...N].map((n) => n.cloneNode(true)));
+    return;
+  }
+  for (let i = 0; i < N.length; i++) {
+    const w = W[i]!;
+    const n = N[i]!;
+    if (w.isEqualNode(n)) continue;
+    const l = L[i]!;
+    if (w instanceof Element && n instanceof Element && l instanceof Element && sameShell(w, n)) {
+      morph(l, w, n);
+    } else {
+      live.replaceChild(n.cloneNode(true), l);
+    }
+  }
+}
+
+function parse(html: string): HTMLTemplateElement {
+  const t = document.createElement('template');
+  t.innerHTML = html;
+  return t;
+}
+
+const FOCUSABLE = 'a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])';
 
 /**
  * The phone layout: one page that scrolls, the scene a band across its top.
@@ -231,6 +297,24 @@ export class Hud {
   private detailId: string | null = null;
   private checksRequested = false;
 
+  /**
+   * What the panel body last wrote, for which tab and detail, and that HTML
+   * parsed: a render that would write the same string writes nothing, and one
+   * that differs replaces only the parts that do (`morph`).
+   */
+  private lastHtml = '';
+  private lastKey = '';
+  private lastTemplate: HTMLTemplateElement | null = null;
+  /** A rebuild held back while the reader holds a selection or the scrubber. */
+  private held: { cancel(): void } | null = null;
+  /** The selection wait ran out; the next rebuild goes ahead regardless. */
+  private overdue = false;
+  /** The written ticker and header notice, so an unchanged one is not rewritten. */
+  private tickerHtml = '';
+  private headlineHtml = '';
+  /** The status line's kind; a change of kind is the one thing it announces. */
+  private statusKind: StatusKind = 'live';
+
   private state: StoreState | null = null;
   private checks: CheckResult | null = null;
   private checksRunning = false;
@@ -322,7 +406,15 @@ export class Hud {
     this.sun.frameIndex = i;
     if (this.tab === 'sun') this.updateSunFrame();
   }
-  setSunPlaying(p: boolean): void { this.sun.playing = p; if (this.tab === 'sun') this.renderMargin(); }
+  /**
+   * Only a change re-renders. Scrubbing pauses on every input event, and a
+   * render per event swapped the range input out from under the pointer.
+   */
+  setSunPlaying(p: boolean): void {
+    if (p === this.sun.playing) return;
+    this.sun.playing = p;
+    if (this.tab === 'sun') this.renderMargin();
+  }
 
   /**
    * What the scene measured out of each frame, for the panel to state.
@@ -367,6 +459,10 @@ export class Hud {
 
   get sunState(): SunState { return this.sun; }
   get activeTab(): TabId { return this.tab; }
+  /** The open detail by its registry id, or 'notices'; null when a tab is showing. */
+  get activeDetail(): string | null {
+    return this.tab === 'detail' && this.detailId ? detailSubject(this.detailId) : null;
+  }
 
   /* ---------------- construction ---------------- */
 
@@ -546,6 +642,7 @@ export class Hud {
       this.cb.onLoadForecast();
     }
     this.renderMargin();
+    this.cb.onNavigate?.(tab, null);
   }
 
   /**
@@ -566,7 +663,9 @@ export class Hud {
       checks: this.checks,
       forecast: this.forecast,
       now,
-      origin: `${location.origin}${location.pathname}`,
+      // The address of exactly this state — view, scale, layers, tab, detail —
+      // so the document links back to what the reader was looking at.
+      origin: `${location.origin}${location.pathname}${location.hash}`,
     });
   }
 
@@ -594,26 +693,35 @@ export class Hud {
     this.flash(this.downloadEl, 'Saved');
   }
 
-  /** Confirm an action on its own button, so no layout moves. */
+  /**
+   * Confirm an action on its own button, so no layout moves — and out loud,
+   * because a label that changes under a screen reader is not heard.
+   */
   private flash(el: HTMLElement, text: string): void {
     const original = el.dataset['label'] ?? el.textContent ?? '';
     el.dataset['label'] = original;
     el.textContent = text;
+    announce(text);
     window.setTimeout(() => { el.textContent = el.dataset['label'] ?? original; }, 1600);
   }
 
   /** Open a body's detail from a click in the scene. */
   showBody(name: string): void { this.openDetail(BODY_PREFIX + name); }
 
-  /** Open any subject — a model, a drawn layer, an idea — by registry id. */
+  /**
+   * Open any subject — a model, a drawn layer, an idea, an instrument, a body —
+   * by registry id, or 'notices'. An instrument opens its live reading and a
+   * body its distances (`detailFor`), whichever route asked.
+   */
   showSubject(id: string): void { this.openDetail(id); }
 
   /** Every NOAA notice in the feed, verbatim — from the header notice and the ticker. */
   openNotices(): void { this.openDetail(NOTICES_DETAIL); }
 
-  private openDetail(id: string): void {
-    // The notices subject is read where the notices are, not as a card of its own.
-    if (id === NOTICES_SUBJECT) id = NOTICES_DETAIL;
+  private openDetail(asked: string): void {
+    // A registry id or the panel's own key: an instrument opens its reading, a
+    // body its distances, and the notices subject the notices themselves.
+    const id = detailFor(asked);
     this.tab = 'detail';
     this.detailId = id;
     // Notices are the Now tab's own detail, so its tab stays lit and is the way
@@ -635,6 +743,16 @@ export class Hud {
     // A new detail starts at its top, not at the old panel's scroll position.
     this.bodyEl.scrollTop = 0;
     this.reveal(id);
+    this.cb.onNavigate?.('detail', detailSubject(id));
+  }
+
+  /**
+   * On a phone, bring the column's head — the tab bar — under the header: where
+   * an opened detail lands, and where Back from one lands. On a desktop the
+   * column is always in view and this does nothing.
+   */
+  scrollToPanel(): void {
+    if (window.matchMedia(PAGE_LAYOUT).matches) this.marginEl.scrollIntoView({ block: 'start' });
   }
 
   /**
@@ -646,7 +764,7 @@ export class Hud {
    */
   private reveal(id: string): void {
     this.bodyEl.focus({ preventScroll: true });
-    if (window.matchMedia(PAGE_LAYOUT).matches) this.marginEl.scrollIntoView({ block: 'start' });
+    this.scrollToPanel();
     this.cb.onOpenDetail?.(id);
   }
 
@@ -666,11 +784,71 @@ export class Hud {
   render(state: StoreState): void {
     this.state = state;
     const now = new Date();
+    this.writeClock(now);
+    this.renderRail(state, now);
+
+    // Notices: the header shows the most consequential one in force, or
+    // nothing — it never says "all clear". The ticker's text is built by
+    // `noticeTicker`, a pure function, so its failed state can be tested.
+    // Each is written only when its text changes: rewriting an unchanged
+    // ticker every minute took the focus off its own "+N more".
+    const notices = noticeTicker(state, now);
+    const top = notices.top;
+    this.headlineEl.hidden = !top;
+    if (top) {
+      const html = `<span class="alert-level">${escapeHtml(noticeWord(top, now))}</span>`
+        + `<span class="alert-text">${escapeHtml(top.text || top.product)}</span>`
+        + `<span class="alert-time">${escapeHtml(whenUTC(top.issued, now))}</span>`;
+      this.headlineEl.className = `headline-alert level-${top.level}`;
+      if (html !== this.headlineHtml) { this.headlineEl.innerHTML = html; this.headlineHtml = html; }
+      this.headlineEl.title = `${validityText(top, now)} — ${top.message.slice(0, 400)}`;
+    }
+    const ticker = '<span class="ticker-tag">NOAA</span>'
+      + `<span class="ticker-items" data-t>${notices.items}</span>`;
+    if (ticker !== this.tickerHtml) {
+      this.tickerEl.innerHTML = ticker;
+      this.tickerHtml = ticker;
+      this.fitTicker();
+    }
+
+    // Status: the short form in the foot, the whole sentence in its title. It
+    // is not a live region — its time moves every minute — so it is spoken
+    // only when its kind changes: live to mirror, to failed, and back.
+    const status = statusLine(state, now);
+    this.statusEl.classList.toggle('is-error', status.tone === 'error');
+    this.statusEl.classList.toggle('is-mirror', status.tone === 'mirror');
+    this.statusEl.classList.toggle('is-degraded', status.tone === 'degraded');
+    if (this.statusEl.textContent !== status.text) this.statusEl.textContent = status.text;
+    this.statusEl.title = status.title;
+    const kind: StatusKind = status.tone ?? 'live';
+    if (kind !== this.statusKind) {
+      this.statusKind = kind;
+      announce(status.text);
+    }
+
+    this.renderMargin();
+  }
+
+  /**
+   * The clock's own work, every 30 s: the time in the header, the tiles' ages,
+   * and every age in the panel. Nothing in the panel is rebuilt by it — that
+   * waits for the store or the reader to change something.
+   */
+  tick(now = new Date()): void {
+    this.writeClock(now);
+    if (this.state) this.renderRail(this.state, now);
+    fillLive(this.bodyEl, now);
+  }
+
+  private writeClock(now: Date): void {
+    const text = `${now.toISOString().slice(0, 10)} ${hhmmUTC(now.toISOString())} UTC`;
+    if (this.clockEl.textContent !== text) this.clockEl.textContent = text;
+  }
+
+  /** The rail: every tile, its value, state and age, and the layer toggles' states. */
+  private renderRail(state: StoreState, now: Date): void {
     const env = state.now;
     const d = env?.data ?? null;
-
-    this.clockEl.textContent =
-      `${now.toISOString().slice(0, 10)} ${hhmmUTC(now.toISOString())} UTC`;
 
     /**
      * One state per value slot, from the machine in data/state.ts — loading,
@@ -781,35 +959,6 @@ export class Hud {
     this.setToggleState('wind-toggle', snapshotLane.loading ? 'loading'
       : d?.solar_wind ? 'fresh'
         : (env?.parts?.solar_wind?.error ?? state.lastError) ? 'error' : 'no-data');
-
-    // Notices: the header shows the most consequential one in force, or
-    // nothing — it never says "all clear". The ticker's text is built by
-    // `noticeTicker`, a pure function, so its failed state can be tested.
-    const notices = noticeTicker(state, now);
-    const top = notices.top;
-    this.headlineEl.hidden = !top;
-    if (top) {
-      this.headlineEl.className = `headline-alert level-${top.level}`;
-      this.headlineEl.innerHTML =
-        `<span class="alert-level">${escapeHtml(noticeWord(top, now))}</span>`
-        + `<span class="alert-text">${escapeHtml(top.text || top.product)}</span>`
-        + `<span class="alert-time">${escapeHtml(whenUTC(top.issued, now))}</span>`;
-      this.headlineEl.title = `${validityText(top, now)} — ${top.message.slice(0, 400)}`;
-    }
-    this.tickerEl.innerHTML =
-      '<span class="ticker-tag">NOAA</span><span class="ticker-items" data-t></span>';
-    (this.tickerEl.querySelector('[data-t]') as HTMLElement).innerHTML = notices.items;
-    this.fitTicker();
-
-    // Status: the short form in the foot, the whole sentence in its title.
-    const status = statusLine(state, now);
-    this.statusEl.classList.toggle('is-error', status.tone === 'error');
-    this.statusEl.classList.toggle('is-mirror', status.tone === 'mirror');
-    this.statusEl.classList.toggle('is-degraded', status.tone === 'degraded');
-    this.statusEl.textContent = status.text;
-    this.statusEl.title = status.title;
-
-    this.renderMargin();
   }
 
   /** What the scene's Earth surface carries, for the provenance rows. */
@@ -837,10 +986,13 @@ export class Hud {
    */
   setStats(s: FrameStats): void {
     const scale = renderScale(s);
-    this.rendering = scale.sentence;
     const scaleKey = `${s.pixelRatio}/${s.maxPixelRatio}`;
     if (scaleKey !== this.scaleKey) {
       this.scaleKey = scaleKey;
+      // The Sources row is the sentence as the scale was set, frame rate and
+      // all; a frame rate that moves every second would otherwise make every
+      // render of that tab a change.
+      this.rendering = scale.sentence;
       if (this.tab === 'sources') this.renderMargin();
     }
     const key = scale.reduced ? scale.sentence : '';
@@ -879,35 +1031,161 @@ export class Hud {
 
   private remembered = (id: string): boolean | undefined => this.sectionState.get(id);
 
+  /** The panel body as the current tab would write it. */
+  private marginHtml(state: StoreState, now: Date): string {
+    switch (this.tab) {
+      case 'report': return renderReport(state, this.narration, now, this.remembered);
+      case 'forecast':
+        return renderForecast(
+          this.forecast, this.forecastLoading, state?.cmes ?? [], this.remembered,
+          this.forecastError,
+        );
+      case 'sun': return renderSun(this.sun, LOOPS, this.cycle, this.cycleLoading, this.cycleError);
+      case 'sources':
+        return renderSources(state, this.checks, this.remembered, {
+          surface: this.narration.earthSurface ?? 'vector',
+          lights: this.earthLights, coast: this.earthCoast,
+        }, this.rendering);
+      case 'checks': return renderChecks(this.checks, this.checksRunning);
+      case 'detail': return this.detailId ? renderDetail(this.detailId, state, now) : '';
+    }
+  }
+
+  /**
+   * Write the panel body — or, far more often, decide there is nothing to write.
+   *
+   * The store ticks every minute and the scene narrates every toggle, and the
+   * panel used to be replaced wholesale each time: focus fell to the page,
+   * a selection vanished, the Sun's scrubber let go mid-drag, all under a
+   * reader who had changed nothing. Now:
+   *  - the same tab and detail with the same HTML writes nothing (ages and the
+   *    scene's clock are live spans, filled by `tick`, so they do not count);
+   *  - different HTML replaces only the parts that differ (`morph`), and puts
+   *    focus back if the element that had it was among them;
+   *  - that waits while a selection is held in the panel (until it is let go,
+   *    or 20 s) or the scrubber is held, because both would be lost;
+   *  - a different tab or detail — the reader asked for it — is drawn whole,
+   *    at once.
+   */
   private renderMargin(): void {
     const state = this.state;
     if (!state) return;
     const now = new Date();
-    switch (this.tab) {
-      case 'report':
-        this.bodyEl.innerHTML = renderReport(state, this.narration, now, this.remembered);
-        break;
-      case 'forecast':
-        this.bodyEl.innerHTML = renderForecast(
-          this.forecast, this.forecastLoading, state?.cmes ?? [], this.remembered,
-          this.forecastError,
-        );
-        break;
-      case 'sun':
-        this.bodyEl.innerHTML = renderSun(this.sun, LOOPS, this.cycle, this.cycleLoading, this.cycleError);
-        this.placeSunFrame();
-        break;
-      case 'sources':
-        this.bodyEl.innerHTML = renderSources(state, this.checks, this.remembered, {
-          surface: this.narration.earthSurface ?? 'vector',
-          lights: this.earthLights, coast: this.earthCoast,
-        }, this.rendering);
-        break;
-      case 'checks': this.bodyEl.innerHTML = renderChecks(this.checks, this.checksRunning); break;
-      case 'detail':
-        this.bodyEl.innerHTML = this.detailId ? renderDetail(this.detailId, state, now) : '';
-        break;
+    const html = this.marginHtml(state, now);
+    const key = `${this.tab}:${this.detailId ?? ''}`;
+    if (key !== this.lastKey) {
+      this.held?.cancel();
+      const next = parse(html);
+      this.bodyEl.replaceChildren(next.content.cloneNode(true));
+      this.lastTemplate = next;
+    } else if (html !== this.lastHtml) {
+      if (this.mustWait()) return;
+      const next = parse(html);
+      const focus = this.focusKey();
+      if (this.lastTemplate) morph(this.bodyEl, this.lastTemplate.content, next.content);
+      else this.bodyEl.replaceChildren(next.content.cloneNode(true));
+      this.lastTemplate = next;
+      this.restoreFocus(focus);
+    } else {
+      fillLive(this.bodyEl, now);
+      return;
     }
+    this.lastHtml = html;
+    this.lastKey = key;
+    if (this.tab === 'sun') this.placeSunFrame();
+    fillLive(this.bodyEl, now);
+  }
+
+  /** A selection the reader is holding inside the panel. */
+  private selectionHeld(): boolean {
+    const s = document.getSelection();
+    if (!s || s.isCollapsed || s.rangeCount === 0) return false;
+    return this.bodyEl.contains(s.anchorNode) || this.bodyEl.contains(s.focusNode);
+  }
+
+  private scrubHeld(): boolean {
+    return !!this.bodyEl.querySelector('#sun-scrub:active');
+  }
+
+  /**
+   * Whether a rebuild must wait, arranging for it to happen when it may: on
+   * the pointer's release for the scrubber; for a selection, when it is let go
+   * or after 20 s, whichever is first — a selection left behind cannot hold
+   * the panel's news back for ever.
+   */
+  private mustWait(): boolean {
+    if (this.held) return true;
+    if (this.scrubHeld()) {
+      // :active clears after pointerup has been dispatched, so look a task later.
+      this.hold(['pointerup', 'pointercancel'], () => window.setTimeout(() => {
+        if (!this.scrubHeld()) this.release();
+      }, 0), 0);
+      return true;
+    }
+    if (!this.overdue && this.selectionHeld()) {
+      this.hold(['selectionchange'], () => { if (!this.selectionHeld()) this.release(); }, 20_000);
+      return true;
+    }
+    this.overdue = false;
+    return false;
+  }
+
+  private hold(events: string[], check: () => void, capMs: number): void {
+    const timer = capMs ? window.setTimeout(() => { this.overdue = true; this.release(); }, capMs) : 0;
+    const cancel = (): void => {
+      for (const e of events) document.removeEventListener(e, check, true);
+      window.clearTimeout(timer);
+      this.held = null;
+    };
+    for (const e of events) document.addEventListener(e, check, true);
+    this.held = { cancel };
+  }
+
+  /**
+   * End the wait and write what was held back. The overdue pass is for this
+   * one write: if nothing differs by now it is not spent, and must not carry
+   * over to let the next change through under a selection made later.
+   */
+  private release(): void {
+    this.held?.cancel();
+    this.renderMargin();
+    this.overdue = false;
+  }
+
+  /**
+   * Where focus is in the panel, said so it survives a rebuild: a section by
+   * its summary, a subject link by its id and which of them it was, anything
+   * else by its id, or by its place among the panel's focusable elements.
+   */
+  private focusKey(): string | null {
+    const a = document.activeElement;
+    if (!(a instanceof HTMLElement) || a === this.bodyEl || !this.bodyEl.contains(a)) return null;
+    const sect = a.closest('[data-sect]') as HTMLElement | null;
+    if (a.tagName === 'SUMMARY' && sect && a.parentElement === sect) return `sect:${sect.dataset['sect']}`;
+    const subj = a.dataset['subject'];
+    if (subj) {
+      const same = [...this.bodyEl.querySelectorAll(`[data-subject="${CSS.escape(subj)}"]`)];
+      return `subject:${subj}:${same.indexOf(a)}`;
+    }
+    if (a.id) return `id:${a.id}`;
+    return `n:${[...this.bodyEl.querySelectorAll(FOCUSABLE)].indexOf(a)}`;
+  }
+
+  /** Put focus back where `focusKey` said it was, if the rebuild took it away. */
+  private restoreFocus(key: string | null): void {
+    if (!key) return;
+    const a = document.activeElement;
+    if (a && a !== document.body && a.isConnected) return;
+    const [kind, ...rest] = key.split(':');
+    const arg = rest.join(':');
+    let el: Element | null | undefined = null;
+    if (kind === 'sect') el = this.bodyEl.querySelector(`[data-sect="${CSS.escape(arg)}"] > summary`);
+    else if (kind === 'subject') {
+      const at = arg.lastIndexOf(':');
+      el = this.bodyEl.querySelectorAll(`[data-subject="${CSS.escape(arg.slice(0, at))}"]`)[Number(arg.slice(at + 1))];
+    } else if (kind === 'id') el = document.getElementById(arg);
+    else el = this.bodyEl.querySelectorAll(FOCUSABLE)[Number(arg)];
+    if (el instanceof HTMLElement && this.bodyEl.contains(el)) el.focus({ preventScroll: true });
   }
 
   /**
@@ -960,11 +1238,14 @@ export class Hud {
     this.placeSunFrame();
     const stamp = this.bodyEl.querySelector('.sun-stamp');
     if (stamp) {
-      const age = Math.round((Date.now() - Date.parse(f.time)) / 60000);
-      stamp.innerHTML = `<span>${hhmmUTC(f.time)} UTC</span><span>${age} min ago</span>`;
+      stamp.innerHTML = sunStamp(f.time);
+      fillLive(stamp, new Date());
     }
     const scrub = document.getElementById('sun-scrub') as HTMLInputElement | null;
     if (scrub && document.activeElement !== scrub) scrub.value = String(this.sun.frameIndex);
+    const count = this.bodyEl.querySelector('[data-frame-count]');
+    const frames = this.sun.loop?.frames.length ?? 0;
+    if (count) count.textContent = `${this.sun.frameIndex + 1}/${frames}`;
   }
 
   /**

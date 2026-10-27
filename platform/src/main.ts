@@ -26,6 +26,9 @@ import { errorReason } from './data/state.js';
 import { TIER_WORD, whenUTC } from './hud/format.js';
 import { SubjectCard } from './hud/subject-card.js';
 import { bodySubjectId, subject } from './hud/subjects.js';
+import {
+  DEFAULT_LAYERS, formatHash, parseHash, type LayerId, type Route,
+} from './hud/route.js';
 
 const canvas = document.getElementById('scene') as HTMLCanvasElement;
 /**
@@ -341,6 +344,8 @@ const hud = new Hud({
   // it; the rail folds behind it, so on the way back up the band is the view
   // again. The reader's saved setting is left as they made it.
   onOpenDetail: () => { if (window.matchMedia(PAGE_LAYOUT).matches) setRail(false, false, false); },
+  // A tab or a detail is a step the reader can go Back from.
+  onNavigate: () => writeHash(true),
 });
 
 /* ---------------- controls ---------------- */
@@ -397,9 +402,9 @@ function syncNarration(): void {
   hud.render(store.get());
 }
 
-function setView(v: ViewName): void {
+function setView(v: ViewName, immediate = false): void {
   view = v;
-  viewer.setView(v);
+  viewer.setView(v, immediate);
   for (const [id, b] of viewButtons) b.setAttribute('aria-pressed', String(id === v));
   const spec = VIEWS.find((x) => x.id === v);
   announce(`${spec?.label ?? v} view — ${spec?.title ?? ''}`);
@@ -413,6 +418,7 @@ function setView(v: ViewName): void {
   if (v === 'polar' && !viewer.auroraOn) setAurora(true);
   syncStageNote();
   syncNarration();
+  writeHash(false);
 }
 
 /**
@@ -430,6 +436,7 @@ function setScale(mode: ScaleMode): void {
   scaleNoteEl.hidden = false;
   announce(scaleLabel(mode));
   syncNarration();
+  writeHash(false);
 }
 
 function setShield(on: boolean): void {
@@ -437,6 +444,7 @@ function setShield(on: boolean): void {
   btnShield.setAttribute('aria-pressed', String(on));
   announce(on ? 'Magnetic field lines and boundaries shown.' : 'Field hidden.');
   syncNarration();
+  writeHash(false);
 }
 
 function setAurora(on: boolean): void {
@@ -444,6 +452,7 @@ function setAurora(on: boolean): void {
   btnAurora.setAttribute('aria-pressed', String(on));
   announce(on ? 'Aurora forecast shown.' : 'Aurora hidden.');
   syncNarration();
+  writeHash(false);
 }
 
 function setWind(on: boolean): void {
@@ -451,6 +460,7 @@ function setWind(on: boolean): void {
   btnWind.setAttribute('aria-pressed', String(on));
   announce(on ? 'Solar wind stream shown.' : 'Solar wind stream hidden.');
   syncNarration();
+  writeHash(false);
 }
 
 /**
@@ -534,6 +544,7 @@ function setCmes(on: boolean): void {
   btnCme.setAttribute('aria-pressed', String(on));
   announce(on ? 'CME cones shown.' : 'CME cones hidden.');
   syncNarration();
+  writeHash(false);
 }
 btnCme.addEventListener('click', () => setCmes(!viewer.cmesOn));
 
@@ -544,8 +555,107 @@ function setCoast(on: boolean): void {
     ? 'Vector coastlines drawn over the surface imagery.'
     : 'Coastlines hidden — the raster surface only.');
   syncNarration();
+  writeHash(false);
 }
 btnCoast.addEventListener('click', () => setCoast(!viewer.coastOverlayOn));
+
+/* ---------------- the address ---------------- */
+
+/**
+ * The URL's fragment is the address of what the reader is looking at
+ * (hud/route.ts): reload keeps it, a link opens it, and Back closes what was
+ * opened. A view, scale or layer change rewrites the current entry — five
+ * views in a row are not five steps back — while a tab or a detail is a step
+ * of its own. The rail's open or closed state stays a per-device setting in
+ * localStorage; it is not part of what a link shares.
+ */
+const ROUTE_STATE = { viewer: 1 };
+/**
+ * True while an address is being applied, so applying it does not write it
+ * again — and from the start until the opening address has been applied, so
+ * the boot's own defaults cannot overwrite a link before it is read.
+ */
+let routing = true;
+// Back lands on the tab bar, not wherever the page last stood (see onAddress).
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+
+function layersNow(): Record<LayerId, boolean> {
+  return {
+    field: viewer.shieldOn, aurora: viewer.auroraOn, wind: viewer.windOn,
+    cmes: viewer.cmesOn, coast: viewer.coastOverlayOn,
+  };
+}
+const SET_LAYER: Record<LayerId, (on: boolean) => void> = {
+  field: setShield, aurora: setAurora, wind: setWind, cmes: setCmes, coast: setCoast,
+};
+
+/** Whether the current history entry is one this page wrote. */
+const ownEntry = (): boolean => (history.state as { viewer?: number } | null)?.viewer === 1;
+
+/** Write the page's state into the address: a new entry for a step, else in place. */
+function writeHash(push: boolean): void {
+  if (routing) return;
+  const hash = formatHash({
+    view, scale: viewer.scaleMode, tab: hud.activeTab, detail: hud.activeDetail, layers: layersNow(),
+  });
+  if (hash === location.hash && ownEntry()) return;
+  const url = `${location.pathname}${location.search}${hash}`;
+  if (push && hash !== location.hash) history.pushState(ROUTE_STATE, '', url);
+  else history.replaceState(ROUTE_STATE, '', url);
+}
+
+/**
+ * Put the page in the state an address names, in the order each step needs
+ * the one before: the scale, then the view framed for it, then the layers —
+ * after the view, because Polar turns the aurora on and the address may say
+ * off — then the tab or the detail. With `scene` false only the panel moves.
+ * Returns whether the panel changed.
+ */
+function applyRoute(r: Route, scene: boolean, immediate: boolean): boolean {
+  const was = routing;
+  routing = true;
+  try {
+    if (scene) {
+      const scale = r.scale ?? 'globe';
+      const v = r.view ?? 'deck';
+      const rescaled = scale !== viewer.scaleMode;
+      if (rescaled) setScale(scale);
+      if (rescaled || v !== view) setView(v, immediate);
+      for (const id of Object.keys(DEFAULT_LAYERS) as LayerId[]) {
+        const on = r.layers[id] ?? DEFAULT_LAYERS[id];
+        if (layersNow()[id] !== on) SET_LAYER[id](on);
+      }
+    }
+    if (r.detail) {
+      if (hud.activeDetail === r.detail) return false;
+      hud.showSubject(r.detail);
+      return true;
+    }
+    const tab = r.tab ?? 'report';
+    if (hud.activeTab === tab) return false;
+    hud.selectTab(tab);
+    return true;
+  } finally {
+    routing = was;
+  }
+}
+
+/**
+ * Back, Forward, or a fragment typed or followed. An entry this page wrote
+ * carries ROUTE_STATE: going back to it moves the panel only, and the view,
+ * scale and layers stay as the reader has them, because changing those was
+ * never a step. Anything else — a typed address, a followed link — is applied
+ * whole. Either way the entry is then rewritten as the page now stands.
+ */
+function onAddress(): void {
+  const r = parseHash(location.hash);
+  if (!r) return;
+  const moved = applyRoute(r, !ownEntry(), false);
+  writeHash(false);
+  if (moved) hud.scrollToPanel();
+}
+window.addEventListener('popstate', onAddress);
+window.addEventListener('hashchange', onAddress);
 
 btnMotion.addEventListener('click', () => motion.setOverride(!motion.reduced));
 
@@ -568,9 +678,12 @@ installKeyboard({
   focusReport: () => hud.selectTab('report'),
 });
 
-// The header notice opens every notice, verbatim. Its href stays, so without
-// script it still lands on the report.
+// The header notice opens every notice, verbatim. Its href is the Notices
+// detail's address; a plain click goes through the router instead, so the
+// view, scale and layers in the address are kept rather than reset by it. A
+// click meant for a new tab or window follows the href.
 document.getElementById('headline-alert')?.addEventListener('click', (e) => {
+  if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
   e.preventDefault();
   hud.openNotices();
 });
@@ -669,13 +782,41 @@ function afterFirstPaint(fn: () => void): void {
   requestAnimationFrame(() => requestAnimationFrame(fn));
 }
 
-// Ages tick even when the feed does not.
-window.setInterval(syncNarration, 30_000);
+// Ages tick even when the feed does not — and only the ages: the panel is
+// rebuilt when the store or the reader changes something, never by the clock.
+window.setInterval(() => hud.tick(), 30_000);
 sunTimer = window.setInterval(stepSun, 220);
 
 setScale('globe');
 setWind(true);
 viewer.start();
+// Open on the address, if there is one: a link from the splash, a reload. A
+// detail opened before the data has landed shows its loading state until then.
+const opening = parseHash(location.hash);
+if (opening) {
+  applyRoute(opening, true, true);
+  // A detail scrolls itself into view on a phone; a tab the address names
+  // is shown the same way.
+  if (opening.tab && !opening.detail) hud.scrollToPanel();
+  // On a phone the column's top moves once the first snapshot lands — the
+  // ticker above it grows from its loading line to two — which left the tab
+  // bar 22 px under where it was put. It is put there again then, unless the
+  // reader has scrolled in the meantime.
+  if ((opening.tab || opening.detail) && window.matchMedia(PAGE_LAYOUT).matches) {
+    const y = window.scrollY;
+    let done = false;
+    const off = store.subscribe((s) => {
+      if (done || (!s.now && !s.lastError)) return;
+      done = true;
+      requestAnimationFrame(() => {
+        off();
+        if (Math.abs(window.scrollY - y) < 2) hud.scrollToPanel();
+      });
+    });
+  }
+}
+routing = false;
+writeHash(false);
 store.start();
 afterFirstPaint(loadEarthImagery);
 

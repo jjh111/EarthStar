@@ -869,6 +869,11 @@ header.top {
        column's top, under the header. Not the tab bar's own box — stuck, it
        is already "in view", and scrolling to it would go nowhere. */
     scroll-margin-top: var(--header-real-h, var(--header-h));
+    /* At least a screen tall under the header, so that scroll can always put
+       the tab bar at the top: a short panel — a detail still loading on a
+       cold link, the Checks before they run — otherwise left the page too
+       short to get there, and the detail opened somewhere below the band. */
+    min-height: calc(100vh - var(--header-real-h, var(--header-h)));
   }
   .status {
     order: -1; align-self: stretch; padding: 0.25rem 0.8rem; border-bottom: 1px solid var(--line);
@@ -970,6 +975,9 @@ header.top {
   .margin {
     display: grid; grid-template-rows: auto 1fr auto;
     background: var(--bg-margin); border-left: 1px solid var(--line); border-top: 0;
+    /* One screen here, so the phone page's screen-tall column does not
+       apply (it squeezed the header's row): back to the desktop's 0. */
+    min-height: 0;
   }
   .margin-body { overflow-y: auto; }
   .tabs { position: static; }

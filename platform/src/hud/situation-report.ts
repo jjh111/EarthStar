@@ -9,14 +9,14 @@
 import type { NowEnvelope } from '../data/source.js';
 import { VIEWS } from '../scene/camera-rig.js';
 import type { SpacecraftPos } from '../data/ephemerides.js';
-import { hhmmUTC, formatAge } from '../contract/types.js';
+import { hhmmUTC } from '../contract/types.js';
 import type { AuroraNow, Envelope } from '../contract/types.js';
 import type { Cme } from '../data/cme.js';
 import { splitNotices, stalenessOf, whenUTC } from './format.js';
+import { liveAge, liveClock, liveSubsolar, liveText } from './live.js';
 import { errorReason, valueState } from '../data/state.js';
 import { ALERT_LIMIT } from '../data/swpc.js';
 import { scaleLabel, type ScaleMode } from '../scene/scales.js';
-import { subsolarPoint } from '../models/ephemeris.js';
 import { igrfCitation } from '../models/igrf14.js';
 import { t89BandLabel, t89Citation } from '../models/t89.js';
 import { t96Citation, t96OutOfRange } from '../models/t96.js';
@@ -38,6 +38,12 @@ export type ReportSectionId = 'wind' | 'geomagnetic' | 'sun' | 'shield' | 'scene
 
 export interface ReportLine {
   text: string;
+  /**
+   * The same sentence with its clock-bound words — an age, the time, where the
+   * Sun is overhead — left as live tokens (live.ts), for the panel to fill on
+   * its own clock. `text` is this written out at the report's time.
+   */
+  live: string;
   section: ReportSectionId;
   /** Subject ids this sentence is about. Rendered as links; absent from export. */
   subjects: string[];
@@ -131,12 +137,6 @@ function kpWord(kp: number | null): string {
   return 'quiet';
 }
 
-function cardinal(lat: number, lon: number): string {
-  const ns = lat >= 0 ? 'N' : 'S';
-  const ew = lon >= 0 ? 'E' : 'W';
-  return `${Math.abs(lat).toFixed(1)}°${ns}, ${Math.abs(lon).toFixed(1)}°${ew}`;
-}
-
 /**
  * When the next attempt happens, for a sentence in the error state. The store
  * polls on a fixed cadence and reports when the next one is due, so the
@@ -179,10 +179,10 @@ export function buildReportLines(
    * turn the report into something a reader can walk out of: the panel links
    * them and shows what each does not say, and the export ignores them.
    */
-  const say = (section: ReportSectionId, text: string, ...subjects: string[]): void => {
-    acc.push({ text, section, subjects });
+  const say = (section: ReportSectionId, live: string, ...subjects: string[]): void => {
+    acc.push({ text: liveText(live, now), live, section, subjects });
   };
-  const at = `${hhmmUTC(now.toISOString())} UTC`;
+  const at = `${liveClock()} UTC`;
 
   /**
    * Cold start. Nothing has been measured *yet* — a different claim from
@@ -199,10 +199,9 @@ export function buildReportLines(
       );
       // The one scene fact worth stating during a cold start: what is on the
       // globe while the rasters are still in flight.
-      const ss = subsolarPoint(now);
       say('scene', 
         `Scene: the Sun at centre, planets at their true positions for ${at} [D]; the ` +
-        `Sun is overhead at ${cardinal(ss.lat, ss.lon)}. ` +
+        `Sun is overhead at ${liveSubsolar()}. ` +
         (scene.earthSurface === 'imagery'
           ? `Earth's surface is NASA's Blue Marble composite (2004) [E].`
           : `Earth's surface imagery is still loading; the vector base map is on the globe.`),
@@ -239,7 +238,8 @@ export function buildReportLines(
         `speed ${sw.speed === null ? 'no data' : `${Math.round(sw.speed)} kilometres per second`}; ` +
         `density ${sw.density === null ? 'no data' : `${sw.density.toFixed(1)} protons per cubic centimetre`}. ` +
         `Measured [E], timestamped ${hhmmUTC(sw.time)} UTC` +
-        (s.state === 'stale' ? `, and now STALE — ${formatAge(s.ageS ?? 0)} old.` : `, ${formatAge(s.ageS ?? 0)} old.`),
+        (s.state === 'stale' ? `, and now STALE — ${liveAge(p.solar_wind?.data_time ?? '')} old.`
+          : `, ${liveAge(p.solar_wind?.data_time ?? '')} old.`),
         'inst.bz', 'inst.bt', 'inst.speed', 'inst.density', 'layer.l1-monitors',
       );
     }
@@ -506,11 +506,10 @@ export function buildReportLines(
   }
 
   /* --- The scene itself ------------------------------------------------ */
-  const ss = subsolarPoint(now);
   say('scene', 
     `Scene: the Sun at centre, with all eight planets at their true ` +
     `positions for ${at}, computed locally with astronomy-engine [D]. ` +
-    `The Sun is currently overhead at ${cardinal(ss.lat, ss.lon)}, and Earth's day/night ` +
+    `The Sun is currently overhead at ${liveSubsolar()}, and Earth's day/night ` +
     `terminator in the scene is drawn from that point [D]. The Moon is shown at its ` +
     `true direction from Earth. Other planets are dimmed in the near-Earth views; ` +
     `their positions are unchanged.`,
@@ -564,7 +563,7 @@ export function buildReportLines(
       `Aurora: NOAA's OVATION Prime model [D · NOAA] puts the peak probability of visible ` +
       `aurora at ${a.max_probability}% in this forecast, valid ${hhmmUTC(a.forecast_time)} UTC ` +
       `and computed from an observation at ${hhmmUTC(a.observation_time)} UTC ` +
-      `(${formatAge(ageS)} old${stale ? ', STALE' : ''}). It is drawn as the glowing oval over ` +
+      `(${liveAge(a.observation_time)} old${stale ? ', STALE' : ''}). It is drawn as the glowing oval over ` +
       `the poles, on a 1°-by-1° grid, teal through magenta with increasing probability — ` +
       `a legend for intensity, not the aurora's real colours. ` +
       `The oval encircles the magnetic pole, not the geographic one — which is why it ` +

@@ -20,7 +20,8 @@
 import type { PartMeta } from '../data/source.js';
 import type { StoreState } from '../data/store.js';
 import { valueState, type ValueStateResult } from '../data/state.js';
-import { formatAge, hhmmUTC, minus, whenUTC } from './format.js';
+import { hhmmUTC, minus, whenUTC } from './format.js';
+import { agesAt, type Ages } from './live.js';
 import { inlineSpark } from './sparkline.js';
 
 /**
@@ -85,6 +86,12 @@ export function partState(state: StoreState, part: SentencePart, now = new Date(
   });
 }
 
+/** When the part was observed, the instant its age is counted from. */
+function partTime(state: StoreState, part: SentencePart): string | null {
+  const meta = part === 'aurora' ? auroraMeta(state) : state.now?.parts?.[part];
+  return meta?.data_time ?? null;
+}
+
 /**
  * Nothing NOAA serves has arrived: every part of the snapshot failed and none
  * was read from the mirror — or the snapshot fetch itself threw before any
@@ -114,12 +121,13 @@ const live = (st: ValueStateResult): boolean => st.state === 'fresh' || st.state
 /**
  * One reading, written in its part's state. Fresh is the number and its unit;
  * stale is the same number in amber with its age after it, because a value
- * that stopped updating three hours ago must not read as now. `age` is false
- * for the first of two readings from one part, so the age is said once.
+ * that stopped updating three hours ago must not read as now. `at` is when the
+ * part was observed, and null for the first of two readings from one part, so
+ * the age is said once; `ages` writes it, as words or as a live span.
  */
 function reading(
   v: number | string | null | undefined, digits: number, unit: string,
-  st: ValueStateResult, age = true,
+  st: ValueStateResult, at: string | null, ages: Ages,
 ): string {
   if (st.state === 'loading') return PENDING;
   if (st.state === 'error') return UNAVAILABLE;
@@ -133,7 +141,7 @@ function reading(
     : unit === '%' ? '<span class="sentence-unit tight">%</span>'
       : ` <span class="sentence-unit">${unit}</span>`;
   return `<b class="sentence-num${stale ? ' is-stale' : ''}">${text}</b>${u}`
-    + (stale && age && st.ageS !== null ? ` <span class="sentence-age">(${formatAge(st.ageS)} old)</span>` : '');
+    + (stale && at ? ` <span class="sentence-age">(${ages(at)} old)</span>` : '');
 }
 
 /**
@@ -149,10 +157,16 @@ const read = (spark: string, r: string): string =>
 /**
  * Returns HTML. The caller inserts it as a single flowing paragraph — the
  * point is that it reads as prose, with the graphics doing work inside it.
+ * Ages are written as words at `now` unless the caller asks for live spans.
  */
-export function stateSentence(state: StoreState, now = new Date()): string {
+export function stateSentence(state: StoreState, now = new Date(), ages: Ages = agesAt(now)): string {
   if (fullOutage(state)) return outageSentence(state);
   const d = state.now?.data ?? null;
+  /** A reading, with its part's age when it is stale; null says no age. */
+  const value = (
+    v: number | string | null | undefined, digits: number, unit: string,
+    st: ValueStateResult, part: SentencePart | null,
+  ): string => reading(v, digits, unit, st, part ? partTime(state, part) : null, ages);
   /** Sentences, not comma splices: each glyph opens a clause of its own. */
   const out: string[] = [];
 
@@ -172,12 +186,12 @@ export function stateSentence(state: StoreState, now = new Date()): string {
       : bz < -5 ? ' strongly southward' : bz < 0 ? ' southward' : ' northward';
     const bzConsequence = bz !== null && bz < 0 ? ' &mdash; field opens, energy enters' : '';
     out.push(
-      `${head('wind', 'wind')} ${read(speedSpark, reading(sw?.speed, 0, 'km/s', wS, false))}; ` +
-      `${head(null, `field${bzWord}`)} ${read(bzSpark, reading(bz, 1, 'nT', wS))}${bzConsequence}.`,
+      `${head('wind', 'wind')} ${read(speedSpark, value(sw?.speed, 0, 'km/s', wS, null))}; ` +
+      `${head(null, `field${bzWord}`)} ${read(bzSpark, value(bz, 1, 'nT', wS, 'solar_wind'))}${bzConsequence}.`,
     );
   } else {
     // Speed and field are one feed: one word for both.
-    out.push(`${head('wind', 'wind')} ${reading(null, 0, '', wS)}.`);
+    out.push(`${head('wind', 'wind')} ${value(null, 0, '', wS, 'solar_wind')}.`);
   }
 
   /* --- the shield it meets --- */
@@ -185,7 +199,7 @@ export function stateSentence(state: StoreState, now = new Date()): string {
   const mp = live(mS) ? d?.magnetopause?.standoff_re ?? null : null;
   const mpWord = mp === null ? ''
     : mp < 8 ? ', compressed' : mp > 11.5 ? ', expanded' : '';
-  out.push(`${head('shield', 'shield')} ${read('', reading(mp, 1, 'R⊕', mS))}${mpWord}.`);
+  out.push(`${head('shield', 'shield')} ${read('', value(mp, 1, 'R⊕', mS, 'magnetopause'))}${mpWord}.`);
 
   /* --- geomagnetic response at the ground --- */
   const kS = partState(state, 'kp', now);
@@ -195,7 +209,7 @@ export function stateSentence(state: StoreState, now = new Date()): string {
   const kpSpark = live(kS) && state.kpSeries
     ? inlineSpark(state.kpSeries, { band: [0, 4], extremes: true, label: 'Kp, 6 h' }) : '';
   // One decimal, as the tile and the splash write it.
-  out.push(`${head('field', `ground${kpWord}`)} ${read(kpSpark, reading(kp, 1, 'Kp', kS))}.`);
+  out.push(`${head('field', `ground${kpWord}`)} ${read(kpSpark, value(kp, 1, 'Kp', kS, 'kp'))}.`);
 
   /* --- particle radiation --- */
   const pS = partState(state, 'particles', now);
@@ -206,8 +220,8 @@ export function stateSentence(state: StoreState, now = new Date()): string {
     ? inlineSpark(state.protonSeries, { log: true, extremes: true, label: 'proton flux above 10 MeV, last 6 hours, logarithmic' })
     : '';
   out.push(
-    `${head('particle', 'radiation')} ${read('', reading(sStep, 0, '', pS, false))}`
-    + (sStep ? ` ${read(pSpark, reading(s10, 2, 'pfu', pS))}`
+    `${head('particle', 'radiation')} ${read('', value(sStep, 0, '', pS, null))}`
+    + (sStep ? ` ${read(pSpark, value(s10, 2, 'pfu', pS, 'particles'))}`
       + ((pt?.s_scale ?? 0) >= 1 ? ' &mdash; storm' : '') : '')
     + '.',
   );
@@ -220,15 +234,15 @@ export function stateSentence(state: StoreState, now = new Date()): string {
   const aS = partState(state, 'aurora', now);
   const au = live(aS) ? state.aurora?.data ?? null : null;
   out.push(
-    `${head('flare', 'X-ray')} ${read(xSpark, reading(xr?.class ?? null, 0, '', xS))} ` +
-    `${head('aurora', 'aurora')} ${read('', reading(au?.max_probability, 0, '%', aS))}.`,
+    `${head('flare', 'X-ray')} ${read(xSpark, value(xr?.class ?? null, 0, '', xS, 'xray'))} ` +
+    `${head('aurora', 'aurora')} ${read('', value(au?.max_probability, 0, '%', aS, 'aurora'))}.`,
   );
 
   return out.join(' ');
 }
 
 /** The plain-language equivalent, for screen readers and the text alternative. */
-export function stateSentenceText(state: StoreState, now = new Date()): string {
+export function stateSentenceText(state: StoreState, now = new Date(), ages: Ages = agesAt(now)): string {
   if (fullOutage(state)) return outageSentence(state);
   const pending = !state.now && state.lanes.snapshot;
   if (pending) {
@@ -240,6 +254,7 @@ export function stateSentenceText(state: StoreState, now = new Date()): string {
   /** The same five states as the HTML, in words. */
   const said = (
     v: number | string | null | undefined, digits: number, words: string, st: ValueStateResult,
+    part: SentencePart,
   ): string => {
     if (st.state === 'loading') return 'loading';
     if (st.state === 'error') return 'unavailable';
@@ -247,7 +262,7 @@ export function stateSentenceText(state: StoreState, now = new Date()): string {
       || (typeof v === 'number' && !Number.isFinite(v))) return 'no data';
     const text = typeof v === 'number' ? minus(v.toFixed(digits)) : v;
     return `${text}${words ? ` ${words}` : ''}`
-      + (st.state === 'stale' && st.ageS !== null ? ` (stale, ${formatAge(st.ageS)} old)` : '');
+      + (st.state === 'stale' && partTime(state, part) ? ` (stale, ${ages(partTime(state, part)!)} old)` : '');
   };
   const wS = partState(state, 'solar_wind', now);
   const mS = partState(state, 'magnetopause', now);
@@ -257,14 +272,14 @@ export function stateSentenceText(state: StoreState, now = new Date()): string {
   const aS = partState(state, 'aurora', now);
   const sw = live(wS) ? d?.solar_wind ?? null : null;
   const pt = live(pS) ? d?.particles ?? null : null;
-  return `Solar wind ${said(sw?.speed, 0, 'kilometres per second', wS)}, `
-    + `interplanetary field Bz ${said(sw?.bz_gsm, 1, 'nanotesla', wS)}, `
-    + `magnetopause standoff ${said(live(mS) ? d?.magnetopause?.standoff_re : null, 1, 'Earth radii', mS)}, `
-    + `planetary K index ${said(live(kS) ? d?.kp?.estimated_kp : null, 1, '', kS)}, `
-    + `radiation ${said(pt && pt.proton_10mev !== null ? `S${pt.s_scale ?? 0}` : null, 0, '', pS)}`
-    + `${pt && pt.proton_10mev !== null ? ` at ${said(pt.proton_10mev, 2, 'particle flux units above 10 MeV', pS)}` : ''}, `
-    + `X-ray class ${said(live(xS) ? d?.xray?.class : null, 0, '', xS)}, `
-    + `peak aurora probability ${said(live(aS) ? state.aurora?.data?.max_probability : null, 0, 'percent', aS)}.`;
+  return `Solar wind ${said(sw?.speed, 0, 'kilometres per second', wS, 'solar_wind')}, `
+    + `interplanetary field Bz ${said(sw?.bz_gsm, 1, 'nanotesla', wS, 'solar_wind')}, `
+    + `magnetopause standoff ${said(live(mS) ? d?.magnetopause?.standoff_re : null, 1, 'Earth radii', mS, 'magnetopause')}, `
+    + `planetary K index ${said(live(kS) ? d?.kp?.estimated_kp : null, 1, '', kS, 'kp')}, `
+    + `radiation ${said(pt && pt.proton_10mev !== null ? `S${pt.s_scale ?? 0}` : null, 0, '', pS, 'particles')}`
+    + `${pt && pt.proton_10mev !== null ? ` at ${said(pt.proton_10mev, 2, 'particle flux units above 10 MeV', pS, 'particles')}` : ''}, `
+    + `X-ray class ${said(live(xS) ? d?.xray?.class : null, 0, '', xS, 'xray')}, `
+    + `peak aurora probability ${said(live(aS) ? state.aurora?.data?.max_probability : null, 0, 'percent', aS, 'aurora')}.`;
 }
 
 /**
@@ -273,16 +288,19 @@ export function stateSentenceText(state: StoreState, now = new Date()): string {
  * is stale — a single clock time above six numbers would otherwise claim they
  * are all that recent.
  */
-export function sentenceAsOf(state: StoreState, now = new Date()): { text: string; stale: boolean } | null {
+export function sentenceAsOf(
+  state: StoreState, now = new Date(), ages: Ages = agesAt(now),
+): { text: string; stale: boolean } | null {
   const times: number[] = [];
-  let oldest: number | null = null;
+  /** The observation time of the oldest stale reading, whose age is the one given. */
+  let oldest: string | null = null;
   for (const part of SENTENCE_PARTS) {
-    const meta = part === 'aurora' ? auroraMeta(state) : state.now?.parts?.[part];
-    const t = meta?.data_time ? Date.parse(meta.data_time) : NaN;
+    const at = partTime(state, part);
+    const t = at ? Date.parse(at) : NaN;
     if (!Number.isFinite(t)) continue;
     times.push(t);
     const st = partState(state, part, now);
-    if (st.state === 'stale' && st.ageS !== null) oldest = Math.max(oldest ?? 0, st.ageS);
+    if (st.state === 'stale' && (oldest === null || t < Date.parse(oldest))) oldest = at;
   }
   if (times.length === 0) return null;
   const lo = new Date(Math.min(...times)).toISOString();
@@ -292,7 +310,7 @@ export function sentenceAsOf(state: StoreState, now = new Date()): { text: strin
     : lo.slice(0, 10) === hi.slice(0, 10) ? `${from.slice(0, -4)}–${hhmmUTC(hi)} UTC`
       : `${from} – ${whenUTC(hi, now)}`;
   return {
-    text: `as of ${range}${oldest !== null ? ` · stale · ${formatAge(oldest)}` : ''}`,
+    text: `as of ${range}${oldest !== null ? ` · stale · ${ages(oldest)}` : ''}`,
     stale: oldest !== null,
   };
 }

@@ -25,8 +25,8 @@
   <meta name="twitter:image" content="https://earthstar.space/viewer/og.jpg" />
 
   <link rel="preconnect" href="https://services.swpc.noaa.gov" crossorigin />
-  <script type="module" crossorigin src="/viewer/assets/index-DxgFpMOt.js"></script>
-  <link rel="stylesheet" crossorigin href="/viewer/assets/index-CIHj2F4x.css">
+  <script type="module" crossorigin src="/viewer/assets/index-BbWUYD28.js"></script>
+  <link rel="stylesheet" crossorigin href="/viewer/assets/index-CaDm6UyB.css">
 </head>
 <body>
   <a class="skip-link" href="#margin-body">Skip to the Situation Report</a>
@@ -43,13 +43,16 @@
           </a>
           <span class="brand-word">Viewer</span>
         </h1>
-        <p class="clock" id="clock" role="status"></p>
+        <!-- Not a live region: it changes every minute, and a reader does not
+             need each minute read out. -->
+        <p class="clock" id="clock"></p>
       </div>
 
       <!-- The most consequential NOAA notice in force, in the space the header
            was wasting; a click opens every notice verbatim. Hidden when none is
-           in force, and never an "all clear". -->
-      <a class="headline-alert" id="headline-alert" href="#margin-body" hidden></a>
+           in force, and never an "all clear". The href is the Notices detail's
+           address, so it can be opened in a new tab or shared. -->
+      <a class="headline-alert" id="headline-alert" href="#d=notices" hidden></a>
 
       <button class="ctl controls-toggle" id="controls-toggle" type="button"
         aria-expanded="false" aria-controls="controls">Controls</button>
@@ -121,7 +124,9 @@
           <button type="button" class="scale-flip" id="scale-flip"></button></p>
         <p class="stage-note" id="stage-note" hidden></p>
       </div>
-      <div id="tip" class="tip" role="status" hidden></div>
+      <!-- Pointer-only, and hidden from assistive technology: what it names is
+           reachable through the card, the report and its lists. -->
+      <div id="tip" class="tip" aria-hidden="true" hidden></div>
     </main>
 
     <aside class="margin" aria-label="Detail panel">
@@ -134,8 +139,9 @@
            On a phone the status moves up under the tabs instead. The chip is
            the render scale, shown only while the renderer is trading
            resolution for frame rate; its sentence is in its title and the
-           Sources tab. -->
-      <p class="status" id="status" role="status"></p>
+           Sources tab. Not a live region: its time moves every minute, so
+           hud.ts announces it only when its kind changes. -->
+      <p class="status" id="status"></p>
       <div class="margin-actions">
         <span class="perf-chip" id="perf" hidden></span>
         <button class="ctl ctl-sm" id="brief-copy" type="button"

@@ -43,6 +43,10 @@ src/hud/         instrument rail, alerts ticker, and the margin column
 src/hud/subjects.ts     one registry of every thing the Viewer shows — tiles, cards,
                         the report, Sources and Checks are all views of it
 src/hud/subject-card.ts the card that answers "what is this?" at the object in the scene
+src/hud/route.ts        the address: view, scale, layers, tab and detail in the URL's
+                        fragment (#v=polar&t=sun, #d=inst.speed), so a reading can be linked
+src/hud/live.ts         the panel's clock-bound words (ages, the time), filled on a 30 s
+                        tick, so the panel is rebuilt only when what it says changes
 src/a11y/        reduced motion, keyboard rig
 vendor/          source of truth for the models: IGRF-14 coefficients (IAGA),
                  Tsyganenko's t89c.f and t96.f — see vendor/README.md

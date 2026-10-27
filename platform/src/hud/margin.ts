@@ -18,9 +18,10 @@ import { instrumentFor, type ImageLoop, type LoopKind } from '../data/solar-imag
 import { igrfCitation } from '../models/igrf14.js';
 import { coverageBands, type SunPlaneCalibration } from '../scene/sun-plane.js';
 import {
-  NO_DATA, badgeFor, badgeTitle, formatAge, hhmmUTC, inForce, noticeWord, stalenessOf,
+  NO_DATA, badgeFor, badgeTitle, hhmmUTC, inForce, noticeWord, stalenessOf,
   validityText, whenUTC,
 } from './format.js';
+import { ageHtml, liveAge, liveHtml } from './live.js';
 import { valueState } from '../data/state.js';
 import { panelSpark } from './sparkline.js';
 import { sentenceAsOf, stateSentence, stateSentenceText } from './state-sentence.js';
@@ -148,7 +149,7 @@ export function renderReport(
   // reader has opened is remembered, the same way the Sources sections are.
   const body = sections.map((sec, i) => section(
     `report-${sec.id}`, sec.title,
-    sec.lines.map((l) => `<p>${linkSubjects(escapeHtml(l.text), l.subjects)}</p>`).join('')
+    sec.lines.map((l) => `<p>${linkSubjects(escapeHtml(l.live), l.subjects)}</p>`).join('')
     + sectionLimits(sec.subjects),
     i === 0, remembered,
   )).join('');
@@ -157,15 +158,17 @@ export function renderReport(
   // sparkline and number together. The prose report follows it, and the
   // screen-reader text alternative sits alongside. The tab already says "Now",
   // so the visible heading gives its line to when "now" was measured.
-  const asOf = sentenceAsOf(state, now);
-  return `
+  // Every age, and the scene's clock, is a live span: the panel fills them on
+  // its own clock, so this HTML changes only when what it says does.
+  const asOf = sentenceAsOf(state, now, liveAge);
+  return liveHtml(`
     <h2 class="sr-only">Now</h2>
     ${asOf ? `<p class="as-of${asOf.stale ? ' is-stale' : ''}">${escapeHtml(asOf.text)}</p>` : ''}
-    <p class="state-sentence" aria-hidden="true">${stateSentence(state, now)}</p>
-    <p class="sr-only">${escapeHtml(stateSentenceText(state, now))}</p>
+    <p class="state-sentence" aria-hidden="true">${stateSentence(state, now, liveAge)}</p>
+    <p class="sr-only">${escapeHtml(stateSentenceText(state, now, liveAge))}</p>
     <h3>Situation Report</h3>
     ${body}
-    ${renderDrawnIndex(narration)}`;
+    ${renderDrawnIndex(narration)}`);
 }
 
 /**
@@ -274,7 +277,7 @@ export function renderForecast(
       <tr><td class="num">${escapeHtml(fl.maxClass)}</td>
           <td class="num">${hhmmUTC(fl.max ?? fl.begin)}</td>
           <td>${fl.region ? `region ${fl.region}` : ''}
-            <span class="tile-meta">${formatAge((Date.now() - Date.parse(fl.begin)) / 1000)} ago</span></td></tr>`).join('')}
+            <span class="tile-meta">${ageHtml(fl.begin)} ago</span></td></tr>`).join('')}
     </tbody></table>` : ''}
 
     ${f.f107.value !== null ? `<h3>Solar radio flux</h3>
@@ -767,6 +770,15 @@ export function renderSun(
     ${solarCyclePanel(cycle, cycleLoading, cycleError)}`;
 }
 
+/**
+ * A frame's time and its age. The same two spans whether the panel writes it
+ * or a playing loop swaps it in place (hud.ts), so a later render can tell
+ * them apart from what it wrote.
+ */
+export function sunStamp(time: string): string {
+  return `<span>${hhmmUTC(time)} UTC</span><span>${ageHtml(time)} ago</span>`;
+}
+
 /** The disk section as it looks when the loop is in hand. */
 function diskSection(sun: SunState): string {
   const L = sun.loop!;
@@ -774,7 +786,6 @@ function diskSection(sun: SunState): string {
   // Resolved per frame, not per loop: a loop can span a spacecraft handover,
   // and the label belongs to the image on screen.
   const instrument = instrumentFor(L.instrument, f.satellite);
-  const ageMin = Math.round((Date.now() - Date.parse(f.time)) / 60000);
   const n = L.frames.length;
 
   // Playback is opt-in and its cost is stated: a SUVI loop is tens of
@@ -784,7 +795,7 @@ function diskSection(sun: SunState): string {
     : sun.preloaded >= n
       ? `<button class="ctl" id="sun-play" aria-pressed="${sun.playing}">${sun.playing ? 'Pause' : 'Play'}</button>
          <input type="range" id="sun-scrub" min="0" max="${n - 1}" value="${sun.frameIndex}" aria-label="Frame" />
-         <span class="tile-meta">${sun.frameIndex + 1}/${n}</span>`
+         <span class="tile-meta" data-frame-count>${sun.frameIndex + 1}/${n}</span>`
       : `<button class="ctl" id="sun-play">Load loop · ${n} frames, ${mb(L.frameBytes, n)}</button>`;
 
   return `
@@ -794,7 +805,7 @@ function diskSection(sun: SunState): string {
            panel does not throw away a decode that costs 380 ms. -->
       <div class="sun-slot" id="sun-slot" data-frame="${escapeHtml(f.url)}"
            data-alt="${escapeHtml(instrument)} image of the Sun at ${hhmmUTC(f.time)} UTC"></div>
-      <div class="sun-stamp"><span>${hhmmUTC(f.time)} UTC</span><span>${ageMin} min ago</span></div>
+      <div class="sun-stamp">${sunStamp(f.time)}</div>
     </div>
     <div class="sun-transport">${transport}</div>
     <p><span class="badge badge-e">E</span> ${escapeHtml(instrument)}. ${escapeHtml(L.describes)}</p>
@@ -877,7 +888,6 @@ function coronaPanel(sun: SunState): string {
   if (!L) return '';
   const f = L.frames[L.newestGood]!;
   const c = sun.coronaPlane;
-  const ageMin = Math.round((Date.now() - Date.parse(f.time)) / 60000);
 
   const geometry = c
     ? `Drawn on a plane through the Sun, perpendicular to the line it was photographed
@@ -896,7 +906,7 @@ function coronaPanel(sun: SunState): string {
     <div class="sun-frame sun-frame-sm">
       <div class="sun-slot" id="corona-slot" data-frame="${escapeHtml(f.url)}"
            data-alt="${escapeHtml(L.instrument)} coronagraph image at ${hhmmUTC(f.time)} UTC"></div>
-      <div class="sun-stamp"><span>${hhmmUTC(f.time)} UTC</span><span>${ageMin} min ago</span></div>
+      <div class="sun-stamp">${sunStamp(f.time)}</div>
     </div>
     <p><span class="badge badge-e">E</span> ${escapeHtml(L.instrument)}.
       ${escapeHtml(L.describes)}</p>
@@ -999,6 +1009,28 @@ export function renderSubject(id: string): string {
 /** Bodies are addressed as `body:Jupiter` so one detail slot serves both. */
 export const BODY_PREFIX = 'body:';
 
+/**
+ * Outside the panel — in the URL, in a link from the splash, in a Related
+ * list — a detail is named by its registry id, or 'notices'. Inside, a tile's
+ * detail is keyed by its instrument and a body's by its name, because those
+ * carry the live reading rather than the prose alone. These two translate, so
+ * `inst.speed` opens the wind-speed reading wherever it is asked for.
+ */
+export function detailFor(id: string): string {
+  if (id === NOTICES_SUBJECT) return NOTICES_DETAIL;
+  const inst = INSTRUMENTS.find((i) => i.subject === id);
+  if (inst) return inst.id;
+  const s = subject(id);
+  return s?.kind === 'body' ? BODY_PREFIX + s.label : id;
+}
+
+/** The registry id a panel detail is addressed by; see `detailFor`. */
+export function detailSubject(key: string): string {
+  if (key === NOTICES_DETAIL) return NOTICES_DETAIL;
+  if (key.startsWith(BODY_PREFIX)) return bodySubjectId(key.slice(BODY_PREFIX.length));
+  return INSTRUMENTS.find((i) => i.id === key)?.subject ?? key;
+}
+
 export function renderBody(name: string, now: Date): string {
   const f = bodyFacts(name as BodyName, now);
   const row = (k: string, v: string) => `<tr><td>${k}</td><td class="num">${v}</td></tr>`;
@@ -1096,9 +1128,26 @@ export function renderDetail(
   // value and no feed provenance of its own — the prose is the whole of it.
   if (!inst) return renderSubject(id);
   const env: NowEnvelope | null = state.now;
-  const d: Now | null = env?.data ?? null;
-  const meta = env?.parts?.[inst.part];
-  const s = stalenessOf(meta, now);
+  // Opened before the first snapshot has landed — a link from the splash, a
+  // reload — it says it is loading, or why it cannot, rather than "no data".
+  if (!env) {
+    const st = valueState({
+      lane: { loading: state.lanes.snapshot, error: state.lastError, nextAttempt: state.nextAttempt },
+      received: false, now,
+    });
+    return `
+      <h2>${escapeHtml(inst.label)}</h2>
+      <p>${st.state === 'loading'
+        ? `<span class="tile-state loading">Loading ${escapeHtml(inst.label)}<span class="pulse">…</span></span>`
+        : st.state === 'error'
+          ? `<span class="tile-state err"><span class="tile-state-word">unavailable</span> · ${
+            escapeHtml(st.label.replace(/^unavailable · /, ''))}</span>`
+          : NO_DATA}</p>
+      ${renderSubjectProse(inst.subject)}`;
+  }
+  const d: Now | null = env.data ?? null;
+  const meta = env.parts?.[inst.part];
+  const s = stalenessOf(meta, now, liveAge);
   const b = badgeFor(meta);
   const raw = inst.value(d);
 
@@ -1108,7 +1157,7 @@ export function renderDetail(
       <span>${escapeHtml(raw)}</span><span class="tile-unit">${escapeHtml(inst.unit)}</span>
     </p>
     <p class="tile-meta"><span class="badge badge-${b.toLowerCase()}">${b}</span>
-      ${escapeHtml(s.label)}</p>
+      ${liveHtml(escapeHtml(s.label))}</p>
     ${detailSpark(inst, state)}
     <h3>Provenance</h3>
     ${meta ? `<table class="prov"><tbody>
