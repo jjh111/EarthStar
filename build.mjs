@@ -80,17 +80,27 @@ const mask = (file) => `style="--m:url(${file})"`;
 
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+// A register's badge: its capital in a hairline box is for the eye; a screen
+// reader hears the word beside it instead ('empirical', not 'E'), and a pointer
+// finds the whole register in the title. Where the word follows in the text
+// already (the legend), the capital is only hidden.
+const badgeHTML = (r, title = concepts.registers[r], { said = false } = {}) =>
+  `<span class="badge" title="${esc(title)}" aria-hidden="true">${esc(r)}</span>`
+  + (said ? '' : `<span class="visually-hidden"> ${esc(title.split(' — ')[0].toLowerCase())}</span>`);
+
+// The head is a plain line until ideas.js makes it the button that opens the
+// notes: without script nothing would answer it, so there the notes stand open
 function ideaHTML(c) {
   const search = [c.name, c.meaning, c.more, c.alignment, c.formula, ...(c.lens || [])].filter(Boolean).join(' ');
   const links = (c.links || []).map((l) => `<a href="${esc(l.href)}">${esc(l.label)}</a>`).join('');
   return `<article class="idea" id="idea-${esc(c.id)}" data-id="${esc(c.id)}" data-lens="${esc((c.lens || []).join(' '))}" data-register="${esc(c.register)}" data-search="${esc(search)}">
-  <button class="idea-head" type="button" aria-expanded="false" aria-controls="idea-${esc(c.id)}-more">
+  <div class="idea-head">
     ${IDEA_IDS.includes(c.id)
       ? `<span class="idea-glyph glyph" aria-hidden="true" ${mask(`${GLYPHS}/idea-${esc(c.id)}.svg`)}></span>`
       : `<span class="idea-glyph" aria-hidden="true">${esc(c.glyph)}</span>`}
     <span class="idea-name">${esc(c.name)}</span>
-    <span class="badge" title="${esc(concepts.registers[c.register] || '')}">${esc(c.register)}</span>
-  </button>
+    ${badgeHTML(c.register)}
+  </div>
   <p class="idea-meaning">${esc(c.meaning)}</p>
   <div class="idea-more" id="idea-${esc(c.id)}-more" hidden>
     ${c.formula ? `<p class="idea-formula">${esc(c.formula)}</p>` : ''}
@@ -104,8 +114,10 @@ function ideaHTML(c) {
 const ideasGrid = concepts.concepts.map(ideaHTML).join('\n');
 const ideasLenses = concepts.lenses.map((l) =>
   `<button type="button" class="chip" data-lens="${esc(l.id)}" aria-pressed="${l.id === 'all'}">${esc(l.label)}</button>`).join('');
+// The key to the five registers, and one sentence on how the Viewer reads three
 const registerLegend = Object.entries(concepts.registers).map(([k, v]) =>
-  `<span class="legend-item"><span class="badge">${k}</span> ${esc(v)}</span>`).join(' ');
+  `<span class="legend-item">${badgeHTML(k, v, { said: true })} ${esc(v)}</span>`).join(' ')
+  + ` <span class="legend-viewer">The Viewer marks every reading with three of them: E for measured, D for modelled and M for ambient.</span>`;
 
 // ── 1. Archive fragments: markdown → HTML, written to /archive ──
 
@@ -190,22 +202,23 @@ html = html.replace('<!--BUILD:IDEAS_GRID-->', ideasGrid);
 html = html.replace('<!--BUILD:IDEAS_LENSES-->', ideasLenses);
 html = html.replace('<!--BUILD:REGISTER_LEGEND-->', registerLegend);
 
-// Section II: the Gomens and the key to their script, from src/gomens.json
+// Section II: the Gomens and the key to their script, from src/gomens.json.
+// A figure is a picture until gomens.js makes it the button that wakes it
 const REG = { D: 'Design — a proposal, not built hardware', M: 'Mythopoetic — vision and commitment' };
 const gomenLi = (g) => `<li class="scale" id="scale-${esc(g.scale.toLowerCase())}">
   <span class="scale-name">${esc(g.scale)}</span>
-  <button type="button" class="gomen-pic" aria-pressed="false" aria-label="Wake ${esc(g.name)}">
+  <span class="gomen-pic" data-wake="Wake ${esc(g.name)}">
     <span class="gomen-art" aria-hidden="true">
       <img class="ga-wash" src="${GOMENS}/${esc(g.id)}-wash.svg" alt="" width="96" height="96" decoding="async">
       <span class="ga-ink" ${mask(`${GOMENS}/${esc(g.id)}-ink.svg`)}></span>
       <span class="ga-gold" ${mask(`${GOMENS}/${esc(g.id)}-gold.svg`)}></span>
     </span>
     <span class="gomen-say" aria-hidden="true">${esc(g.say)}</span>
-  </button>
+  </span>
   <div class="gomen-label">
     <span class="cart glyph" aria-hidden="true" ${mask(`${GLYPHS}/cart-${esc(g.id)}.svg`)}></span>
     <div>
-      <span class="gomen-name">${esc(g.name)} <span class="badge" title="${esc(REG[g.register] || '')}">${esc(g.register)}</span></span>
+      <span class="gomen-name">${esc(g.name)} ${badgeHTML(g.register, REG[g.register])}</span>
       <p class="gomen-reading"><span class="gomen-radicals">${esc(g.radicals)}</span>${esc(g.reading)}</p>
     </div>
   </div>
@@ -221,10 +234,10 @@ const TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 
 const inWords = (n) => (n < 20 ? WORDS[n] : TENS[Math.floor(n / 10)] + (n % 10 ? '-' + WORDS[n % 10] : ''));
 const guideCount = { kingdoms: taxonomy.kingdoms.length, species: taxonomy.species.length, refs: Object.keys(taxonomy.references).length };
 const scriptKey = `<div class="script-key">
-  <p class="key-lede"><span class="badge" title="${esc(REG.M)}">M</span> ${esc(gomenLore.key.lede)}</p>
+  <p class="key-lede">${badgeHTML('M', REG.M)} ${esc(gomenLore.key.lede)}</p>
   <ul class="key-row" aria-label="Key to the script">${RADICALS.map((r) =>
     `<li><span class="glyph" aria-hidden="true" ${mask(`${GLYPHS}/radical-${r}.svg`)}></span><span><b>${esc(r)}</b><small>${esc(gomenLore.key.radicals[r] || '')}</small></span></li>`).join('')}</ul>
-  <p class="key-guide"><span class="badge" title="${esc(REG.D)}">D</span> <a href="field-guide/">Gomenata, a field guide to the adjacent life <span aria-hidden="true">↗</span></a>: ${inWords(guideCount.kingdoms)} kingdoms, ${inWords(guideCount.species)} species, ${inWords(guideCount.refs)} references</p>
+  <p class="key-guide">${badgeHTML('D', REG.D)} <a href="field-guide/">Gomenata, a field guide to the adjacent life <span aria-hidden="true">↗</span></a>: ${inWords(guideCount.kingdoms)} kingdoms, ${inWords(guideCount.species)} species, ${inWords(guideCount.refs)} references</p>
 </div>`;
 html = html.replace('<!--BUILD:SCRIPT_KEY-->', scriptKey);
 // Section numerals, counted in beads, the wayfinder's star, and any other mark
@@ -242,7 +255,7 @@ const WORKS = 'assets/img/works';
 const megabytes = (file) => `${(statSync(p(file)).size / 1e6).toFixed(1)} MB`;
 const kilobytes = (file) => `${(statSync(p(file)).size / 1e3).toFixed(1)} KB`;
 const runtime = (s) => (s < 60 ? `${s} s` : `${Math.floor(s / 60)} min${s % 60 ? ` ${s % 60} s` : ''}`);
-const badge = (r) => `<span class="badge" title="${esc(REG[r])}">${r}</span>`;
+const badge = (r) => badgeHTML(r, REG[r]);
 const poster = (id, sizes) => `<picture class="work-media">
     <source type="image/avif" srcset="${WORKS}/${id}-640.avif 640w, ${WORKS}/${id}-1280.avif 1280w" sizes="${sizes}">
     <source type="image/webp" srcset="${WORKS}/${id}-640.webp 640w, ${WORKS}/${id}-1280.webp 1280w" sizes="${sizes}">

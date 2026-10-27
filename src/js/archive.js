@@ -161,6 +161,15 @@ function currentSlug() {
   return slug;
 }
 
+// A code block or a table wider than the text scrolls sideways, so it takes
+// the focus too, and the keys can scroll it
+function scrollersFocusable() {
+  for (const el of $('archivePanelBody').querySelectorAll('.archive-md pre, .archive-md table')) {
+    if (el.scrollWidth > el.clientWidth + 1) el.tabIndex = 0;
+    else el.removeAttribute('tabindex');
+  }
+}
+
 // Everything behind the reader leaves the tab order and the accessibility tree
 function show() {
   $('archivePanel').classList.add('open');
@@ -233,6 +242,7 @@ export async function openDoc(id, from = null, slug = null) {
     }
     body.classList.toggle('has-toc', !!toc);
     renderedDocId = id;
+    scrollersFocusable();
     toSlug(slug);
   } catch (e) {
     if (currentDocId !== id) return;
@@ -403,6 +413,10 @@ export function initArchive() {
   RAIL.addEventListener?.('change', () => {
     const toc = $('archivePanelBody').querySelector('.archive-toc');
     if (toc) toc.open = RAIL.matches;
+  });
+  let sized = null;
+  window.addEventListener('resize', () => {
+    if (isOpen() && sized === null) sized = requestAnimationFrame(() => { sized = null; scrollersFocusable(); });
   });
 
   document.addEventListener('keydown', (e) => {

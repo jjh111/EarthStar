@@ -91,6 +91,7 @@ function summonCrab() {
   crabActive = true;
   const crab = document.createElement('div');
   crab.className = 'gomen-crab';
+  crab.setAttribute('aria-hidden', 'true');
   // a Shore-walker, drawn in the script, comes up the page's shore
   crab.innerHTML = '<span class="gomen-crab-body"></span><span class="gomen-crab-say">gomen’nasai</span>';
   crab.querySelector('.gomen-crab-body').appendChild(gomenArt('shorewalkers'));

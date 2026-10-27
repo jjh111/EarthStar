@@ -147,6 +147,20 @@ function hhmm(d) {
   return d ? d.toISOString().slice(11, 16) + ' UTC' : '';
 }
 
+// The measured tier's badge, as the page draws its others: E for the eye,
+// the word for a screen reader
+function measured() {
+  const b = document.createElement('span');
+  b.className = 'badge';
+  b.title = 'Measured';
+  b.setAttribute('aria-hidden', 'true');
+  b.textContent = 'E';
+  const word = document.createElement('span');
+  word.className = 'visually-hidden';
+  word.textContent = 'measured';
+  return [b, word];
+}
+
 /** state ∈ loading | live | stale | nodata | error */
 function setTile(id, state, { value = '', unit = '', detail = '', when = null, via = '', error = '' } = {}) {
   const el = document.getElementById('sky-' + id);
@@ -169,7 +183,8 @@ function setTile(id, state, { value = '', unit = '', detail = '', when = null, v
     v.removeAttribute('aria-label');
   } else {
     v.textContent = value; u.textContent = unit; d.textContent = detail;
-    p.textContent = `${hhmm(when)}${state === 'stale' ? ' · stale' : ''} · [E] ${via}`;
+    p.textContent = `${hhmm(when)}${state === 'stale' ? ' · stale' : ''} · `;
+    p.append(...measured(), ` ${via}`);
     v.removeAttribute('aria-label');
   }
 }
@@ -228,8 +243,9 @@ function render(results, via) {
     if (x && x.class) parts.push(`X-rays\u00a0${x.class}`);
     const quiet = kp && kp.estimated_kp != null ? (kp.estimated_kp < 4 ? 'Quiet sky' : kp.estimated_kp < 5 ? 'Unsettled sky' : 'Storm') : 'The sky';
     const text = parts.length ? `${quiet} — ${parts.join(', ')}.` : 'The sky is not reporting right now.';
-    // The sentence is a live region: rewriting it unchanged every minute
-    // would read it out again, so it is written only when it says something new
+    // Written only when it says something new, so a refresh that brings the
+    // same sky leaves it alone (it is not a live region: the page's only voices
+    // are search's count and the copy buttons)
     if (line.textContent !== text) line.textContent = text;
   }
 

@@ -1,6 +1,7 @@
 // Emoji garden — click to plant sprouts, grow trees, place stars in the margins.
 // State persists in localStorage. Also feeds the footer coherence meter and
-// the margin-star constellations.
+// the margin-star constellations. What it draws over the page is decoration,
+// hidden from screen readers; the footer's plants are buttons.
 
 import { spawnButterfly, clearButterflies, butterflyCount } from './butterflies.js';
 import { drawInto } from './glyph.js';
@@ -92,7 +93,6 @@ function updateCoherenceMeter() {
   // Asymptotic toward 1 — coherence always has room to grow
   const c = 1 - 1 / (1 + 0.055 * score);
   const value = '∇𝒞 = ' + (score === 0 ? '0.00' : '+' + c.toFixed(2));
-  // The value is a live region: it speaks only when it changes
   if (valueEl.textContent !== value) valueEl.textContent = value;
   barEl.style.width = (c * 100) + '%';
   barEl.parentElement.setAttribute('aria-valuenow', c.toFixed(2));
@@ -139,6 +139,7 @@ function renderStars(moved = false) {
 function createTransientEmoji(x, y) {
   const emoji = document.createElement('div');
   emoji.className = 'emoji-transient';
+  emoji.setAttribute('aria-hidden', 'true');
   drawInto(emoji, CONFIG.transient.emojis[Math.floor(Math.random() * CONFIG.transient.emojis.length)]);
   emoji.style.left = (x - 12) + 'px';
   emoji.style.top = (y - 12) + 'px';
@@ -206,6 +207,7 @@ export function composteOldestSprout() {
 function createPersistentEmoji(emojiChar) {
   const el = document.createElement('div');
   el.className = 'emoji-persistent';
+  el.setAttribute('aria-hidden', 'true');
   drawInto(el, emojiChar);
   document.body.appendChild(el);
   return el;
@@ -214,6 +216,7 @@ function createPersistentEmoji(emojiChar) {
 function fadeAwayEmoji(x, y, emojiChar) {
   const el = document.createElement('div');
   el.className = 'emoji-fading';
+  el.setAttribute('aria-hidden', 'true');
   drawInto(el, emojiChar);
   el.style.left = (x - 15) + 'px';
   el.style.top = (y - 15) + 'px';

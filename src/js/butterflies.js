@@ -47,6 +47,7 @@ export function spawnButterfly(x, y) {
   if (isStill()) return;
   const el = document.createElement('div');
   el.className = 'butterfly-living';
+  el.setAttribute('aria-hidden', 'true');
   drawInto(el, '🦋');
   const spawnX = x + (Math.random() - 0.5) * 40;
   const spawnY = y + (Math.random() - 0.5) * 40;

@@ -71,9 +71,24 @@ export function expandIdea(id, scroll = true) {
   return true;
 }
 
+// The page ships each head as a plain line, its notes open to a reader without
+// script (site.css); here each becomes the button that opens and closes them
+function headsToButtons(grid) {
+  for (const head of grid.querySelectorAll('div.idea-head')) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'idea-head';
+    btn.setAttribute('aria-expanded', 'false');
+    btn.setAttribute('aria-controls', head.closest('.idea').id + '-more');
+    btn.append(...head.childNodes);
+    head.replaceWith(btn);
+  }
+}
+
 export function initIdeas() {
   const grid = document.getElementById('ideas-grid');
   if (!grid) return;
+  headsToButtons(grid);
 
   // Opening names the tile in the URL; closing it hands the URL back to the
   // section. Both replace, so expanding never adds a history entry.

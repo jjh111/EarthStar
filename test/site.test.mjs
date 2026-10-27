@@ -610,6 +610,99 @@ async function newPage(opts = {}) {
 }
 
 {
+  // Without script the page is whole and still: nothing that needs script
+  // shows, every idea's notes stand open with the last row full, each Sky tile
+  // says its reading needs script and still opens it in the Viewer, and the
+  // films are links to their files
+  for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
+    const { ctx, page } = await newPage({ viewport, javaScriptEnabled: false });
+    await page.goto(BASE + '/', { waitUntil: 'networkidle' });
+    const r = await page.evaluate(() => {
+      const shown = (el) => { const b = el.getBoundingClientRect(); return b.width > 0 && b.height > 0 && getComputedStyle(el).visibility !== 'hidden'; };
+      const grid = document.getElementById('ideas-grid').getBoundingClientRect();
+      const tiles = [...document.querySelectorAll('.sky-tile')];
+      return {
+        controls: [...document.querySelectorAll('button, input, [role="button"]')].filter(shown).map((el) => el.className || el.id),
+        notes: [...document.querySelectorAll('.idea-more')].filter(shown).length, ideas: document.querySelectorAll('.idea').length,
+        gap: Math.round(grid.right - document.querySelector('.idea:last-child').getBoundingClientRect().right),
+        sentence: document.getElementById('sky-sentence').innerText,
+        tiles: tiles.every((t) => t.querySelector('.sky-detail').innerText === 'needs JavaScript' && !shown(t.querySelector('.sky-reading'))
+          && t.querySelector('a.sky-open').getAttribute('href').startsWith('/viewer/')),
+        films: [...document.querySelectorAll('a.work-open[data-film]')].every((a) => a.getAttribute('href').endsWith('.mp4')),
+        hScroll: document.documentElement.scrollWidth > innerWidth + 1,
+      };
+    });
+    const at = viewport.width;
+    check(`no script, ${at}: no control that needs it shows`, r.controls.length === 0, r.controls.join(', '));
+    check(`no script, ${at}: every idea open, the last row full`, r.notes === r.ideas && r.gap <= 1, `${r.notes}/${r.ideas}, ${r.gap} px short`);
+    check(`no script, ${at}: Sky says its readings need script, and each tile opens the Viewer`, /need JavaScript/.test(r.sentence) && r.tiles && !/Reading the sky/.test(r.sentence));
+    check(`no script, ${at}: films link to their files, and nothing scrolls sideways`, r.films && !r.hScroll);
+    await ctx.close();
+  }
+}
+
+{
+  // Every reader hears a badge's word, not its letter, and sees it at 10 px or
+  // more; the quiet inks hold 5:1 by day and by night; the page speaks only
+  // for search and the copy buttons; and forced colours keep the script
+  for (const colorScheme of ['light', 'dark']) {
+    const { ctx, page } = await newPage({ colorScheme });
+    await page.goto(BASE + '/', { waitUntil: 'networkidle' });
+    const r = await page.evaluate(() => {
+      const rgb = (c) => { const d = document.createElement('i'); d.style.color = c; document.body.append(d); const v = getComputedStyle(d).color.match(/\d+/g).map(Number); d.remove(); return v; };
+      const lum = ([r, g, b]) => [r, g, b].map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }).reduce((a, v, i) => a + v * [0.2126, 0.7152, 0.0722][i], 0);
+      const ratio = (a, b) => { const x = lum(rgb(a)), y = lum(rgb(b)); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+      const v = (k) => getComputedStyle(document.documentElement).getPropertyValue(k).trim();
+      const badges = [...document.querySelectorAll('.badge')];
+      return {
+        inks: Math.min(...['--ink-3', '--gold-2'].flatMap((k) => ['--bg', '--bg-2'].map((g) => ratio(v(k), v(g))))),
+        focus: Math.min(ratio(v('--focus'), v('--bg')), ratio(v('--focus'), v('--bg-2'))),
+        mute: badges.filter((b) => !(b.getAttribute('aria-hidden') === 'true' && b.title && (b.nextElementSibling?.matches('.visually-hidden') || b.closest('.legend-item, .sky-note')))).length,
+        small: badges.filter((b) => parseFloat(getComputedStyle(b).fontSize) < 10).length, n: badges.length,
+        voices: [...document.querySelectorAll('[aria-live]')].map((el) => el.id).sort().join(' '),
+      };
+    });
+    check(`${colorScheme}: the quiet inks hold 5:1 and the focus ring 3:1`, r.inks >= 5 && r.focus >= 3, `${r.inks.toFixed(2)}, ${r.focus.toFixed(2)}`);
+    check(`${colorScheme}: every badge says its word and is 10 px or more`, r.n > 20 && r.mute === 0 && r.small === 0, `${r.mute} mute, ${r.small} small of ${r.n}`);
+    if (colorScheme === 'light') check('the page speaks only for search and the copy buttons', r.voices === 'archiveStatus search-status seedStatus', r.voices);
+    await page.emulateMedia({ colorScheme, forcedColors: 'active' });
+    const kept = await page.evaluate(() => [...document.querySelectorAll('.idea-glyph.glyph, .key-row .glyph, .stage-no .num, .ga-ink')]
+      .every((g) => { const cs = getComputedStyle(g); return cs.forcedColorAdjust === 'none' && !/rgba\(0, 0, 0, 0\)|transparent/.test(cs.backgroundColor); }));
+    check(`${colorScheme}: forced colours keep the script`, kept);
+    await ctx.close();
+  }
+}
+
+{
+  // A finger gets 44 px everywhere: the bar keeps its height, so its controls
+  // answer a tap just outside the box drawn; the seed's copy button and the
+  // reader's controls grow, and the reader's row stays under 56 px. The
+  // reader's wide code takes the focus, so the keys can scroll it.
+  const { ctx, page } = await newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  await page.goto(BASE + '/', { waitUntil: 'networkidle' });
+  await page.evaluate(() => scrollTo(0, innerHeight * 1.5));
+  await page.waitForTimeout(300);
+  const box = await page.evaluate(() => { const t = document.getElementById('themeToggle').getBoundingClientRect(), i = document.getElementById('siteSearch').getBoundingClientRect(); return { t: [t.left - 4, t.top - 4], i: [i.left + 30, i.top - 4] }; });
+  await page.touchscreen.tap(...box.i);
+  const field = await page.evaluate(() => document.activeElement?.id);
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.touchscreen.tap(...box.t);
+  await page.waitForTimeout(150);
+  check('touch: the bar\'s controls answer a tap beside their boxes', field === 'siteSearch' && await page.evaluate(() => document.documentElement.dataset.theme === 'dark'), field);
+  const seed = await page.locator('#seedCopy').boundingBox();
+  check('touch: the seed\'s copy button is 44 px', seed.width >= 44 && seed.height >= 44, `${seed.width}x${seed.height}`);
+  await page.goto(BASE + '/#doc/earth-star-skill', { waitUntil: 'networkidle' });
+  await page.waitForSelector('.archive-md pre');
+  const reader = await page.evaluate(() => ({ row: document.querySelector('.archive-panel-header').getBoundingClientRect().height,
+    small: [...document.querySelectorAll('.archive-panel-header button')].filter((b) => b.offsetParent && b.getBoundingClientRect().height < 44).length,
+    wide: [...document.querySelectorAll('.archive-md pre, .archive-md table')].filter((el) => el.scrollWidth > el.clientWidth + 1).map((el) => el.tabIndex),
+  }));
+  check('touch: the reader\'s controls are 44 px in a row under 56', reader.row <= 56 && reader.small === 0, `${reader.row}px, ${reader.small} small`);
+  check('the reader\'s wide code and tables take the focus', reader.wide.length > 0 && reader.wide.every((t) => t === 0), reader.wide.join(','));
+  await ctx.close();
+}
+
+{
   const { ctx, page } = await newPage({ reducedMotion: 'reduce' });
   await page.goto(BASE + '/', { waitUntil: 'networkidle' });
   await page.mouse.click(700, 450);

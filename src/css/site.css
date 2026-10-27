@@ -16,11 +16,14 @@
   --bg-3: #d8caa6;          /* pressed / hover surface */
   --ink: #142e1d;           /* dark green */
   --ink-2: #33513c;
-  --ink-3: #495e4f;
+  /* the quiet ink, for meta and provenance: 5.6:1 on the paper and 6.2:1 on a
+     card, so small text keeps its 4.5 with the automata's gold beneath it */
+  --ink-3: #405546;
   --line: rgba(20, 46, 29, 0.22);
   --line-2: rgba(20, 46, 29, 0.5);
   --gold: #b48a0e;          /* flourish gold (day) */
-  --gold-2: #775806;        /* gold that must read as text: bronze by day */
+  --gold-2: #6a4f05;        /* gold that must read as text: bronze by day, 5.4:1 */
+  --focus: var(--gold-2);   /* the focus ring: gold that holds 3:1 on its ground */
   --gold-glow: rgba(200, 150, 12, 0.35);
   --scrim: rgba(20, 46, 29, 0.55);
   --live: #1f6b3a;          /* the one green-on-tan accent: a live reading */
@@ -47,7 +50,7 @@
     --bg-3: #1a3527;
     --ink: #e8dcc0;
     --ink-2: #c4b89b;
-    --ink-3: #9a9278;
+    --ink-3: #a8a086;         /* 6.4:1 on the night, 5.8:1 on a card */
     --line: rgba(232, 220, 192, 0.16);
     --line-2: rgba(232, 220, 192, 0.4);
     --gold: #e9b92c;
@@ -55,7 +58,6 @@
     --gold-glow: rgba(255, 215, 0, 0.45);
     --scrim: rgba(8, 20, 12, 0.6);
     --live: #ffe9a8;
-  --leaf: #86c97a;
     --leaf: #86c97a;
     --automata-rgb: 233, 185, 44;
     --automata-alpha: 0.3;
@@ -67,7 +69,7 @@
   --bg-3: #1a3527;
   --ink: #e8dcc0;
   --ink-2: #c4b89b;
-  --ink-3: #9a9278;
+  --ink-3: #a8a086;
   --line: rgba(232, 220, 192, 0.16);
   --line-2: rgba(232, 220, 192, 0.4);
   --gold: #e9b92c;
@@ -75,6 +77,7 @@
   --gold-glow: rgba(255, 215, 0, 0.45);
   --scrim: rgba(8, 20, 12, 0.6);
   --live: #ffe9a8;
+  --leaf: #86c97a;
   --automata-rgb: 233, 185, 44;
   --automata-alpha: 0.3;
 }
@@ -107,7 +110,9 @@ a { color: inherit; }
 button { font: inherit; color: inherit; }
 ::selection { background: var(--gold-glow); }
 
-:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+/* on the painting and in the films' night, the ring is the night's gold */
+.cover, .portraits, .film-dialog { --focus: #e9b92c; }
 
 .visually-hidden {
   position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
@@ -574,11 +579,15 @@ h1 {
   .wf-links .wf-still-row:hover { color: var(--ink); }
   .wf-links .wf-still-row:focus-visible { outline-offset: -3px; }
 }
-/* Without script the menu cannot open, so the links stay in a row of their own */
+/* Without script there is no search, no switch and no menu that could open:
+   the bar is the star, the sections and the Viewer. On narrow screens the
+   sections wrap beside the Viewer, every one in sight, and the bar stays at
+   the head of the page rather than following it down */
 @media (max-width: 900px) {
-  :root:not(.js) { --wf-h: 92px; }
+  :root:not(.js) { --wf-h: 0px; }
+  :root:not(.js) .wayfinder { position: relative; align-items: start; }
   :root:not(.js) .wf-menu { display: none; }
-  :root:not(.js) .wf-links { position: static; display: flex; flex-direction: row; grid-area: 2 / 1 / 3 / -1; padding: 0; border: 0; background: none; overflow-x: auto; }
+  :root:not(.js) .wf-links { position: static; display: flex; flex-flow: row wrap; padding: 0; border: 0; background: none; max-height: none; overflow: visible; }
   :root:not(.js) .wf-links a { min-height: 36px; padding: 0 8px; font-size: 0.72em; letter-spacing: 0.12em; }
 }
 /* phones: the star gives its place to search, and Top joins the menu */
@@ -675,7 +684,7 @@ body.is-searching .wf-search:not(.pop-open) .wf-status {
 .sky-open { color: inherit; text-decoration: none; }
 .sky-open::after { content: ''; position: absolute; inset: 0; border-radius: var(--radius); }
 .sky-open:focus-visible { outline: none; }
-.sky-open:focus-visible::after { outline: 2px solid var(--gold); outline-offset: 3px; }
+.sky-open:focus-visible::after { outline: 2px solid var(--focus); outline-offset: 3px; }
 .sky-go { color: var(--ink-3); letter-spacing: 0; transition: color 0.15s; }
 .sky-tile:hover, .sky-tile:focus-within { border-color: var(--line-2); }
 .sky-tile:hover .sky-go, .sky-tile:focus-within .sky-go { color: var(--ink); }
@@ -690,12 +699,12 @@ body.is-searching .wf-search:not(.pop-open) .wf-status {
 .sky-unit:empty { display: none; } /* a class or a scale has no unit, and no gap after it */
 .sky-detail { font-size: 0.9em; color: var(--ink-2); }
 .sky-prov { font-family: var(--mono); font-size: 0.76em; color: var(--ink-3); letter-spacing: 0.02em; }
-.sky-tile[data-state="loading"] { opacity: 0.7; }
+/* Loading and stale say so in their words and their ink, never by fading the
+   tile: faded, its small type would fall under 4.5:1 */
 .sky-tile[data-state="loading"] .sky-value { color: var(--ink-3); animation: skyPulse 1.6s ease-in-out infinite; }
-.sky-tile[data-state="loading"] .sky-detail { font-style: italic; }
+.sky-tile[data-state="loading"] .sky-detail { font-style: italic; color: var(--ink-3); }
 @keyframes skyPulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
 .no-pulse .sky-value { animation: none !important; }
-.sky-tile[data-state="stale"] { opacity: 0.8; }
 .sky-tile[data-state="stale"] .sky-value { color: var(--ink-2); }
 .sky-tile[data-state="nodata"] .sky-value, .sky-tile[data-state="error"] .sky-value {
   font-family: var(--sans); font-size: 1em; color: var(--ink-3); letter-spacing: 0.04em;
@@ -759,9 +768,12 @@ body.is-searching .wf-search:not(.pop-open) .wf-status {
 .sky-shot-cap .badge { color: #f3ead2; }
 .sky-tiers { display: inline-flex; gap: 3px; margin-right: 4px; vertical-align: -0.1em; }
 
-/* Register badges: ink text, gold hairline — the provenance grammar is a flourish that carries meaning */
+/* Register badges: ink text, gold hairline — the provenance grammar is a flourish that carries meaning.
+   One spec on both surfaces: a mono capital in a 1 px box, never under 10 px.
+   The capital is for the eye: a screen reader hears the word beside it
+   ('empirical', not 'E'), and a pointer finds the whole of it in the title. */
 .badge {
-  display: inline-block; font-family: var(--mono); font-size: 0.66em; line-height: 1;
+  display: inline-block; font-family: var(--mono); font-size: max(0.66em, 10px); line-height: 1;
   padding: 3px 5px; border: 1px solid var(--gold); border-radius: var(--radius);
   color: var(--ink); vertical-align: middle;
 }
@@ -820,6 +832,7 @@ body.is-searching .wf-search:not(.pop-open) .wf-status {
 .ideas-empty { font-family: var(--serif); font-style: italic; color: var(--ink-3); padding: 24px 0; }
 .ideas-legend { margin-top: 14px; font-size: 0.84em; color: var(--ink-3); display: flex; flex-wrap: wrap; gap: 6px 18px; }
 .legend-item { white-space: nowrap; }
+.legend-viewer { flex-basis: 100%; }
 
 /* ── Archive ──
    A catalogue: one document per row. The kind of document stands above its
@@ -840,7 +853,7 @@ body.is-searching .wf-search:not(.pop-open) .wf-status {
 .archive-card-title a::after { content: ''; position: absolute; inset: 0; border-radius: var(--radius); }
 .archive-card:hover .archive-card-title a { text-decoration: underline 1px var(--gold); text-underline-offset: 4px; }
 .archive-card-title a:focus-visible { outline: none; }
-.archive-card-title a:focus-visible::after { outline: 2px solid var(--gold); outline-offset: 3px; }
+.archive-card-title a:focus-visible::after { outline: 2px solid var(--focus); outline-offset: 3px; }
 .archive-card-desc { font-size: 0.96em; color: var(--ink-2); line-height: 1.6; max-width: 62ch; }
 .archive-card-tags { font-family: var(--mono); font-size: 0.78em; color: var(--ink-3); letter-spacing: 0.04em; line-height: 1.5; margin-top: 8px; }
 @media (min-width: 600px) {
@@ -1012,13 +1025,12 @@ body.is-searching .wf-search:not(.pop-open) .wf-status {
 .work-film:hover .work-media::before, .work-film:focus-within .work-media::before { border-color: #e9b92c; }
 .work-body { flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 9px 14px 10px; line-height: 1.45; }
 .work-kicker { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; font-family: var(--mono); font-size: 0.72em; color: var(--ink-3); }
-.work-kicker .badge, .works-portraits .badge { font-size: max(0.66em, 10px); }
 .work-title { font-family: var(--serif); font-size: 1.3em; font-weight: 500; line-height: 1.2; color: var(--ink); }
 .work-title a { color: inherit; text-decoration: none; }
 .work-title a::after { content: ''; position: absolute; inset: 0; border-radius: var(--radius); }
 .work:hover .work-title a { text-decoration: underline 1px var(--gold); text-underline-offset: 4px; }
 .work-title a:focus-visible { outline: none; }
-.work-title a:focus-visible::after { outline: 2px solid var(--gold); outline-offset: 3px; }
+.work-title a:focus-visible::after { outline: 2px solid var(--focus); outline-offset: 3px; }
 .work-title [aria-hidden] { font-family: var(--sans); font-size: 0.6em; color: var(--ink-3); }
 .work-about { font-size: 0.86em; color: var(--ink-2); }
 .work-prov { margin-top: auto; padding-top: 2px; font-family: var(--serif); font-style: italic; font-size: 0.94em; color: var(--ink-3); }
@@ -1076,7 +1088,7 @@ body.is-searching .wf-search:not(.pop-open) .wf-status {
 .film-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; align-items: center; padding: 7px 8px 7px 16px; }
 .film-title { grid-column: 1; font-family: var(--serif); font-size: 1.3em; font-weight: 500; line-height: 1.2; }
 .film-meta { grid-column: 1; font-family: var(--mono); font-size: 0.74em; line-height: 1.5; color: rgba(243, 234, 210, 0.78); }
-.film-meta .badge { margin-right: 6px; color: #f3ead2; font-size: max(0.66em, 10px); }
+.film-meta .badge { margin-right: 6px; color: #f3ead2; }
 .film-close {
   grid-column: 2; grid-row: 1 / span 2; width: 40px; height: 40px; cursor: pointer;
   background: transparent; border: 1px solid rgba(243, 234, 210, 0.3); border-radius: var(--radius);
@@ -1287,6 +1299,70 @@ footer > p { margin-top: 4px; }
 /* Stilled by the visitor (still.js): what loops of its own accord stops;
    what answers a click still answers it */
 :root[data-still] .cover-cue span, :root[data-still] .sky-value, :root[data-still] .emoji-persistent { animation: none; }
+
+/* Forced colours (a high-contrast theme) paint every background in the
+   system's Canvas, and a mask over Canvas is no mark at all: the script would
+   vanish, or turn to blocks. So the drawn marks keep their own paint, in the
+   system's text colour (its link colour inside a link), and what is pressed,
+   live or current keeps its fill */
+@media (forced-colors: active) {
+  .glyph, .ga-ink, .ga-gold, .logo-day { forced-color-adjust: none; background: CanvasText; }
+  a .glyph { background: LinkText; }
+  .wf-still[aria-pressed="true"], .wf-still-row[aria-pressed="true"] .wf-still-box, .chip[aria-pressed="true"] {
+    forced-color-adjust: none; background: Highlight; border-color: Highlight; color: HighlightText;
+  }
+  .wf-still[aria-pressed="true"] .glyph, .wf-still-row[aria-pressed="true"] .glyph { background: HighlightText; }
+  .sky-tile[data-state="live"] .sky-label::before, .coherence-meter-fill, .thread-fill, .thread-knot.is-current {
+    forced-color-adjust: none; background: CanvasText;
+  }
+}
+
+/* Touch: every control is a 44 px target under a coarse pointer. Where one can
+   grow without moving the page, it grows. The bar and the idea cards keep
+   their height, so there each control's ::before is its target, 44 px and
+   centred on the box drawn; the search field's hands its taps to the field
+   (search.js) */
+@media (pointer: coarse) {
+  .seed-copy { width: 44px; height: 44px; }
+  .chip { min-height: 44px; }
+  .archive-panel-header { padding-block: 5px; } /* so the reader's one row stays under 56 px */
+  .archive-nav-btn, .archive-panel-close { min-width: 44px; height: 44px; }
+  .film-close { width: 44px; height: 44px; }
+  .archive-toc summary { line-height: 44px; }
+  .wf-mark, .wf-links a, .wf-viewer, .wf-theme, .wf-still, .wf-menu, .wf-field, .wf-input, .idea-head { position: relative; }
+  .wf-mark::before, .wf-links a::before, .wf-viewer::before, .wf-theme::before, .wf-still::before, .wf-menu::before, .wf-field::before,
+  .idea-head::before {
+    content: ''; position: absolute; left: 50%; top: 50%; width: max(100%, 44px); height: max(100%, 44px); transform: translate(-50%, -50%);
+  }
+  /* two small boxes side by side: their targets meet and never overlap */
+  .wf-still + .wf-theme { margin-left: 4px; }
+}
+@media (pointer: coarse) and (max-width: 640px) { .seed-plain { padding-right: 50px; } }
+
+/* ── Without script ──
+   The head script marks the page .js before it paints. Without it nothing that
+   needs script shows: search and the switches (with the bar, above), the copy
+   button, the lenses and their count, the garden and the thread. What stays
+   reads as a page: every idea open, each Sky tile saying that its reading
+   needs script and still opening it in the Viewer, the Archive's titles
+   opening their documents, the films playing from their cards. */
+.js .without-js, :root:not(.js) .with-js { display: none; }
+:root:not(.js) .wf-search, :root:not(.js) .wf-theme, :root:not(.js) .seed-copy, :root:not(.js) .ideas-bar,
+:root:not(.js) .footer-garden, :root:not(.js) .coherence-meter, :root:not(.js) .thread,
+:root:not(.js) .sky-reading, :root:not(.js) .sky-prov { display: none; }
+:root:not(.js) .seed-plain { padding-right: 0; }
+:root:not(.js) .idea-head, :root:not(.js) .gomen-pic { cursor: auto; }
+:root:not(.js) .idea-head::after { content: none; }
+:root:not(.js) .idea-more[hidden] { display: block; columns: 2 22em; column-gap: 32px; }
+/* every idea open, the last row is full by CSS where ideas.js cannot see to
+   it: a last card alone takes the row, and a last pair shares three columns */
+@media (min-width: 1001px) {
+  @container (max-width: 1299px) {
+    :root:not(.js) .idea:nth-child(3n+1):last-child { grid-column: 1 / -1; }
+    :root:not(.js) .idea:nth-child(3n+2):last-child { grid-column: span 2; }
+  }
+}
+@media (min-width: 601px) and (max-width: 1000px) { :root:not(.js) .idea:nth-child(odd):last-child { grid-column: 1 / -1; } }
 
 /* ── Print: an open archive document prints like a document ── */
 @media print {

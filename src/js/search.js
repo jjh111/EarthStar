@@ -106,6 +106,9 @@ export function initSearch() {
   const count = pop.querySelector('.search-count');
   const all = pop.querySelector('.search-all');
   registerPageGroups(input);
+  // Under a coarse pointer the field's target reaches past its box (site.css):
+  // a tap there is a tap on the field
+  input.parentElement.addEventListener('click', (e) => { if (e.target === input.parentElement) input.focus(); });
 
   let options = [];   // what the list offers, in order: { group, id }
   let active = -1;    // the option the keys are on; -1 is the field itself

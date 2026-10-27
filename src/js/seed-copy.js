@@ -28,17 +28,20 @@ export function initSeedCopy() {
     return parts.join('\n\n');
   };
 
+  // The outcome is said once, by the status beside the button (a live region),
+  // as the reader's Copy link says its own
+  const status = document.getElementById('seedStatus');
   let resetTimer = null;
   btn.addEventListener('click', async () => {
     const text = seedText();
     if (!text) return;
     const ok = await copyText(text);
     btn.classList.toggle('is-copied', ok);
-    btn.setAttribute('aria-label', ok ? 'Copied' : 'Copy failed — select the text manually');
+    if (status) status.textContent = ok ? 'Seed copied' : 'Copy failed — select the text manually';
     clearTimeout(resetTimer);
     resetTimer = setTimeout(() => {
       btn.classList.remove('is-copied');
-      btn.setAttribute('aria-label', 'Copy the seed: coherence line, equations, and seed phrase');
+      if (status) status.textContent = '';
     }, 2000);
   });
 }
