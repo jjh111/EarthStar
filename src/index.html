@@ -118,8 +118,8 @@
     <span id="search-status" class="wf-status" aria-live="polite"></span>
   </div>
   <!-- The seven sections: a row on wide screens, the Sections menu on narrow ones.
-       Top stands in for the star, which phones hide; the menu ends with
-       Still the ground. -->
+       Top stands in for the star, which phones hide; the menu adds the
+       footer's Garden, which it names there, and ends with Still the ground. -->
   <div class="wf-links" id="wfLinks">
     <a class="wf-top" href="#top">Top</a>
     <a href="#seed">Seed</a>
@@ -129,6 +129,7 @@
     <a href="#archive-section">Archive</a>
     <a href="#works">Works</a>
     <a href="#begin">Onward</a>
+    <a class="wf-garden" href="#garden">Garden</a>
     <button type="button" class="wf-still-row" aria-pressed="false"><span class="wf-still-box"><!--BUILD:GLYPH still--></span>Still the ground</button>
   </div>
   <!-- Always in the bar: the door to the Viewer (↗: another Earth Star surface,
@@ -187,7 +188,7 @@
 
 <section id="sky" class="stage sky" data-thread="Sky">
   <div class="sky-inner">
-    <h2 class="section-label"><span class="stage-no" title="III"><!--BUILD:NUM 3--><span class="visually-hidden">III</span></span> Sky now <span class="section-sub">the star scale, measured this minute by NOAA</span></h2>
+    <h2 class="section-label"><span class="stage-no" title="III"><!--BUILD:NUM 3--><span class="visually-hidden">III</span></span> Sky now <span class="section-sub">the star scale, as NOAA last measured it</span></h2>
     <!-- Without script there are no readings: the sentence and each tile say
          so, and each tile still opens its reading in the Viewer -->
     <p class="sky-sentence" id="sky-sentence"><span class="with-js">Reading the sky…</span><span class="without-js">The live readings need JavaScript, which is off in this browser. Each tile opens its reading in the Viewer.</span></p>
@@ -224,7 +225,7 @@
       </a>
       <p class="sky-foot">
         <a class="sky-cta" href="/viewer/">Open the Viewer <span aria-hidden="true">↗</span></a>
-        <span class="sky-note">Live readings from NOAA, fetched by your browser and refreshed every minute. <span class="badge" title="Measured" aria-hidden="true">E</span> measured, timestamped, never invented. Loading is not “no data”.</span>
+        <span class="sky-note">Live readings from NOAA, fetched by your browser and refreshed every minute while Sky is in view. <span class="badge" title="Measured" aria-hidden="true">E</span> measured, timestamped, never invented. Loading is not “no data”.</span>
       </p>
     </div>
   </div>
@@ -246,7 +247,11 @@
 
 <section id="archive-section" class="archive" data-thread="Archive">
   <div class="archive-inner">
-    <h2 class="section-label"><span class="stage-no" title="V"><!--BUILD:NUM 5--><span class="visually-hidden">V</span></span> Archive <span class="section-sub">the documents beneath</span></h2>
+    <!-- the heading's row holds the catalogue's count, as the Ideas bar holds theirs -->
+    <div class="archive-head">
+      <h2 class="section-label"><span class="stage-no" title="V"><!--BUILD:NUM 5--><span class="visually-hidden">V</span></span> Archive <span class="section-sub">the documents beneath</span></h2>
+      <span class="ideas-count" id="archive-count"></span>
+    </div>
     <div class="archive-grid" id="archiveGrid"><!--BUILD:ARCHIVE_GRID--></div>
   </div>
 </section>

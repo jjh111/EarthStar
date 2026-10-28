@@ -78,14 +78,16 @@ async function newPage(opts = {}) {
   check('no sprout from card click', await page.locator('.emoji-transient').count() === 0);
   check('provenance line', await page.locator('.archive-provenance').count() === 1);
 
+  // (a keyboard scroll can start late on a busy machine: wait for the text to
+  // hold the focus, then for the scroll, rather than a fixed while)
   const readerTop = () => page.evaluate(() => document.getElementById('archivePanelBody').scrollTop);
+  await page.waitForFunction(() => document.activeElement?.id === 'archivePanelBody');
   await page.keyboard.press('PageDown');
-  await page.waitForTimeout(400);
-  const paged = await readerTop();
+  const paged = await page.waitForFunction(() => document.getElementById('archivePanelBody').scrollTop > 0, null, { timeout: 3000 }).then(() => readerTop(), () => 0);
   check('PageDown scrolls the document', paged > 0, `scrollTop ${paged}`);
   await page.keyboard.press(' ');
-  await page.waitForTimeout(400);
-  check('Space does not close the reader', await page.locator('.archive-panel.open').count() === 1 && await readerTop() > paged);
+  const spaced = await page.waitForFunction((y) => document.getElementById('archivePanelBody').scrollTop > y, paged, { timeout: 3000 }).then(() => true, () => false);
+  check('Space does not close the reader', await page.locator('.archive-panel.open').count() === 1 && spaced);
 
   const firstTitle = await page.locator('#archiveDocTitle').textContent();
   await page.keyboard.press(']');
@@ -157,7 +159,9 @@ async function newPage(opts = {}) {
   await page.locator('#idea-gomens .idea-head').click();
   check('idea expands', await page.locator('#idea-gomens-more').isVisible());
 
-  // Sky strip: every tile resolves to a real state; an error never shows a number
+  // Sky strip: every tile resolves to a real state once Sky nears the screen;
+  // an error never shows a number
+  await page.evaluate(() => document.getElementById('sky').scrollIntoView());
   await page.waitForFunction(() => Array.from(document.querySelectorAll('.sky-tile')).every(t => t.dataset.state !== 'loading'), null, { timeout: 25000 }).catch(() => {});
   const states = await page.$$eval('.sky-tile', ts => ts.map(t => [t.dataset.state, t.querySelector('.sky-value').textContent]));
   const resolved = states.every(([s]) => ['live', 'stale', 'nodata', 'error'].includes(s));
@@ -328,8 +332,9 @@ async function newPage(opts = {}) {
   await page.evaluate(() => window.scrollTo(0, innerHeight * 1.5));
   await page.waitForTimeout(300);
   const row = await page.evaluate(() => {
-    const links = [...document.querySelectorAll('.wf-links a:not(.wf-top)')].map((a) => a.getBoundingClientRect());
-    return { h: document.querySelector('.wayfinder').getBoundingClientRect().height, n: links.filter((r) => r.width > 0).length,
+    // (the menu's Top and Garden are not in the row: only what shows is counted)
+    const links = [...document.querySelectorAll('.wf-links a:not(.wf-top)')].map((a) => a.getBoundingClientRect()).filter((r) => r.width > 0);
+    return { h: document.querySelector('.wayfinder').getBoundingClientRect().height, n: links.length,
       tops: new Set(links.map((r) => Math.round(r.top))).size, end: Math.max(...links.map((r) => r.right)), door: document.querySelector('.wf-viewer').getBoundingClientRect().left };
   });
   check('landscape phone: seven sections in one row', row.h <= 44 && row.n === 7 && row.tops === 1 && row.end <= row.door, JSON.stringify(row));
@@ -368,6 +373,20 @@ async function newPage(opts = {}) {
   });
   const open = await page.evaluate(() => Math.round(document.getElementById('idea-gomens').getBoundingClientRect().width - document.getElementById('ideas-grid').getBoundingClientRect().width));
   check('an opened idea spans the row', open === 0 && await holes() === 0, `${open} px short`);
+  // The cards keep the page's order around an open one (read across, then
+  // down), and the head that was pressed stays where it was on the screen
+  const inOrder = () => page.evaluate(() => {
+    const pos = [...document.querySelectorAll('.idea:not([hidden])')].map((el, i) => { const b = el.getBoundingClientRect(); return { i, t: Math.round(b.top), l: Math.round(b.left) }; });
+    return [...pos].sort((a, b) => a.t - b.t || a.l - b.l).every((q, k) => q.i === k);
+  });
+  const tending = page.locator('#idea-tending .idea-head');
+  await tending.scrollIntoViewIfNeeded();
+  const y0 = (await tending.boundingBox()).y;
+  await tending.click();
+  const y1 = (await tending.boundingBox()).y;
+  check('an opened idea keeps the cards in order, and its head holds still', await inOrder() && await holes() === 0 && Math.abs(y1 - y0) <= 2,
+    `${Math.round(y0)} → ${Math.round(y1)}`);
+  await tending.click();
   await page.locator('#idea-gomens .idea-head').click();
   check('closing an idea leaves #ideas', await page.evaluate(() => location.hash) === '#ideas');
   const all = await holes();
@@ -438,7 +457,8 @@ async function newPage(opts = {}) {
   check('every Gomen opens its plate in the field guide', plates.length === 5 && lost.length === 0, lost.join(', ') || plates.join(' '));
   check('the field guide leads back to the splash and the Viewer', /<a href="\/">/.test(guide) && /<a href="\/viewer\/">/.test(guide));
   const sitemap = await (await page.request.get(BASE + '/sitemap.xml')).text();
-  check('the sitemap lists the splash, the Viewer and the field guide', (sitemap.match(/<loc>/g) || []).length === 3 && sitemap.includes('/field-guide/'));
+  check('the sitemap lists the splash, the Viewer, the field guide and every document', (sitemap.match(/<loc>/g) || []).length === 3 + await page.locator('.archive-card').count()
+    && sitemap.includes('/field-guide/') && sitemap.includes('/archive/wrf.html'));
 
   const cards = await page.$$eval('.work, .works-portraits', (els) => els.map((el) => ({
     id: el.id, badge: el.querySelector('.badge')?.textContent, words: el.querySelector('.work-kicker, figcaption').textContent,
@@ -561,7 +581,8 @@ async function newPage(opts = {}) {
   await page.waitForTimeout(800);
   const wind = await page.evaluate(() => {
     const t = document.getElementById('sky-wind'), q = (s) => t.querySelector(s).textContent;
-    return { value: q('.sky-value'), unit: q('.sky-unit'), detail: q('.sky-detail'), sentence: document.getElementById('sky-sentence').textContent };
+    // (a dot binds to the word after it with a no-break space)
+    return { value: q('.sky-value'), unit: q('.sky-unit'), detail: q('.sky-detail').replace(/\u00a0/g, ' '), sentence: document.getElementById('sky-sentence').textContent };
   });
   check('sky wind tile holds the speed, its unit apart', /^\d+$/.test(wind.value) && wind.unit === 'km/s', `${wind.value} | ${wind.unit}`);
   check('sky minus is U+2212 in tile and sentence', wind.detail.startsWith('Bz \u22121.6 nT · southward') && /Bz\s\u22121\.6\snT/.test(wind.sentence)
@@ -639,6 +660,27 @@ async function newPage(opts = {}) {
     check(`no script, ${at}: films link to their files, and nothing scrolls sideways`, r.films && !r.hScroll);
     await ctx.close();
   }
+  // A card's link is its document's own page, which needs no script either:
+  // a whole page in standards mode, titled, its provenance above the text,
+  // the way home and into the reader, and every asset it asks for found
+  const { ctx, page } = await newPage({ viewport: { width: 390, height: 844 }, javaScriptEnabled: false });
+  const missing = [];
+  page.on('response', (r) => { if (new URL(r.url()).origin === new URL(BASE).origin && r.status() >= 400) missing.push(`${r.status()} ${new URL(r.url()).pathname}`); });
+  await page.goto(BASE + '/', { waitUntil: 'networkidle' });
+  await page.locator('.archive-card a[data-doc="wrf"]').click();
+  await page.waitForLoadState('networkidle');
+  const doc = await page.evaluate(() => ({
+    mode: document.compatMode, title: document.title, home: !!document.querySelector('a[href="/"]'), reader: !!document.querySelector('a[href="/#doc/wrf"]'),
+    canonical: document.querySelector('link[rel="canonical"]')?.href, prov: document.querySelector('.archive-provenance .prov-status')?.textContent || '',
+    font: getComputedStyle(document.querySelector('.archive-md p')).fontFamily, hScroll: document.documentElement.scrollWidth > innerWidth + 1,
+  }));
+  check('no script: a card opens its document\'s own page, whole', page.url().endsWith('/archive/wrf.html') && doc.mode === 'CSS1Compat'
+    && /^Waste Reclamation Fund/.test(doc.title) && doc.home && doc.reader && doc.canonical?.endsWith('/archive/wrf.html')
+    && /not enacted/.test(doc.prov) && /DM Sans/.test(doc.font) && !doc.hScroll && missing.length === 0, JSON.stringify({ ...doc, missing }));
+  const lost = await (await page.request.get(BASE + '/404.html')).text();
+  check('the 404 page leads home, to the Viewer and to the field guide', /^<!doctype html>/i.test(lost)
+    && ['href="/"', 'href="/viewer/"', 'href="/field-guide/"'].every((h) => lost.includes(h)));
+  await ctx.close();
 }
 
 {
@@ -709,6 +751,12 @@ async function newPage(opts = {}) {
   await page.waitForTimeout(900);
   check('reduced motion: no butterflies', await page.locator('.butterfly-living').count() === 0);
   check('reduced motion: sprout reaches footer', await page.locator('.emoji-footer').count() === 1);
+  // the system has stilled the ground already: the switch says so, and holds
+  const still = page.locator('.wf-end .wf-still');
+  await still.click({ force: true }); // (aria-disabled: a press changes nothing)
+  check('reduced motion: the Still switch shows pressed, and why', await still.getAttribute('aria-pressed') === 'true'
+    && await still.getAttribute('aria-disabled') === 'true' && /reduced motion/.test(await still.getAttribute('title'))
+    && !(await page.evaluate(() => document.documentElement.hasAttribute('data-still'))));
   // The automata ground renders its full cascade at once under reduced motion
   check('automata ground paints', await page.evaluate(() => {
     const c = document.getElementById('bgAutomaton');

@@ -37,6 +37,17 @@ for (const s of T.species) {
     await sharp(flat).resize(600, 600).webp(webpOpts).toFile(P(`${s.id}-inset.webp`));
   }
 }
+// The card a link to the guide shows (og:image): the frontispiece, whole, on
+// the guide's paper, its own edge columns drawn out to 1200 × 630 so the
+// paper runs to the edge without a seam
+const FRONT = P('snowmakers.webp'), OG = join(HERE, 'og.jpg');
+if (stale(OG, FRONT)) {
+  const plate = sharp(FRONT).flatten({ background: '#efe4c8' });
+  const { width: pw, height: ph } = await plate.metadata();
+  const pad = Math.round((ph * 1200 / 630 - pw) / 2);
+  await sharp(await plate.extend({ left: pad, right: pad, extendWith: 'copy' }).png().toBuffer())
+    .resize(1200, 630, { fit: 'cover' }).jpeg({ quality: 84, mozjpeg: true }).toFile(OG);
+}
 const kingdom = Object.fromEntries(T.kingdoms.map((k) => [k.id, k]));
 const order = Object.fromEntries(T.orders.map((o) => [o.id, o]));
 
@@ -217,7 +228,7 @@ function cladogram() {
   const dy = (kys[0] + kys[kys.length - 1]) / 2;
   for (const ky of kys) body += curve(X[0] + 10, dy, X[1] - 10, ky);
   body += `<text x="${X[0] - 10}" y="${f1(dy - 16)}" class="dom" text-anchor="middle">${esc(T.domain.name)}</text><circle cx="${X[0]}" cy="${f1(dy)}" r="6" class="fill"/>`;
-  return `<svg class="clado" viewBox="0 0 1180 ${y + 10}" role="img" aria-label="The classification of the Gomenata, from domain to species">${body}</svg>`;
+  return `<svg class="clado" viewBox="0 0 1180 ${y + 10}" role="group" aria-label="The classification of the Gomenata, from domain to species">${body}</svg>`;
 }
 
 // ── the web of returns: what each eats, and what it gives back ──
@@ -231,7 +242,7 @@ function returns() {
     body += `<text x="590" y="${y + 5}" text-anchor="middle" class="g"><a href="#${s.id}">${esc(s.common.replace(/^The /, ''))}</a></text>`;
     body += `<path d="M710 ${y} C 760 ${y}, 780 ${y}, 842 ${y}" class="ret"/><text x="850" y="${y + 5}" class="r">${esc(s.returns_tag)}</text>`;
   });
-  return `<svg class="web" viewBox="0 0 ${W} ${top + n * h + 10}" role="img" aria-label="Each Gomen, what it eats and what it returns">${body}</svg>`;
+  return `<svg class="web" viewBox="0 0 ${W} ${top + n * h + 10}" role="group" aria-label="Each Gomen, what it eats and what it returns">${body}</svg>`;
 }
 
 // ── the scale of the Gomenata: nanometres to the orbits ──
@@ -250,7 +261,7 @@ function scaleChart() {
     const below = lane.y > base;
     body += `<line x1="${f1(x)}" y1="${base}" x2="${f1(x)}" y2="${below ? lane.y - 16 : lane.y + 6}" class="thin"/><circle cx="${f1(x)}" cy="${base}" r="4" class="fill"/><text x="${f1(x)}" y="${lane.y}" text-anchor="middle" class="sp"><a href="#${s.id}">${esc(name)}</a></text>`;
   }
-  return `<svg class="scalechart" viewBox="0 0 ${W} 290" role="img" aria-label="The Gomens by size, on a logarithmic scale">${body}</svg>`;
+  return `<svg class="scalechart" viewBox="0 0 ${W} 290" role="group" aria-label="The Gomens by size, on a logarithmic scale">${body}</svg>`;
 }
 
 // ── a plate: the drawing, its callouts in ink, its scale bar ──
@@ -378,6 +389,8 @@ const speciesHTML = T.kingdoms.map((k) => {
   return `<section class="kingdom" id="k-${k.id}"><h2><span class="smallcaps">Kingdom</span> ${esc(k.name)}<span class="sub">${esc(k.scale)} · ${esc(k.range)}</span></h2>${list.map(account).join('\n')}</section>`;
 }).join('\n');
 const ordersHTML = T.orders.map((o) => `<li id="o-${o.id}">${pictogram(o.id)}<div><b>${esc(o.name)}</b> <i>${esc(o.math)}</i> ${reg(o.reg)}<p>${esc(o.text)}${cite(o.refs)}</p></div></li>`).join('');
+const SITE = 'https://earthstar.space/';
+const DESCRIPTION = 'A naturalist’s field guide to the Gomens: living responses to the wastes of the industrial world, classified by scale and by the mathematics of their bodies, with fifteen plates. Every design rests on cited science.';
 const refsHTML = refOrder.map((k, i) => `<li id="ref-${k}" value="${i + 1}">${esc(T.references[k])}</li>`).join('');
 
 const html = `<!doctype html>
@@ -386,14 +399,29 @@ const html = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Gomenata · A Field Guide to the Adjacent Life</title>
-<meta name="description" content="A naturalist’s field guide to the Gomens: living responses to the wastes of the industrial world, classified by scale and by the mathematics of their bodies, with fifteen plates. Every design rests on cited science.">
-<link rel="icon" href="../assets/img/favicon.svg">
+<meta name="description" content="${esc(DESCRIPTION)}">
+<link rel="canonical" href="${SITE}field-guide/">
+<meta name="theme-color" content="#efe4c8">
+<link rel="icon" href="../assets/img/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../assets/img/apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:url" content="${SITE}field-guide/">
+<meta property="og:title" content="Gomenata · A Field Guide to the Adjacent Life">
+<meta property="og:description" content="${esc(DESCRIPTION)}">
+<meta property="og:image" content="${SITE}field-guide/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Gomenata · A Field Guide to the Adjacent Life">
+<meta name="twitter:description" content="${esc(DESCRIPTION)}">
+<meta name="twitter:image" content="${SITE}field-guide/og.jpg">
 <style>
 @font-face { font-family: 'Cormorant Garamond'; font-style: normal; font-weight: 300 700; font-display: swap; src: url(../assets/fonts/CormorantGaramond.woff2) format('woff2'); }
 @font-face { font-family: 'Cormorant Garamond'; font-style: italic; font-weight: 300 700; font-display: swap; src: url(../assets/fonts/CormorantGaramond-italic.woff2) format('woff2'); }
 :root {
-  --paper: #efe4c8; --paper-2: #e6d7b4; --ink: #2a1d12; --sepia: #6b4a2e; --faded: #8a7458;
-  --oxblood: #8a2c1c; --gold: #9a7408; --verd: #3d6e60;
+  --paper: #efe4c8; --paper-2: #e6d7b4; --ink: #2a1d12; --sepia: #6b4a2e; --faded: #6e5a40;
+  --oxblood: #8a2c1c; --gold: #6f5400; --verd: #335e52;
   --serif: 'Cormorant Garamond', 'FreeSerif', Georgia, serif;
 }
 * { box-sizing: border-box; }
@@ -466,6 +494,10 @@ svg .thin { stroke-width: .8; opacity: .7; }
 .scalechart .tick { font-size: 16px; fill: var(--sepia); font-style: italic; }
 .scalechart .sp { font-size: 17px; paint-order: stroke; stroke: var(--paper); stroke-width: 6px; stroke-linejoin: round; } .scalechart .sp a { fill: var(--ink); }
 .figcap { text-align: center; font-style: italic; color: var(--sepia); font-size: .95rem; margin-top: 4px; }
+/* the species in the diagrams are links: Chrome draws no focus ring round an
+   SVG link, so the focused name is underlined in oxblood instead */
+.diagram svg a:focus { outline: none; }
+.diagram svg a:focus-visible, .diagram svg a:focus-visible tspan { text-decoration: underline 2px; text-underline-offset: 3px; fill: var(--oxblood); }
 
 /* species */
 .kingdom > h2 { border-top: 1px solid rgba(42,29,18,.3); padding-top: 34px; }
@@ -500,7 +532,7 @@ svg .thin { stroke-width: .8; opacity: .7; }
 .pigments { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 10px; margin: 2px 0 6px; font-size: .9rem; color: var(--sepia); }
 .pigments .plbl { font-variant: small-caps; letter-spacing: .08em; margin-right: 4px; }
 .pigments .pig { display: inline-flex; align-items: center; gap: 6px; }
-.pigments .mat { font-size: .78rem; letter-spacing: .04em; opacity: .8; }
+.pigments .mat { font-size: .78rem; letter-spacing: .04em; }
 .pigments .mat::before { content: '· '; }
 .pigments .chip { width: 30px; height: 18px; background: var(--c); border-radius: 46% 54% 38% 62% / 55% 40% 60% 45%; opacity: .88; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12), inset -3px -2px 6px rgba(0,0,0,.18); }
 .plate-svg .scalebar text { font-size: 28px; font-style: italic; }
@@ -520,7 +552,7 @@ svg .thin { stroke-width: .8; opacity: .7; }
 .picto * { stroke-width: 1.2; }
 .how { padding-left: 1.1em; margin: 0; } .how li { margin: 6px 0; }
 .says { margin: 16px 0 8px; font-size: 1.4rem; font-style: italic; color: var(--sepia); text-align: center; }
-.caveat { border-left: 3px solid var(--gold); padding: 6px 12px; background: rgba(154,116,8,.06); font-size: .95rem; }
+.caveat { border-left: 3px solid var(--gold); padding: 6px 12px; background: rgba(111,84,0,.06); font-size: .95rem; }
 .missing { text-align: center; font-style: italic; color: var(--faded); padding: 60px 0; }
 
 /* orders */
@@ -615,7 +647,7 @@ writeFileSync(join(HERE, 'index.html'), html);
 
 // the diagrams as standalone SVG, for the film
 mkdirSync(join(HERE, 'figures'), { recursive: true });
-const SVG_STYLE = `<style>text{font-family:'Cormorant Garamond',serif;fill:#2a1d12}path,line,polyline,polygon,circle,ellipse{fill:none;stroke:#2a1d12;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}.fill{fill:#2a1d12;stroke:none}.paper{fill:#efe4c8}.thin{stroke-width:.8;opacity:.7}a{fill:inherit}.ret{stroke:#3d6e60}.w{fill:#8a2c1c;font-style:italic}.r{fill:#3d6e60;font-style:italic}.head{font-size:15px;fill:#6b4a2e;letter-spacing:.1em}.bin{font-style:italic}.cn{fill:#8a7458;font-size:16px}.ord{font-size:15px;fill:#6b4a2e;letter-spacing:.08em}.king{font-size:20px;letter-spacing:.1em}.dom{font-size:26px;letter-spacing:.12em}.scale,.tick{font-size:16px;font-style:italic;fill:#6b4a2e}.sp{font-size:17px}</style>`;
+const SVG_STYLE = `<style>text{font-family:'Cormorant Garamond',serif;fill:#2a1d12}path,line,polyline,polygon,circle,ellipse{fill:none;stroke:#2a1d12;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}.fill{fill:#2a1d12;stroke:none}.paper{fill:#efe4c8}.thin{stroke-width:.8;opacity:.7}a{fill:inherit}.ret{stroke:#335e52}.w{fill:#8a2c1c;font-style:italic}.r{fill:#335e52;font-style:italic}.head{font-size:15px;fill:#6b4a2e;letter-spacing:.1em}.bin{font-style:italic}.cn{fill:#6e5a40;font-size:16px}.ord{font-size:15px;fill:#6b4a2e;letter-spacing:.08em}.king{font-size:20px;letter-spacing:.1em}.dom{font-size:26px;letter-spacing:.12em}.scale,.tick{font-size:16px;font-style:italic;fill:#6b4a2e}.sp{font-size:17px}</style>`;
 const standalone = (svg) => svg.replace('<svg ', `<svg xmlns="http://www.w3.org/2000/svg" `).replace(/(<svg[^>]*>)/, `$1${SVG_STYLE}`).replace(/<\/?a[^>]*>/g, '');
 for (const o of T.orders) writeFileSync(join(HERE, 'figures', `${o.id}.svg`), standalone(pictogram(o.id)));
 writeFileSync(join(HERE, 'figures', 'cladogram.svg'), standalone(cladogram()));

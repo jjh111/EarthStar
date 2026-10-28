@@ -142,12 +142,19 @@ export function initSearch() {
     list.hidden = options.length === 0;
     setActive(was ? options.findIndex((o) => o.group.name === was.group.name && o.id === was.id) : -1);
 
-    // ideas and documents as the page shows them; then whatever else was found
+    // ideas and documents as the page shows them, and whatever else was
+    // found, in the order the list sets its groups
     const ideas = document.querySelectorAll('.idea:not([hidden])').length;
     const docs = document.querySelectorAll('#archiveGrid .archive-card').length;
     const more = found.filter((g) => g.count);
     const n = (k, one, many = one + 's') => `${k} ${k === 1 ? one : many}`;
-    const line = q ? [n(ideas, 'idea'), ...more.map((g) => n(g.hits.length, ...g.count)), n(docs, 'document')].join(' · ') : '';
+    const parts = groups.map((g) => {
+      if (g.name === 'Ideas') return n(ideas, 'idea');
+      if (g.name === 'Documents') return n(docs, 'document');
+      const f = g.count && found.find((x) => x.name === g.name);
+      return f ? n(f.hits.length, ...g.count) : null;
+    }).filter(Boolean);
+    const line = q ? parts.join(' · ') : '';
     if (status && line !== said) status.textContent = said = line;
     const none = ideas + docs + more.length === 0;
     count.textContent = none ? 'Nothing here matches — try fewer words' : line;

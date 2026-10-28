@@ -53,6 +53,13 @@ function show(id) {
   // preload=none; a player that arrives with its sources waits for play.)
   const video = document.createElement('video');
   Object.assign(video, { controls: true, playsInline: true, preload: 'none', poster: a.dataset.poster || '' });
+  // On a portrait screen the tall cut is what will play: the player takes its
+  // shape, and its poster, before play, so nothing moves when it starts (the
+  // dialog's height cap still holds on a short phone, letterboxed)
+  if (a.dataset.tall && matchMedia('(orientation: portrait)').matches) {
+    video.style.aspectRatio = '9 / 16';
+    if (a.dataset.tallPoster) video.poster = a.dataset.tallPoster;
+  }
   video.append(...[[a.dataset.tall, '(orientation: portrait)'], [a.getAttribute('href')]]
     .filter(([src]) => src).map(([src, media]) => {
       const s = document.createElement('source');

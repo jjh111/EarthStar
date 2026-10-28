@@ -50,7 +50,8 @@ function classify(e) {
   if (!navigator.onLine) return 'offline';
   if (e && /HTTP 404/.test(e.message)) return 'upstream 404';
   if (e && e.name === 'AbortError') return 'timed out';
-  return 'blocked';
+  // (a browser cannot tell a refused request from no network at all)
+  return 'offline or blocked';
 }
 
 // ── parsing (shapes verified live; see heliosphere-data/sources.md) ────
@@ -108,7 +109,11 @@ function parse(key, data) {
     return { time: n.d, estimated_kp: num(n.r.estimated_kp), kp: kpLabel(n.r.kp) };
   }
   if (key === 'mag' || key === 'wind') {
-    const n = newest(data, 'time_tag', (r) => r.active === true);
+    // The newest active row that holds the reading, as for the X-rays below:
+    // a row with no speed (or no field) is a gap, and the row before it
+    // carries its own, older time
+    const has = key === 'mag' ? 'bz_gsm' : 'proton_speed';
+    const n = newest(data, 'time_tag', (r) => r.active === true && num(r[has]) != null);
     if (!n) return null;
     return key === 'mag'
       ? { time: n.d, spacecraft: n.r.source, bz_gsm: num(n.r.bz_gsm), bt: num(n.r.bt) }
@@ -134,8 +139,10 @@ function parse(key, data) {
 // ── state machine ────────────────────────────────────────────────────────
 
 const TILES = ['kp', 'wind', 'xray', 'scales'];
-const NOTE_DOWN = 'NOAA could not be reached from this browser. The page tries again every minute.';
+const NOTE_DOWN = 'NOAA could not be reached from this browser (offline or blocked). The page tries again each minute.';
+const NOTE_STALE = 'NOAA’s newest readings are old: each tile shows its age, and the page tries again every minute.';
 let noteLive = null; // the note as the page ships it, restored once a reading arrives
+let nextAt = 0;      // when the next attempt is due, for a failed tile to say
 
 const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -143,8 +150,36 @@ function ageSeconds(d) {
   return d ? Math.round((Date.now() - d.getTime()) / 1000) : Infinity;
 }
 
-function hhmm(d) {
-  return d ? d.toISOString().slice(11, 16) + ' UTC' : '';
+// As the Viewer writes a time (whenUTC): 'HH:MM UTC' today, 'DD Mon HH:MM UTC'
+// on any other day, so a reading from yesterday never passes for this morning's
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function when(d) {
+  if (!d) return '';
+  const iso = d.toISOString(), hm = iso.slice(11, 16) + ' UTC';
+  if (iso.slice(0, 10) === new Date().toISOString().slice(0, 10)) return hm;
+  return `${String(d.getUTCDate()).padStart(2, '0')} ${MON[d.getUTCMonth()]} ${hm}`;
+}
+
+// As the Viewer writes an age (formatAge): '45s', '12 min', '3.2 h'
+function age(seconds) {
+  if (!Number.isFinite(seconds)) return 'unknown';
+  const s = Math.max(0, Math.round(seconds));
+  if (s < 90) return `${s}s`;
+  const m = Math.round(s / 60);
+  if (m < 90) return `${m} min`;
+  return `${(m / 60).toFixed(1)} h`;
+}
+
+// The dot between the parts of a line binds to the part after it, so a line
+// breaks before a dot, never after one
+const DOT = ' ·\u00a0';
+
+// A run of words that never breaks across a line
+function nw(text) {
+  const s = document.createElement('span');
+  s.className = 'nw';
+  s.textContent = text;
+  return s;
 }
 
 // The measured tier's badge, as the page draws its others: E for the eye,
@@ -161,8 +196,9 @@ function measured() {
   return [b, word];
 }
 
-/** state ∈ loading | live | stale | nodata | error */
-function setTile(id, state, { value = '', unit = '', detail = '', when = null, via = '', error = '' } = {}) {
+/** state ∈ loading | live | stale | nodata | error. `at` is the reading's
+ *  time; `since`, the time its age is counted from (the older of a pair) */
+function setTile(id, state, { value = '', unit = '', detail = '', at = null, since = at, via = '', error = '' } = {}) {
   const el = document.getElementById('sky-' + id);
   if (!el) return;
   el.dataset.state = state;
@@ -175,16 +211,22 @@ function setTile(id, state, { value = '', unit = '', detail = '', when = null, v
     v.setAttribute('aria-label', 'loading');
   } else if (state === 'nodata') {
     v.textContent = 'no data'; u.textContent = ''; d.textContent = detail || 'the feed answered with nothing usable';
-    p.textContent = when ? 'newest ' + hhmm(when) : '';
+    p.textContent = at ? 'newest ' + when(at) : '';
     v.removeAttribute('aria-label');
   } else if (state === 'error') {
-    v.textContent = 'unavailable'; u.textContent = ''; d.textContent = error ? `${error} · next try in 60 s` : 'next try in 60 s';
+    // the time of the next attempt, as the Viewer says it ('retrying 19:02 UTC'),
+    // to the minute after it, so it never reads as a time already past
+    const retry = nextAt ? `retrying\u00a0${when(new Date(Math.ceil(nextAt / 60e3) * 60e3)).replace(/ /g, '\u00a0')}` : 'retrying';
+    v.textContent = 'unavailable'; u.textContent = ''; d.textContent = error ? `${error}${DOT}${retry}` : retry;
     p.textContent = '';
     v.removeAttribute('aria-label');
   } else {
+    // The time, then for a stale reading its age ('stale · 3.2 h'), then the
+    // tier and the source: three runs that never break inside, each after the
+    // first led by its dot, so a line breaks only before a dot
     v.textContent = value; u.textContent = unit; d.textContent = detail;
-    p.textContent = `${hhmm(when)}${state === 'stale' ? ' · stale' : ''} · `;
-    p.append(...measured(), ` ${via}`);
+    const source = nw('· '); source.append(...measured(), ' ' + via);
+    p.replaceChildren(nw(when(at)), ...(state === 'stale' ? [' ', nw(`· stale · ${age(ageSeconds(since))}`)] : []), ' ', source);
     v.removeAttribute('aria-label');
   }
 }
@@ -201,48 +243,72 @@ function fromMock(m) {
 }
 
 function render(results, via) {
-  const st = (key, d) => (ageSeconds(d.time) > FEEDS[key].stale ? 'stale' : 'live');
+  const st = (key, t) => (ageSeconds(t) > FEEDS[key].stale ? 'stale' : 'live');
 
   const kp = results.kp;
   if (kp === undefined) setTile('kp', 'error', { error: results.errors.kp });
-  else if (!kp || kp.estimated_kp == null) setTile('kp', 'nodata', { when: kp?.time });
+  else if (!kp || kp.estimated_kp == null) setTile('kp', 'nodata', { at: kp?.time });
   // One decimal: the 1-minute estimate moves in thirds, so a second decimal is
   // false precision. Its label is NOAA's 1-minute estimate, not the 3-hour Kp.
-  else setTile('kp', st('kp', kp), { value: kp.estimated_kp.toFixed(1), unit: 'Kp', detail: '1-minute estimate' + (kp.kp ? ` · NOAA Kp ${kp.kp}` : ''), when: kp.time, via });
+  else setTile('kp', st('kp', kp.time), { value: kp.estimated_kp.toFixed(1), unit: 'Kp', detail: '1-minute estimate' + (kp.kp ? `${DOT}NOAA Kp ${kp.kp}` : ''), at: kp.time, via });
 
   const mag = results.mag, wind = results.wind;
+  const bz = mag?.bz_gsm ?? null, sp = wind?.speed ?? null;
   if (mag === undefined && wind === undefined) setTile('wind', 'error', { error: results.errors.mag || results.errors.wind });
-  else if ((!mag || mag.bz_gsm == null) && (!wind || wind.speed == null)) setTile('wind', 'nodata', { when: mag?.time || wind?.time });
+  else if (bz == null && sp == null) setTile('wind', 'nodata', { at: mag?.time || wind?.time });
   else {
-    // One quantity per tile: the speed is the reading, the field rides in the
-    // detail with its own unit, so the value never wraps
-    const bz = mag?.bz_gsm, sp = wind?.speed;
-    const t = mag?.time || wind?.time;
-    const field = bz != null ? `Bz ${fmtSigned(bz, 1)} nT · ${bz < 0 ? 'southward' : 'northward'} · ` : '';
-    setTile('wind', st('mag', { time: t }), { value: sp != null ? String(Math.round(sp)) : '—', unit: 'km/s', detail: field + (mag?.spacecraft || wind?.spacecraft || ''), when: t, via });
+    // One quantity per tile: the speed is the reading, at its own time, and
+    // the field rides in the detail with its unit (and its own time, where
+    // the magnetometer's differs). The pair is as old as the older of the two,
+    // as the Viewer counts it, so a frozen plasma feed never passes for live.
+    // With no speed, the field is the reading.
+    const shown = [sp != null && wind.time, bz != null && mag.time].filter(Boolean);
+    const older = new Date(Math.min(...shown.map(Number)));
+    const dir = bz != null ? (bz < 0 ? 'southward' : 'northward') : '';
+    const craft = (sp != null ? wind.spacecraft : mag.spacecraft) || '';
+    let tile;
+    if (sp == null) {
+      tile = { value: fmtSigned(bz, 1), unit: 'nT', detail: `Bz${DOT}${dir}${DOT}no speed reading${DOT}${craft}`, at: mag.time };
+    } else {
+      const own = bz != null && when(mag.time) !== when(wind.time) ? `${DOT}${when(mag.time).replace(' UTC', '').replace(/ /g, '\u00a0')}` : '';
+      const field = bz != null ? `Bz ${fmtSigned(bz, 1)} nT${own}${DOT}${dir}${DOT}` : '';
+      tile = { value: String(Math.round(sp)), unit: 'km/s', detail: field + craft, at: wind.time };
+    }
+    setTile('wind', st('wind', older), { ...tile, since: older, via });
   }
 
   const x = results.xray;
   if (x === undefined) setTile('xray', 'error', { error: results.errors.xray });
-  else if (!x || x.flux_long == null) setTile('xray', 'nodata', { when: x?.time });
-  else setTile('xray', st('xray', x), { value: x.class, unit: '', detail: x.flux_long.toExponential(1) + ' W/m² · GOES-' + x.satellite, when: x.time, via });
+  else if (!x || x.flux_long == null) setTile('xray', 'nodata', { at: x?.time });
+  else setTile('xray', st('xray', x.time), { value: x.class, unit: '', detail: `${x.flux_long.toExponential(1)} W/m²${DOT}GOES-${x.satellite}`, at: x.time, via });
 
   const s = results.scales;
   if (s === undefined) setTile('scales', 'error', { error: results.errors.scales });
   else if (!s) setTile('scales', 'nodata');
-  else setTile('scales', st('scales', s), { value: `R${s.R.scale} S${s.S.scale} G${s.G.scale}`, unit: '', detail: `geomagnetic: ${s.G.text}`, when: s.time, via });
+  else setTile('scales', st('scales', s.time), { value: `R${s.R.scale} S${s.S.scale} G${s.G.scale}`, unit: '', detail: `geomagnetic: ${s.G.text}`, at: s.time, via });
+
+  const states = TILES.map((id) => document.getElementById('sky-' + id)?.dataset.state);
+  const down = states.every((v) => v === 'error');
 
   const line = document.getElementById('sky-sentence');
   if (line) {
     // A symbol never wraps away from its number, nor a number from its unit
     // (\u00a0, a no-break space); the word 'wind' may stand at a line's end
-    const parts = [];
-    if (kp && kp.estimated_kp != null) parts.push(`Kp\u00a0${kp.estimated_kp.toFixed(1)}`);
-    if (wind && wind.speed != null) parts.push(`wind ${Math.round(wind.speed)}\u00a0km/s`);
-    if (mag && mag.bz_gsm != null) parts.push(`Bz\u00a0${fmtSigned(mag.bz_gsm, 1)}\u00a0nT`);
-    if (x && x.class) parts.push(`X-rays\u00a0${x.class}`);
-    const quiet = kp && kp.estimated_kp != null ? (kp.estimated_kp < 4 ? 'Quiet sky' : kp.estimated_kp < 5 ? 'Unsettled sky' : 'Storm') : 'The sky';
-    const text = parts.length ? `${quiet} — ${parts.join(', ')}.` : 'The sky is not reporting right now.';
+    const parts = [], times = [];
+    const add = (text, t) => { parts.push(text); times.push(t); };
+    if (kp && kp.estimated_kp != null) add(`Kp\u00a0${kp.estimated_kp.toFixed(1)}`, kp.time);
+    if (sp != null) add(`wind ${Math.round(sp)}\u00a0km/s`, wind.time);
+    if (bz != null) add(`Bz\u00a0${fmtSigned(bz, 1)}\u00a0nT`, mag.time);
+    if (x && x.class) add(`X-rays\u00a0${x.class}`, x.time);
+    // The sky's mood is said in the present tense only while every reading in
+    // the sentence is live; an old one makes it a dated record, as old as its
+    // oldest reading
+    const oldest = times.length ? new Date(Math.min(...times.map(Number))) : null;
+    const stale = oldest && ageSeconds(oldest) > FEEDS.kp.stale;
+    const mood = kp && kp.estimated_kp != null ? (kp.estimated_kp < 4 ? 'Quiet sky' : kp.estimated_kp < 5 ? 'Unsettled sky' : 'Storm') : 'The sky';
+    const text = !parts.length ? (down ? 'NOAA could not be reached from this browser.' : 'NOAA sent no usable readings.')
+      : stale ? `Last readings, ${when(oldest)} (${age(ageSeconds(oldest))} old): ${parts.join(', ')}.`
+      : `${mood} — ${parts.join(', ')}.`;
     // Written only when it says something new, so a refresh that brings the
     // same sky leaves it alone (it is not a live region: the page's only voices
     // are search's count and the copy buttons)
@@ -250,15 +316,20 @@ function render(results, via) {
   }
 
   // When no feed answered at all, the note says why instead of promising
-  // live readings; any reading that arrives brings the promise back
+  // live readings, and when every reading is old it says that; any live
+  // reading brings the promise back
   const note = document.querySelector('#sky .sky-note');
   if (note) {
     noteLive ??= note.innerHTML;
-    const down = TILES.every((id) => document.getElementById('sky-' + id)?.dataset.state === 'error');
-    const html = down ? NOTE_DOWN : noteLive;
+    const old = states.includes('stale') && !states.includes('live');
+    const html = down ? NOTE_DOWN : old ? NOTE_STALE : noteLive;
     if (note.innerHTML !== html) note.innerHTML = html;
   }
 }
+
+// The last readings drawn, so that a return to Sky can redraw them against
+// the clock (their ages, and live turning stale) before the next fetch lands
+let drawn = null;
 
 async function refresh(mockMode) {
   if (mockMode) {
@@ -271,6 +342,7 @@ async function refresh(mockMode) {
     }
     return;
   }
+  nextAt = Date.now() + REFRESH_MS;
   const keys = Object.keys(FEEDS);
   const got = await Promise.all(keys.map(fetchFeed));
   const results = { errors: {} };
@@ -282,19 +354,38 @@ async function refresh(mockMode) {
     if (g.via !== 'NOAA SWPC') via = g.via;
     try { results[k] = parse(k, g.data); } catch { results[k] = null; }
   });
-  render(results, via || '');
+  drawn = { results, via: via || '' };
+  render(drawn.results, drawn.via);
 }
 
 export function initSky() {
   const root = document.getElementById('sky-now');
   if (!root) return;
+  if (REDUCED) root.classList.add('no-pulse');
   const mockMode = new URLSearchParams(location.search).get('mock') === '1';
   for (const id of TILES) setTile(id, 'loading');
-  refresh(mockMode);
-  if (mockMode) return;
-  let timer = setInterval(() => refresh(false), REFRESH_MS);
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') { refresh(false); clearInterval(timer); timer = setInterval(() => refresh(false), REFRESH_MS); }
-  });
-  if (REDUCED) root.classList.add('no-pulse');
+  if (mockMode) { refresh(true); return; }
+  // The feeds are fetched only while the page is in view and Sky is near the
+  // screen (within 600 px): the four 1-minute files are megabytes a minute,
+  // and a reader who never scrolls to Sky, or leaves the tab, should not pay
+  // for them. Until Sky first nears the screen its tiles say 'loading'. On a
+  // return, what was drawn is redrawn by the clock, and a fetch goes out at
+  // once if a minute has passed since the last.
+  let near = false, last = 0, timer = 0;
+  const due = () => document.visibilityState === 'visible' && near;
+  const tick = () => { if (due() && Date.now() - last >= REFRESH_MS - 1000) { last = Date.now(); refresh(false); } };
+  const arm = () => {
+    clearInterval(timer);
+    timer = 0;
+    if (!due()) return;
+    timer = setInterval(tick, REFRESH_MS);
+    nextAt = Date.now() + REFRESH_MS; // the interval's first tick, unless tick() goes now
+    if (drawn) render(drawn.results, drawn.via);
+    tick();
+  };
+  const sky = document.getElementById('sky') || root;
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(([e]) => { if (near !== e.isIntersecting) { near = e.isIntersecting; arm(); } }, { rootMargin: '600px 0px' }).observe(sky);
+  } else { near = true; arm(); }
+  document.addEventListener('visibilitychange', arm);
 }

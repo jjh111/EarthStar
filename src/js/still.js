@@ -8,15 +8,26 @@
 // 'earthstar:still' and asks isStill() when it starts.
 
 const KEY = 'earthStarStill';
+// The system's reduced motion stills the ground already: then the switch
+// shows pressed, says why, and has nothing to change
+const RM = window.matchMedia('(prefers-reduced-motion: reduce)');
 
 export const isStill = () => document.documentElement.hasAttribute('data-still');
 
 export function initStill() {
   const switches = document.querySelectorAll('.wf-still, .wf-still-row');
   if (!switches.length) return;
-  const show = () => switches.forEach((s) => s.setAttribute('aria-pressed', String(isStill())));
+  const show = () => switches.forEach((s) => {
+    s.setAttribute('aria-pressed', String(isStill() || RM.matches));
+    if (RM.matches) s.setAttribute('aria-disabled', 'true'); else s.removeAttribute('aria-disabled');
+    if (RM.matches) s.title = 'Still: your system asks for reduced motion';
+    else if (s.classList.contains('wf-still')) s.title = 'Still the ground';
+    else s.removeAttribute('title');
+  });
   show();
+  RM.addEventListener?.('change', show);
   switches.forEach((s) => s.addEventListener('click', () => {
+    if (RM.matches) return;
     const still = !isStill();
     document.documentElement.toggleAttribute('data-still', still);
     try {

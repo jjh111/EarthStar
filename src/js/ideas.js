@@ -2,8 +2,9 @@
 // Lens chips filter by facet; the site search (search.js) filters by text.
 // Tiles expand in place; the URL hash #idea/<id> deep-links and expands, and
 // ?lens=<id> keeps the chosen lens, so a filtered view can be shared.
-// Rows are always full: an open tile has a row of its own (site.css), and the
-// tiles of a short last row share it between them (coda, below).
+// Tiles keep the page's order. Rows are always full: an open tile has a row of
+// its own (site.css), and the closed tiles of a short row (the last, or the
+// one an open tile ends) share it between them (coda, below).
 
 import { queryWords, matchesAll } from './match.js';
 
@@ -16,25 +17,59 @@ export function ideaMatches(el, q) {
   return matchesAll(el.dataset.search, queryWords(q));
 }
 
-// Count what is visible and closed, never :nth-child (which counts hidden
-// tiles). A last row of n tiles across c columns gives each about c/n of it,
-// so a lone tile spans the row and none leaves a hole beside it.
+// The grid's columns as a card counts them, and the tracks each one spans:
+// from 1001 px the three columns are six half-tracks (site.css)
+function columns(grid) {
+  const tracks = getComputedStyle(grid).gridTemplateColumns.split(' ').length;
+  return tracks === 6 ? { cols: 3, unit: 2 } : { cols: tracks, unit: 1 };
+}
+
+// A run of closed tiles (from the grid's start or an open tile, to the next
+// open tile or the end) fills whole rows but for the n left at its tail;
+// those n share their row, each about c/n of it, so none leaves a hole beside
+// it. On three columns a lone last tile would stand across the whole row, a
+// closed card shaped like an open one: the last four set two over two instead.
+function share(run, { cols, unit }, spans) {
+  const n = cols > 1 ? run.length % cols : 0;
+  if (!n) return;
+  if (cols === 3 && unit === 2 && n === 1 && run.length >= 4) {
+    for (const el of run.slice(-4)) spans.set(el, 3);
+    return;
+  }
+  const tracks = cols * unit;
+  const base = Math.floor(tracks / n), wide = tracks % n;
+  run.slice(run.length - n).forEach((el, i) => spans.set(el, base + (i >= n - wide ? 1 : 0)));
+}
+
+// Count what is visible, never :nth-child (which counts hidden tiles), and
+// walk it in the page's order
 function coda() {
   const grid = document.getElementById('ideas-grid');
   if (!grid) return;
-  const cols = getComputedStyle(grid).gridTemplateColumns.split(' ').length;
-  const closed = tiles().filter((el) => !el.hidden && !el.classList.contains('is-open'));
-  const n = cols > 1 ? closed.length % cols : 0;
-  const last = closed.slice(closed.length - n);
-  const base = Math.floor(cols / (n || 1)), wide = cols % (n || 1);
+  const cols = columns(grid);
+  const spans = new Map();
+  let run = [];
   for (const el of tiles()) {
-    const i = last.indexOf(el);
-    const span = i < 0 ? '' : String(base + (i >= n - wide ? 1 : 0));
-    el.classList.toggle('is-coda', i >= 0);
+    if (el.hidden) continue;
+    if (el.classList.contains('is-open')) { share(run, cols, spans); run = []; } else run.push(el);
+  }
+  share(run, cols, spans);
+  for (const el of tiles()) {
+    const span = spans.has(el) ? String(spans.get(el)) : '';
+    el.classList.toggle('is-coda', !!span);
     if (el.style.getPropertyValue('--span') !== span) {
       if (span) el.style.setProperty('--span', span); else el.style.removeProperty('--span');
     }
   }
+}
+
+// Opening or closing a tile reflows the rows around it; the head under the
+// pointer (or the keys) stays at its height on the screen
+function holdStill(head, change) {
+  const y0 = head.getBoundingClientRect().top;
+  change();
+  const dy = head.getBoundingClientRect().top - y0;
+  if (Math.abs(dy) > 1) window.scrollBy({ top: dy, behavior: 'instant' });
 }
 
 function apply() {
@@ -63,11 +98,15 @@ export function expandIdea(id, scroll = true) {
   el.hidden = false;
   const btn = el.querySelector('.idea-head');
   const more = el.querySelector('.idea-more');
-  btn.setAttribute('aria-expanded', 'true');
-  more.hidden = false;
-  el.classList.add('is-open');
-  coda();
-  if (scroll) el.scrollIntoView({ block: 'center', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  const open = () => {
+    btn.setAttribute('aria-expanded', 'true');
+    more.hidden = false;
+    el.classList.add('is-open');
+    coda();
+  };
+  if (!scroll) { holdStill(btn, open); return true; }
+  open();
+  el.scrollIntoView({ block: 'center', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
   return true;
 }
 
@@ -97,10 +136,12 @@ export function initIdeas() {
     if (!btn) return;
     const el = btn.closest('.idea');
     const open = btn.getAttribute('aria-expanded') === 'true';
-    btn.setAttribute('aria-expanded', String(!open));
-    el.querySelector('.idea-more').hidden = open;
-    el.classList.toggle('is-open', !open);
-    coda();
+    holdStill(btn, () => {
+      btn.setAttribute('aria-expanded', String(!open));
+      el.querySelector('.idea-more').hidden = open;
+      el.classList.toggle('is-open', !open);
+      coda();
+    });
     if (!open) history.replaceState(null, '', '#idea/' + el.dataset.id);
     else if (location.hash === '#idea/' + el.dataset.id) history.replaceState(null, '', '#ideas');
   });

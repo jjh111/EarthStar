@@ -91,8 +91,8 @@ export const LAYERS = {
     ['main section .stage-inner > *, main section > div > *', 1], ['#garden', 1],
     ['.logo-hero', 2], ['.hero-link', 2], ['.cover-cue', 2],
     ['.wayfinder', 2], ['#thread', 2], ['.section-label', 2], ['.skip-link:focus', 2],
-    // search's list and count hang below the bar's box while they show (never at rest)
-    ['.search-pop, .is-searching .wf-status', 2],
+    // search's list hangs below the bar's box while it shows (never at rest)
+    ['.search-pop', 2],
   ],
 };
 

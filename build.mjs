@@ -13,7 +13,11 @@
 //   assets/img/works/ — the Works shelf's posters (--images; see section 6)
 //   assets/data/search.json — what search finds that the page does not hold as
 //                       text: the works and the field guide's species
-//   archive/<id>.html — pre-rendered document fragments, fetched on demand
+//   archive/<id>.frag.html — pre-rendered document fragments, which the reader
+//                       fetches on demand
+//   archive/<id>.html — each document as a page of its own, what a card's link,
+//                       a new tab, a reader without script or a crawler opens
+//   404.html, sitemap.xml
 //
 // Filenames are not content-hashed on purpose: GitHub Pages serves everything
 // with max-age=600 regardless, so hashing would add churn without cache benefit.
@@ -89,7 +93,8 @@ const badgeHTML = (r, title = concepts.registers[r], { said = false } = {}) =>
   + (said ? '' : `<span class="visually-hidden"> ${esc(title.split(' — ')[0].toLowerCase())}</span>`);
 
 // The head is a plain line until ideas.js makes it the button that opens the
-// notes: without script nothing would answer it, so there the notes stand open
+// notes: without script nothing would answer it, so there the notes stand open.
+// Notes with a second paragraph (for AI) may set in two columns; one, never
 function ideaHTML(c) {
   const search = [c.name, c.meaning, c.more, c.alignment, c.formula, ...(c.lens || [])].filter(Boolean).join(' ');
   const links = (c.links || []).map((l) => `<a href="${esc(l.href)}">${esc(l.label)}</a>`).join('');
@@ -102,7 +107,7 @@ function ideaHTML(c) {
     ${badgeHTML(c.register)}
   </div>
   <p class="idea-meaning">${esc(c.meaning)}</p>
-  <div class="idea-more" id="idea-${esc(c.id)}-more" hidden>
+  <div class="idea-more${c.alignment ? ' idea-more--two' : ''}" id="idea-${esc(c.id)}-more" hidden>
     ${c.formula ? `<p class="idea-formula">${esc(c.formula)}</p>` : ''}
     <p>${esc(c.more)}</p>
     ${c.alignment ? `<p class="idea-align"><strong>For AI:</strong> ${esc(c.alignment)}</p>` : ''}
@@ -119,7 +124,8 @@ const registerLegend = Object.entries(concepts.registers).map(([k, v]) =>
   `<span class="legend-item">${badgeHTML(k, v, { said: true })} ${esc(v)}</span>`).join(' ')
   + ` <span class="legend-viewer">The Viewer marks every reading with three of them: E for measured, D for modelled and M for ambient.</span>`;
 
-// ── 1. Archive fragments: markdown → HTML, written to /archive ──
+// ── 1. Archive fragments: markdown → HTML, written to /archive (the pages
+//       that hold them are written in section 5, with the CSS) ──
 
 mkdirSync(p('archive'), { recursive: true });
 
@@ -146,18 +152,20 @@ marked.use({
   },
 });
 
+const rendered = [];  // { doc, toc, body }, for the documents' own pages
 for (const doc of manifest.docs) {
   const md = readFileSync(p(doc.source), 'utf8')
     .replace(/^---\n[\s\S]*?\n---\n/, ''); // strip YAML frontmatter (skill file)
   heads = { id: doc.id, slugs: new Set(), h2: [] };
-  let html = marked.parse(md);
-  if (heads.h2.length >= 4) {
-    html = `<details class="archive-toc"><summary>Contents</summary><ol>${heads.h2.map((h) =>
-      `<li><a href="#doc/${doc.id}/${h.slug}">${esc(h.text)}</a></li>`).join('')}</ol></details>\n` + html;
-  }
+  const body = marked.parse(md);
+  const toc = heads.h2.length >= 4
+    ? `<details class="archive-toc"><summary>Contents</summary><ol>${heads.h2.map((h) =>
+      `<li><a href="#doc/${doc.id}/${h.slug}">${esc(h.text)}</a></li>`).join('')}</ol></details>\n`
+    : '';
   heads = null;
-  writeFileSync(p(`archive/${doc.id}.html`), html);
-  console.log(`archive/${doc.id}.html  ${(html.length / 1024).toFixed(1)}KB`);
+  rendered.push({ doc, toc, body });
+  writeFileSync(p(`archive/${doc.id}.frag.html`), toc + body);
+  console.log(`archive/${doc.id}.frag.html  ${((toc + body).length / 1024).toFixed(1)}KB`);
 }
 
 // ── 2. Client manifest module (no content, just metadata) ──
@@ -205,6 +213,10 @@ html = html.replace('<!--BUILD:REGISTER_LEGEND-->', registerLegend);
 // Section II: the Gomens and the key to their script, from src/gomens.json.
 // A figure is a picture until gomens.js makes it the button that wakes it
 const REG = { D: 'Design — a proposal, not built hardware', M: 'Mythopoetic — vision and commitment' };
+// A list of words set with dots between: a word of two never splits, and each
+// dot binds to the word after it, so a line never ends on one (as the
+// Archive's tags are set, card-template.mjs)
+const dotted = (words) => words.map((w) => esc(w).replace(/ /g, '\u00a0')).join(' ·\u00a0');
 const gomenLi = (g) => `<li class="scale" id="scale-${esc(g.scale.toLowerCase())}">
   <span class="scale-name">${esc(g.scale)}</span>
   <span class="gomen-pic" data-wake="Wake ${esc(g.name)}">
@@ -219,7 +231,7 @@ const gomenLi = (g) => `<li class="scale" id="scale-${esc(g.scale.toLowerCase())
     <span class="cart glyph" aria-hidden="true" ${mask(`${GLYPHS}/cart-${esc(g.id)}.svg`)}></span>
     <div>
       <span class="gomen-name">${esc(g.name)} ${badgeHTML(g.register, REG[g.register])}</span>
-      <p class="gomen-reading"><span class="gomen-radicals">${esc(g.radicals)}</span>${esc(g.reading)}</p>
+      <p class="gomen-reading"><span class="gomen-radicals">${dotted(g.radicals.split(' · '))}</span>${esc(g.reading)}</p>
     </div>
   </div>
   <p class="gomen-line">${esc(g.lore)}</p>${g.link ? `
@@ -271,7 +283,7 @@ const filmCard = (f, tag, sizes) => `<${tag} class="work work-film" id="work-${f
   ${poster(f.id, sizes)}
   <div class="work-body">
     <p class="work-kicker">${badge('M')} ${filmSize(f)}</p>
-    <h3 class="work-title"><a class="work-open" href="${f.file}" data-film="${f.id}" data-poster="${WORKS}/${f.id}-1280.webp"${f.tall ? ` data-tall="${f.tall}"` : ''}>${esc(f.title)}<span class="visually-hidden">: play the film</span></a></h3>
+    <h3 class="work-title"><a class="work-open" href="${f.file}" data-film="${f.id}" data-poster="${WORKS}/${f.id}-1280.webp"${f.tall ? ` data-tall="${f.tall}" data-tall-poster="${WORKS}/${f.id}-tall-720.webp"` : ''}>${esc(f.title)}<span class="visually-hidden">: play the film</span></a></h3>
     <p class="work-about">${esc(f.about)}</p>
     <p class="work-prov">${esc(works.filmProv)}</p>
   </div>
@@ -345,6 +357,97 @@ html = html
 
 writeFileSync(p('index.html'), html);
 console.log(`index.html  ${(html.length / 1024).toFixed(1)}KB (css inlined)`);
+
+// ── 5b. The documents' own pages, the 404, the sitemap ──
+// A card's link is its document's own page, so a reader without script, a
+// middle-click, a copied link or a crawler gets a whole page: the text as the
+// reader sets it, its provenance above it (a draft bill reads as a draft), and
+// the way home and into the reader. It is the document's canonical address.
+// The pages carry the splash's CSS (its paths one folder up, or from the root
+// for the 404, which is served at any depth) and a few lines of their own.
+const PAGE_CSS = `
+.doc-page { max-width: calc(64ch + 2 * var(--pad-x)); margin: 0 auto; padding: 0 var(--pad-x) 56px; }
+.doc-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0 24px; margin-bottom: 24px; border-bottom: 1px solid var(--line); font-size: 0.86em; }
+.doc-head a { display: inline-flex; align-items: center; gap: 8px; min-height: 48px; color: var(--ink); text-decoration: none; }
+.doc-head a:hover { text-decoration: underline 1px var(--gold); text-underline-offset: 4px; }
+.doc-home { font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; }
+.doc-home .glyph { width: 22px; height: 22px; color: var(--gold); }
+.doc-head .doc-open { margin-left: auto; color: var(--ink-2); }
+.doc-page .archive-toc { max-width: none; }
+.lost { min-height: 100vh; min-height: 100svh; display: grid; place-content: center; justify-items: center; gap: 12px; padding: 48px var(--pad-x); text-align: center; }
+.lost-mark { display: inline-flex; color: var(--gold); }
+.lost-mark .glyph { width: 56px; height: 56px; }
+.lost h1 { font-size: clamp(1.6rem, 1rem + 2.4vw, 2.4rem); font-style: italic; letter-spacing: 0.02em; text-transform: none; margin: 0; }
+.lost ul { list-style: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 0 24px; }
+.lost a:not(.lost-mark) { display: inline-flex; align-items: center; gap: 0.3em; min-height: 44px; color: var(--ink); text-decoration: underline 1px var(--gold); text-underline-offset: 4px; }
+`;
+const { code: pageCss } = await transform(PAGE_CSS, { loader: 'css', minify: true });
+const THEME = `<script>try{var t=localStorage.getItem('earthStarTheme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}</script>`;
+const SITE = 'https://earthstar.space/';
+const pageHead = ({ base, title, description, canonical, extra = '' }) => `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(title)}</title>
+<meta name="description" content="${esc(description)}">
+${canonical ? `<link rel="canonical" href="${canonical}">\n` : ''}${extra}<meta name="theme-color" media="(prefers-color-scheme: light)" content="#e4d7b8">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0e2117">
+<link rel="icon" href="${base}assets/img/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="${base}assets/img/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="${base}assets/img/apple-touch-icon.png">
+${THEME}
+<style>${minCss.replaceAll('url(assets/', `url(${base}assets/`)}${pageCss}</style>
+</head>`;
+const star = (base) => `<span class="glyph" aria-hidden="true" style="--m:url(${base}assets/img/glyphs/star.svg)"></span>`;
+// The provenance bar, as the reader draws it (archive.js)
+const provHTML = (doc, base) => {
+  const prov = doc.provenance, agents = doc.agents;
+  return `<div class="archive-provenance">
+  <span class="prov-kind">${esc(doc.category)}</span>
+  ${prov ? `<span class="prov-status">${esc(prov.status)}</span>
+  <span class="prov-meta">${esc(prov.author)} · ${esc(prov.date)}</span>` : ''}
+  ${agents ? `<span class="prov-agents">${esc(agents.note)}${agents.skill ? ` <a href="${base}${esc(agents.skill)}" download>take the .skill</a>` : ''}</span>` : ''}
+</div>`;
+};
+for (const { doc, toc, body } of rendered) {
+  const page = `${pageHead({ base: '../', title: `${doc.title} — Earth Star Archive`, description: doc.description, canonical: `${SITE}archive/${doc.id}.html` })}
+<body>
+<div class="doc-page">
+<header class="doc-head"><a class="doc-home" href="/">${star('../')}Earth Star</a><a class="doc-open" href="/#doc/${esc(doc.id)}">Open in the Archive</a></header>
+<main>
+${provHTML(doc, '../')}
+${toc}<article class="archive-md">
+${body}</article>
+</main>
+</div>
+</body>
+</html>
+`;
+  writeFileSync(p(`archive/${doc.id}.html`), page);
+  console.log(`archive/${doc.id}.html  ${(page.length / 1024).toFixed(1)}KB (page)`);
+}
+writeFileSync(p('404.html'), `${pageHead({ base: '/', title: 'Not found — Earth Star', description: 'No page grows at this address.', extra: '<meta name="robots" content="noindex">\n' })}
+<body>
+<main class="lost">
+  <a class="lost-mark" href="/" aria-label="Earth Star — home">${star('/')}</a>
+  <h1>Nothing grows at this address.</h1>
+  <ul>
+    <li><a href="/">Earth Star</a></li>
+    <li><a href="/viewer/">The Viewer <span aria-hidden="true">↗</span></a></li>
+    <li><a href="/field-guide/">Gomenata, the field guide <span aria-hidden="true">↗</span></a></li>
+  </ul>
+</main>
+</body>
+</html>
+`);
+// Every page there is to find: the three surfaces and the documents
+const locs = ['', 'viewer/', 'field-guide/', ...manifest.docs.map((d) => `archive/${d.id}.html`)];
+writeFileSync(p('sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${locs.map((l) => `  <url><loc>${SITE}${l}</loc></url>`).join('\n')}
+</urlset>
+`);
 
 // ── 6. Images (only with --images: slow, output is committed) ──
 
@@ -424,8 +527,8 @@ if (process.argv.includes('--images')) {
   // drawn by its own render(t) through film/render.mjs --stills, which needs
   // Chromium (CHROMIUM); the still is a step on the way and is not kept. The
   // field guide's is its frontispiece plate, whole, on the guide's paper. All
-  // 16:9 at 640 and 1280 px, AVIF and WebP; the Blender lineup at 960 and
-  // 1920 px, WebP.
+  // 16:9 at 640 and 1280 px, AVIF and WebP (and a tall cut's 9:16 at 720 px,
+  // WebP); the Blender lineup at 960 and 1920 px, WebP.
   const WORKS_IMG = p(WORKS);
   rmSync(WORKS_IMG, { recursive: true, force: true });
   mkdirSync(WORKS_IMG, { recursive: true });
@@ -442,8 +545,24 @@ if (process.argv.includes('--images')) {
     const still = p(`film/renders/${f.render}-${String(f.still).replace('.', '_')}.jpg`);
     await writePoster(sharp(still), f.id);
     rmSync(still);
+    // A film with a tall cut has a tall poster too, the same moment of its
+    // tall render, so the dialog opens on a portrait screen at the shape the
+    // film will play (works.js), and nothing moves when it starts
+    if (f.tall) {
+      execFileSync(process.execPath, [p('film/render.mjs'), `${f.render}-tall`, '--stills', String(f.still)], { stdio: 'inherit' });
+      const tall = p(`film/renders/${f.render}-tall-${String(f.still).replace('.', '_')}.jpg`);
+      await sharp(tall).resize({ width: 720 }).webp({ quality: 80 }).toFile(`${WORKS_IMG}/${f.id}-tall-720.webp`);
+      console.log(`works/${f.id}-tall-720 webp`);
+      rmSync(tall);
+    }
   }
-  await writePoster(sharp(p(`field-guide/plates/${works.guide.plate}.webp`)).flatten({ background: '#efe4c8' }), works.guide.id, 'contain');
+  // The guide's plate is drawn out to 16:9 by its own edge columns, so its
+  // paper runs on to the poster's edge with no seam where the plate ends (set
+  // on flat paper, its shadowed edge stepped against the fill)
+  const plate = sharp(p(`field-guide/plates/${works.guide.plate}.webp`)).flatten({ background: '#efe4c8' });
+  const { width: pw, height: ph } = await plate.metadata();
+  const pad = Math.round((ph * 16 / 9 - pw) / 2);
+  await writePoster(sharp(await plate.extend({ left: pad, right: pad, extendWith: 'copy' }).png().toBuffer()), works.guide.id);
   for (const w of [960, 1920]) {
     await sharp(p(works.portraits.src)).resize({ width: w }).webp({ quality: 80 }).toFile(`${WORKS_IMG}/${works.portraits.id}-${w}.webp`);
     console.log(`works/${works.portraits.id}-${w} webp`);

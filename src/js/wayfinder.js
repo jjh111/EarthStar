@@ -48,12 +48,18 @@ export function initWayfinder() {
   if (!input || !window.ResizeObserver) return;
   const full = input.placeholder;
   const pen = document.createElement('canvas').getContext('2d');
+  // (the canvas measures without the field's letter-spacing, so it is added
+  // per character, with 4 px to spare)
   const prompt = () => {
     const cs = getComputedStyle(input);
-    pen.font = `italic ${cs.fontSize} ${cs.fontFamily}`;
+    pen.font = `italic ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
     const room = input.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-    input.placeholder = pen.measureText(full).width <= room ? full : 'search…';
+    const need = pen.measureText(full).width + (parseFloat(cs.letterSpacing) || 0) * [...full].length + 4;
+    input.placeholder = need <= room ? full : 'search…';
   };
   new ResizeObserver(prompt).observe(input);
   document.fonts?.ready.then(prompt);
+  // (a query narrows the field's padding, site.css: the prompt is measured
+  // again when the field is empty and shows it)
+  input.addEventListener('input', () => { if (!input.value) prompt(); });
 }

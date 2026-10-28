@@ -34,7 +34,8 @@ function $(id) { return document.getElementById(id); }
 
 async function fetchDoc(id) {
   if (docCache.has(id)) return docCache.get(id);
-  const res = await fetch(`archive/${id}.html`);
+  // the bare fragment; archive/<id>.html is the document's own page
+  const res = await fetch(`archive/${id}.frag.html`);
   if (!res.ok) throw new Error(`archive doc ${id}: ${res.status}`);
   const html = await res.text();
   const tmp = document.createElement('div');
@@ -63,10 +64,18 @@ function docMatches(d, words) {
   return matchesAll([d.title, d.description, d.tags.join(' '), docCache.get(d.id)?.text].join(' '), words);
 }
 
+// The catalogue's count beside its heading, as the Ideas count theirs: what
+// it shows of how many
+function countGrid(shown) {
+  const count = $('archive-count');
+  if (count) count.textContent = shown === DOCS.length ? `${shown} documents` : `${shown} of ${DOCS.length} documents`;
+}
+
 function renderGrid() {
   const grid = $('archiveGrid');
   const words = queryWords(searchQuery);
   const filtered = words.length ? DOCS.filter((d) => docMatches(d, words)) : DOCS;
+  countGrid(filtered.length);
 
   if (filtered.length === 0) {
     grid.innerHTML = '<div class="archive-empty">no documents found</div>';
@@ -373,6 +382,7 @@ async function copyLink() {
 // ── Init ─────────────────────────────────────────────────
 
 export function initArchive() {
+  countGrid(DOCS.length);
   // A card is opened by its title link, so the keyboard and the click are the
   // link's own; without script the link opens the document's page instead
   $('archiveGrid').addEventListener('click', (e) => {
