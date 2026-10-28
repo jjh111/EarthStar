@@ -50,6 +50,10 @@ npm run build      # rebuild HTML/CSS/JS + archive fragments into the repo root
 npm run images     # additionally regenerate responsive AVIF/WebP images (slow)
 ```
 
+`test/ux/ux.mjs` shoots the splash and the Viewer at nine breakpoints and measures how much of
+each screen is content and how much is chrome; `plans/UX_POLISH.md` has the method, the last
+polish round and its before-and-after numbers.
+
 - `src/index.html`, `src/css/site.css`, `src/js/*.js` — page template, styles, behavior modules
 - `src/concepts.json` — the Ideas dashboard: every concept, its lens, register, plain-words meaning, and links
 - `src/archive/manifest.json` — Archive document list + provenance metadata; doc bodies are

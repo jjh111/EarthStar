@@ -4,8 +4,9 @@ The request: bring the Viewer (`/viewer/`) and the splash (`/`) up to production
 tools in their own right for browsing; test the UX at breakpoints; report the UI efficiency
 ratio (useful content to chrome, by share of pixels).
 
-This file is the plan of record. The audit's findings became eighteen briefs. Each brief is one
-commit, titled "Viewer Vn" or "Splash Sn".
+This file is the plan of record and the report. The audit's findings became eighteen briefs. Each
+brief is one commit, titled "Viewer Vn" or "Splash Sn". A fresh review followed, then three rounds
+of fixes. The results are at the end.
 
 ## How it is measured
 
@@ -101,8 +102,8 @@ keyboard, and are calm when they fail ('unavailable' with a retry time).
 | V5 | Layouts that keep the scene the stage: phone portrait, short landscape, 861–1090 px, one-row margin foot | 088d4b5 |
 | V6 | Scene cards open beside their subject; Deck shows Earth and the Sun apart; Polar puts noon at the top | aecd8e4 |
 | V7 | The panel holds still while it is read; view, scale, layers, tab and detail live in the URL, with Back | 1709164 |
-| V8 | Keys scoped to the scene; a visible `?` that teaches tiers, colours, gestures and rules; names in the scene; the way home | — |
-| V9 | Craft: the rail fits, one type scale with a 10 px floor, the HUD grows on large screens, the margin reads in words | — |
+| V8 | Keys scoped to the scene; a visible `?` that teaches tiers, colours, gestures and rules; names in the scene; the way home | b594e89 |
+| V9 | Craft: the rail fits, one type scale with a 10 px floor, the HUD grows on large screens, the margin reads in words | 30e8431 |
 | S1 | A one-row wayfinder with a Sections menu; current section marked; headings that sit right | 92581d2 |
 | S2 | The painting is the stage: the type sits in the empty sky, the door at the foot; sharp on phones | 28c2778 |
 | S3 | Wide screens use their width; the Gomens set 3+2; the sixteen ideas fill full rows | a061778 |
@@ -111,7 +112,7 @@ keyboard, and are calm when they fail ('unavailable' with a retry time).
 | S6 | Sky now reads like the instrument it advertises, and each tile opens its reading in the Viewer | 188d0c5 |
 | S7 | Works: the field guide, the films and the portraits; the Gomens open their plates; Onward once | 0c7bc7f |
 | S8 | The delight keeps to the margins and can be stilled; the footer finished | 764adb7 |
-| S9 | Accessibility, both themes and no-JS, complete: forced colours, contrast headroom, honest semantics, the badge floor | — |
+| S9 | Accessibility, both themes and no-JS, complete: forced colours, contrast headroom, honest semantics, the badge floor | edb609d |
 
 ### V8 — keys scoped to the scene, a `?` that teaches, names in the scene, the way home
 
@@ -261,3 +262,153 @@ pointer.
   - The forced-colors screenshots show the script.
   - The no-JS screenshots at 390 and 1440 show a complete, calm page with no dead controls.
   - `test/site.test.mjs` passes, and no harness row regresses.
+
+## The review that followed
+
+Four reviewers who had not seen the work went over the finished round. Each had one lens:
+
+- the Viewer's truth, tested by trying to make it lie: offline, stale by hours and by days,
+  partial outages, the mirror fallback;
+- the Viewer as a browsing tool at twenty sizes;
+- the splash as a browsing tool in both themes;
+- craft, accessibility and robustness across both surfaces and the field guide.
+
+Every finding was reproduced by a verifier before it was fixed, and every fix was rechecked in
+the browser:
+
+| Round | What happened | Commits |
+|---|---|---|
+| 1 | 80 findings confirmed: Viewer 1 P0, 10 P1, 18 P2, 20 P3; splash 2 P0, 5 P1, 10 P2, 14 P3. Fixed. | b7c9143, 7fef62a |
+| 2 | The recheck found 8 still open or new. Fixed. | baaf85e, 3b1a1a6 |
+| 3 | The recheck found 2 P2s. Fixed and checked by hand. | c05e5f0 |
+
+What the review fixed, in the main:
+
+- **The Viewer on a stale or mirrored feed.**
+  - A stale mirror no longer reads as a fresh all-clear, and the briefing says when the data came
+    from the mirror.
+  - The report and the briefing stop calling old readings current ("reaching Earth right now",
+    "Nothing is inbound").
+  - A DONKI outage now reads as unavailable instead of silently dropping the CMEs.
+  - An all-null Enlil tracer is no longer read as "no ejecta reach Earth".
+  - A notice whose validity NOAA does not state says so, instead of an invented end time.
+  - Every reading time carries UTC, and its date when it is from another day.
+- **The Viewer in the hand.**
+  - Clicking a body picks the body, not a line through it.
+  - The Checks tab no longer labels Earth Star's own model output as NOAA's.
+  - The placeholder Sun is tiered as ambient.
+  - Escape and Back close exactly one thing.
+  - The Sources tables fit the margin.
+- **The splash's Sky tiles.**
+  - Every reading is dated and aged. The heading stops saying "measured this minute" when a
+    reading is old, and the wind tile shows the wind's own time.
+  - The feeds are fetched only while the page is visible.
+- **The splash and the field guide.**
+  - Archive documents have pages of their own, with a head, the styles and a way home, instead
+    of a bare fragment.
+  - The 44 px touch targets now hold everywhere.
+  - The field guide's figure links are reachable and visibly focused, and it has full meta and
+    icons.
+  - There is a 404 page.
+
+## Results
+
+Both builds were measured back to back with the same harness against the same mirror (the
+`data` branch, 27 Oct 2026 13:27 UTC):
+
+- **before:** `cb5b196`, the site as it stood when the round began;
+- **after:** the finished round.
+
+Before → **after**.
+
+### The Viewer
+
+| Breakpoint | Size | Content / chrome, % | Ratio | State sentence top (px) | Header rows | Earth r (px) | Earth / Sun under chrome, % | Open stage, % | Scale stated |
+|---|---|---|---|---|---|---|---|---|---|
+| phone-s | 360×740 | 81 / 9.4 → **75.1 / 21.8** | 8.58 → **3.44** | 962 (below the fold) → **498** | 1 → **1** | 26 → **26** | 0 / 0 → **0 / 0** | 30.1 → **27.4** | no → **yes** |
+| phone | 390×844 | 82.9 / 8.3 → **78.3 / 19** | 9.97 → **4.12** | 941 (below the fold) → **542** | 1 → **1** | 30 → **30** | 0 / 0 → **0 / 0** | 31.4 → **29.6** | no → **yes** |
+| phone-land | 844×390 | 69.8 / 21.9 → **72.3 / 27.7** | 3.18 → **2.61** | 425 (below the fold) → **128** | 1 → **1** | 14 → **32** | 5.2 / 63.3 → **0 / 0** | 23 → **42.4** | no → **yes** |
+| tablet | 768×1024 | 87 / 10 → **85.8 / 12.1** | 8.69 → **7.07** | 718 → **597** | 1 → **1** | 36 → **36** | 0 / 0 → **0 / 0** | 33.9 → **31.5** | no → **yes** |
+| tablet-land | 1024×768 | 79.2 / 20.8 → **85.2 / 14.8** | 3.8 → **5.77** | 211 → **146** | 2 → **1** | 64 → **64** | 0 / 0 → **0 / 0** | 43.9 → **43.8** | no → **yes** |
+| laptop | 1280×800 | 89.9 / 10.1 → **90.7 / 9.3** | 8.89 → **9.79** | 133 → **122** | 1 → **1** | 67 → **67** | 0 / 0 → **0 / 0** | 54.8 → **53.6** | no → **yes** |
+| desktop | 1440×900 | 91.1 / 8.9 → **91.7 / 8.3** | 10.29 → **11.02** | 133 → **122** | 1 → **1** | 75 → **75** | 0 / 0 → **0 / 0** | 56.6 → **56.3** | no → **yes** |
+| fhd | 1920×1080 | 93.1 / 6.9 → **93.6 / 6.4** | 13.45 → **14.61** | 133 → **124** | 1 → **1** | 90 → **90** | 0 / 0 → **0 / 0** | 63.3 → **63.2** | no → **yes** |
+| qhd | 2560×1440 | 91.1 / 4.9 → **95 / 4.6** | 18.73 → **20.69** | 133 → **126** | 1 → **1** | 120 → **120** | 0 / 0 → **0 / 0** | 71.8 → **72.9** | no → **yes** |
+
+How to read it:
+
+- **Desktop and wider.** The ratio rises at every width from laptop to qhd (8.9 → 9.8 at 1280,
+  10.3 → 11.0 at 1440, 18.7 → 20.7 at 2560). The open stage holds within a point, even though
+  the stage now carries its scale note.
+- **Short screens.**
+  - At tablet-land the header falls from two rows to one, and chrome drops from 20.8% to 14.8%.
+  - On a landscape phone, Earth more than doubles in size (14 → 32 px). The Sun, which was 63%
+    under chrome, is clear, and the open stage nearly doubles (23% → 42%).
+- **Phones in portrait.** The ratio falls (8.6 → 3.4 at 360 px, 10.0 → 4.1 at 390 px), and
+  that is the honest result.
+  - **Before:** the first screen under the scene was about 450 px of NOAA notices, most of them
+    days old and labelled NOW. That counted as content, and the state sentence started below
+    the fold, at 941–962 px.
+  - **After:** the first screen shows the scene with its scale stated, the one notice actually
+    in force, the tab bar, and the state sentence (498–542 px). The tab bar, the "?" and the
+    one-time hint are chrome, which is where the ratio goes.
+  - On a return visit the hint is gone, and the ratio rises by about half a point.
+  - The first-screen checks are the measure that matters here, and all of them pass.
+
+### The splash
+
+| Breakpoint | Size | Whole page: content / chrome / art / empty, % | Page ratio | Fold: content / chrome / art, % | Horizontal scroll |
+|---|---|---|---|---|---|
+| phone-s | 360×740 | 72.2 / 14.4 / 4.3 / 9.1 → **76.5 / 9.1 / 4.3 / 10.1** | 5.01 → **8.41** | 17.2 / 6.2 / 76.6 → **16.7 / 6.3 / 76.9** | no → **no** |
+| phone | 390×844 | 73 / 12.9 / 5 / 9.1 → **76.3 / 8.4 / 5.3 / 10** | 5.68 → **9.11** | 15.2 / 5 / 79.8 → **14.8 / 5.1 / 80.1** | no → **no** |
+| phone-land | 844×390 | 63.9 / 25 / 2.6 / 8.5 → **73.5 / 13.7 / 2.6 / 10.1** | 2.55 → **5.36** | 32.4 / 9.5 / 58.1 → **27.6 / 9.5 / 62.9** | no → **no** |
+| tablet | 768×1024 | 72 / 10.9 / 9.6 / 7.5 → **76.4 / 7 / 8.6 / 8** | 6.64 → **10.93** | 11.6 / 2 / 86.4 → **12 / 2.1 / 86** | no → **no** |
+| tablet-land | 1024×768 | 70.3 / 11.1 / 7.8 / 10.8 → **70.3 / 10.8 / 7.5 / 11.3** | 6.35 → **6.51** | 17.7 / 4 / 78.3 → **13.2 / 4 / 82.8** | no → **no** |
+| laptop | 1280×800 | 63.9 / 11.9 / 8.7 / 15.5 → **65.1 / 10.7 / 8.4 / 15.7** | 5.37 → **6.08** | 19 / 3 / 78 → **12.5 / 3 / 84.5** | no → **no** |
+| desktop | 1440×900 | 57.7 / 10.5 / 10.2 / 21.6 → **61.4 / 10.3 / 9.6 / 18.7** | 5.51 → **5.99** | 15.9 / 2.4 / 81.7 → **11.5 / 2.5 / 86.1** | no → **no** |
+| fhd | 1920×1080 | 45.9 / 7.8 / 12.7 / 33.6 → **58.7 / 9.4 / 12.5 / 19.5** | 5.86 → **6.25** | 10 / 1.5 / 88.6 → **11.1 / 1.7 / 87.2** | no → **no** |
+| qhd | 2560×1440 | 37.9 / 5.8 / 15.6 / 40.7 → **55.8 / 7.4 / 17.9 / 18.9** | 6.53 → **7.52** | 5.6 / 0.8 / 93.6 → **9.3 / 1 / 89.7** | no → **no** |
+
+How to read it:
+
+- **Whole page.** The page ratio rises at every size, most on small screens (5.0 → 8.4 at
+  360 px, 2.6 → 5.4 on a landscape phone, 6.6 → 10.9 on a tablet).
+- **Phones.** The one-row wayfinder halves the chrome on phones (25% → 14% in landscape).
+- **Wide screens.** Wide screens now use their width. At 1920 the empty share falls from 34% to
+  20%, and at 2560 from 41% to 19%, where content rises from 38% to 56%.
+- **The fold.** The fold's ratio falls on purpose: the cover's type moved into the painting's
+  empty sky, so more of the painting shows (art 78% → 85% at 1280). The painting is the stage.
+
+The images are in `plans/ux-polish/`:
+
+- `viewer-before-after.jpg`: the screenshot and colour map before, then after, at phone,
+  phone-land, tablet-land and desktop (green content, red chrome, grey empty);
+- `splash-before-after.jpg`: the whole page at 1440, before on the left and after on the right.
+
+## Known gaps
+
+- **The header notice.** It ends in an ellipsis at a few in-between widths where the Viewer's
+  header changes layout (1201, 1401–1432, 1501–1540, 1601–1680). The ticker shows it whole.
+- **Duplicated notice on phones.** The phone header repeats the notice the ticker shows under
+  the scene. Dropping it there is the next chrome to reclaim.
+- **Kp tooltips.** The Ahead tab's Kp bar tooltips still give NOAA's 3-hour values to two
+  decimals, not thirds labels.
+- **Front-door images.** Recapture the Viewer's og image and the splash's Sky door from a
+  networked run with real solar imagery. The sandbox blocks imagery, and the unobserved
+  placeholder Sun must not become the front door.
+- **Film playback.** Check that the films play in a real browser, including the tall cut on a
+  phone. Headless Chromium here fetches them but cannot play them.
+- **Sandbox limits.** Real-GPU frame rate, the cold-start and code-split work, and the aurora
+  contour were deferred. The sandbox cannot measure the first two, and the aurora contour needs
+  its own honesty review.
+
+## Re-running
+
+```sh
+python3 -m http.server 8901 --bind 127.0.0.1 &                 # from the repo root
+git archive origin/data | tar -x -C /tmp/mirror                 # today's feeds
+BASE_URL=http://localhost:8901 CHROMIUM=/path/to/chrome MIRROR=/tmp/mirror/v1 \
+  node test/ux/ux.mjs --out test/ux/out                         # both surfaces, nine sizes
+node test/ux/compare.mjs <before dir> <after dir> viewer out.jpg phone,desktop
+node test/ux/strip.mjs test/ux/out/splash-desktop-full.jpg out.jpg
+```
