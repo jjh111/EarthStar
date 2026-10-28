@@ -24,7 +24,7 @@ const LATER = new Date('2026-10-26T15:29:00Z');
 describe('a live age', () => {
   it('is written out as formatAge would write it', () => {
     expect(liveText(`${liveAge('2026-10-26T11:58:00Z')} old`, NOW)).toBe('13 min old');
-    expect(liveText(liveAge('2026-10-26T12:10:15Z'), NOW)).toBe('45s');
+    expect(liveText(liveAge('2026-10-26T12:10:15Z'), NOW)).toBe('45 s');
     expect(agesAt(LATER)('2026-10-26T12:11:00Z')).toBe('3.3 h');
   });
 

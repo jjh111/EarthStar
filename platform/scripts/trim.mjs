@@ -77,7 +77,19 @@ export function spanDays(rows) {
 }
 
 /**
+ * Forecast feeds, whose newest rows are the far end of a model run rather than
+ * the present. Keeping the newest 720 rows of WSA-Enlil kept +79 h to +106 h
+ * and dropped everything about the next three days — the Viewer then
+ * captioned "the next 106 hours" over 27 hours of the run's tail. For these the
+ * rows kept are the ones nearest the moment of the copy.
+ */
+export const AROUND_NOW = ['/json/enlil_time_series.json'];
+
+/**
  * Returns `{ value, trimmed, archive, byTime }`.
+ *
+ * `around`, when given (ms), keeps the `maxRows` rows nearest that instant
+ * instead of the newest: for a forecast feed, the run around the copy.
  *
  * A leading header row (SWPC's `products/*` convention, all strings) is kept
  * because it is the schema rather than a datum. Rows sharing the cutoff
@@ -85,7 +97,12 @@ export function spanDays(rows) {
  * dropping an arbitrary one of them to hit a round number would be a silent
  * choice about which craft matters.
  */
-export function trim(value, maxRows = MAX_ROWS) {
+/**
+ * @param {unknown} value
+ * @param {number} [maxRows]
+ * @param {number | null} [around]
+ */
+export function trim(value, maxRows = MAX_ROWS, around = null) {
   if (!Array.isArray(value) || value.length <= maxRows) {
     return { value, trimmed: false, archive: false, byTime: false };
   }
@@ -103,7 +120,11 @@ export function trim(value, maxRows = MAX_ROWS) {
   const dated = times.every(Number.isFinite);
 
   let kept;
-  if (dated) {
+  if (dated && around !== null) {
+    const gap = (t) => Math.abs(t - around);
+    const cutoff = [...times].map(gap).sort((a, b) => a - b)[maxRows - 1];
+    kept = body.filter((_, i) => gap(times[i]) <= cutoff);
+  } else if (dated) {
     const cutoff = [...times].sort((a, b) => b - a)[maxRows - 1];
     // `filter` keeps the array in the order it arrived, whichever way that runs.
     kept = body.filter((_, i) => times[i] >= cutoff);

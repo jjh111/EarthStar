@@ -54,6 +54,8 @@ export interface StoreState {
   laneErrors: { aurora: string | null; regions: string | null; cmes: string | null; spacecraft: string | null };
   /** When the next snapshot poll is due — what an error text can promise. */
   nextAttempt: string | null;
+  /** When the slow lane — aurora, regions, CMEs, positions — runs next. */
+  nextSlowAttempt: string | null;
 }
 
 type Listener = (s: StoreState) => void;
@@ -69,6 +71,7 @@ export class NowStore {
     lanes: { snapshot: true, aurora: true, regions: true, cmes: true, spacecraft: true },
     laneErrors: { aurora: null, regions: null, cmes: null, spacecraft: null },
     nextAttempt: null,
+    nextSlowAttempt: null,
   };
   private listeners = new Set<Listener>();
   private timer: number | null = null;
@@ -168,6 +171,7 @@ export class NowStore {
 
   /** Aurora failures are isolated from /now — one must not blank the other. */
   async refreshAurora(): Promise<void> {
+    this.emit({ nextSlowAttempt: new Date(Date.now() + this.auroraIntervalMs).toISOString() });
     // A daily product, fetched alongside the aurora rather than on a timer of
     // its own — there is no third cadence worth maintaining.
     await this.slow('aurora', 'aurora', () => this.source.fetchAurora());

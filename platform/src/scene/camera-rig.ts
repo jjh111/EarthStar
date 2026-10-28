@@ -60,6 +60,8 @@ const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t 
  * across it and above it. See the deck branch of `viewPose`.
  */
 const DECK_BACK_RE = 14;
+/** Polar's height over the pole, in Earth radii, when the whole frame is seen. */
+const POLAR_RE = 3.4;
 const DECK_ACROSS_RE = 5;
 const DECK_RISE_RE = 3;
 
@@ -75,7 +77,7 @@ export interface Pose { pos: Vector3; target: Vector3; up: Vector3 }
  */
 export function viewPose(
   view: ViewName, earthPos: Vector3, earthRadius: number, sunDir: Vector3,
-  coronaRadius: number, bodies: FrameBody[], lens: { fov: number; aspect: number },
+  coronaRadius: number, bodies: FrameBody[], lens: { fov: number; aspect: number; fill?: number },
 ): Pose {
   const NORTH = new Vector3(0, 1, 0);
   let target = view === 'system' || view === 'corona'
@@ -105,7 +107,12 @@ export function viewPose(
     // frame. Up is the sunward direction (set below), so noon sits at the top,
     // which is the convention every auroral-oval plot is drawn in — and it
     // puts the oval's offset from the geographic pole where it can be seen.
-    pos = earthPos.clone().addScaledVector(NORTH, earthRadius * 3.4);
+    //
+    // 3.4 Rₑ fills the whole frame's height; where chrome covers part of it
+    // (`lens.fill`, the share left), the camera stands back until the cap
+    // fills what is left instead.
+    const halfAngle = Math.atan(Math.tan(Math.asin(1 / POLAR_RE)) * (lens.fill ?? 1));
+    pos = earthPos.clone().addScaledVector(NORTH, earthRadius / Math.sin(halfAngle));
   } else if (view === 'corona') {
     // From Earth, looking back at the Sun — the line SOHO photographs down,
     // and the only direction from which a coronagraph frame is face-on
@@ -237,6 +244,8 @@ export class CameraRig {
   readonly camera: PerspectiveCamera;
   readonly controls: OrbitControls;
   view: ViewName = 'deck';
+  /** The share of the frame's height a reader can see; see `Viewer.setTopInset`. */
+  fill = 1;
   private upHint = new Vector3(0, 1, 0);
 
   private from = new Vector3();
@@ -272,8 +281,14 @@ export class CameraRig {
     coronaRadius: number, bodies: FrameBody[], immediate = false,
   ): void {
     this.view = view;
+    // Framed for the band a reader can see: a camera of the whole frame's fov
+    // shows, over a band `fill` of its height, what one of this narrower fov
+    // and wider aspect would show over all of it.
+    const fov = this.fill < 1
+      ? (2 * Math.atan(Math.tan((this.camera.fov * Math.PI) / 360) * this.fill) * 180) / Math.PI
+      : this.camera.fov;
     const pose = viewPose(view, earthPos, earthRadius, sunDir, coronaRadius, bodies,
-      { fov: this.camera.fov, aspect: this.camera.aspect });
+      { fov, aspect: this.camera.aspect / this.fill, fill: this.fill });
     this.upHint = pose.up;
     this.camera.up.copy(this.upHint);
     this.animateTo(pose.pos, pose.target, immediate);

@@ -68,7 +68,10 @@ export const INSTRUMENTS: Instrument[] = [
   {
     id: 'xray', subject: 'inst.xray', label: 'X-ray 0.1–0.8 nm', unit: '', part: 'xray',
     value: (d) => d?.xray?.class ?? NO_DATA,
-    detail: (d) => (d?.xray?.flux_long != null ? `${d.xray.flux_long.toExponential(1)} W/m²` : ''),
+    // The class is the reading; the flux it is cut from, "3.3 × 10⁻⁷ W/m²"
+    // written for a reader, takes a line the rail does not have, and is the
+    // detail's first figure instead.
+    title: 'The class is NOAA’s letter-and-number for the 0.1–0.8 nm flux; the flux itself is in the detail',
   },
   {
     id: 'protons', subject: 'inst.protons', label: 'Radiation (S)', unit: '', part: 'particles',

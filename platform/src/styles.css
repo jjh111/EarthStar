@@ -186,6 +186,9 @@ header.top {
   margin: 0; font-family: var(--mono); font-size: var(--t-1); color: var(--ink-faint);
   white-space: nowrap; letter-spacing: 0.02em; line-height: 1;
   align-self: flex-start; padding-left: 0;
+  /* Its line before the script writes the time, so the brand block does not
+     grow under the reader when it does. */
+  min-height: 1lh;
 }
 
 /* The most consequential outstanding notice, in the space the header row was
@@ -268,6 +271,10 @@ header.top {
 }
 .ctl-toggles .ctl[aria-pressed='false'] { color: var(--ink-faint); }
 .ctl-toggles .ctl:hover { color: var(--ink); }
+/* A layer whose feed failed is red whether it is on or off: the pressed rule
+   above outranks the state rules further down, and a failed CMEs looked the
+   same as a working Field. The title says what failed and when it retries. */
+.ctl-toggles .ctl[data-state='error'] { color: var(--err); border-color: rgba(255, 139, 115, 0.4); }
 :where(button, a, summary, input, [tabindex]):focus-visible {
   outline: 2px solid var(--accent); outline-offset: 1px;
 }
@@ -312,8 +319,14 @@ header.top {
   font-family: var(--sans); font-size: var(--t-0); letter-spacing: 0.13em;
   text-transform: uppercase; color: var(--ink-faint); white-space: nowrap;
 }
+.rail-titles { display: flex; flex-direction: column; gap: 0.08rem; min-width: 0; line-height: 1.1; }
+.rail-zone {
+  font-family: var(--mono); font-size: var(--t-0); color: var(--ink-faint);
+  letter-spacing: 0; white-space: nowrap; cursor: help;
+}
+.rail.is-collapsed .rail-titles { display: none; }
 .rail-toggle {
-  margin-left: auto;
+  margin-left: auto; flex: none;
   font-family: var(--sans); font-size: 0.72rem; line-height: 1;
   background: var(--bg-panel); color: var(--ink-dim);
   border: 1px solid var(--line); border-radius: 4px;
@@ -346,6 +359,22 @@ header.top {
   scrollbar-width: none;
 }
 .instruments::-webkit-scrollbar { display: none; }
+/* Tiles beyond either end fade out there, so no half-cut tile's text sits
+   beside the count or under the head; the foot's padding lets the last tile
+   scroll clear of the count. */
+.rail.has-below .instruments {
+  padding-bottom: 1.8rem;
+  -webkit-mask-image: linear-gradient(#000 calc(100% - 2.4rem), transparent);
+  mask-image: linear-gradient(#000 calc(100% - 2.4rem), transparent);
+}
+.rail.has-above .instruments {
+  -webkit-mask-image: linear-gradient(transparent, #000 1.4rem);
+  mask-image: linear-gradient(transparent, #000 1.4rem);
+}
+.rail.has-above.has-below .instruments {
+  -webkit-mask-image: linear-gradient(transparent, #000 1.4rem, #000 calc(100% - 2.4rem), transparent);
+  mask-image: linear-gradient(transparent, #000 1.4rem, #000 calc(100% - 2.4rem), transparent);
+}
 /* How many tiles are below the rail's foot, while any are: over the one cut
    in half there, so it costs no whole tile, and a click scrolls them up. */
 .rail-more {
@@ -515,6 +544,8 @@ header.top {
 }
 /* A failed read is red and says when it tries again; it never reads as quiet. */
 .ticker-item.is-error .alert-text { color: var(--err); }
+/* "None in force" in Earth Star's copy is a weaker claim than NOAA's own: amber. */
+.ticker-item.is-mirror .alert-text { color: var(--warn); }
 .ticker-tag {
   font-family: var(--mono); font-size: var(--t-0); letter-spacing: 0.1em;
   color: var(--accent); border: 1px solid currentColor; border-radius: 2px;
@@ -545,6 +576,15 @@ header.top {
 }
 .stage-note { color: var(--warn); }
 .stage-note .badge { margin: 0 0.1em; }
+/* Each note has a sentence and a one-line form; a phone shows the second. */
+.stage-notes .note-short { display: none; }
+/* On its side too: the stage is under 400 px tall, and the imagery note's
+   two lines above the ticker reached the Sun Deck seats there. */
+@media (max-width: 600px), (orientation: landscape) and (max-height: 520px) {
+  .stage-notes .note-long { display: none; }
+  .stage-notes .note-short { display: inline; }
+  .stage-notes > * { white-space: nowrap; }
+}
 /* A 24 px target that does not open up the line it sits in: the padding makes
    the box, and the equal negative margin hands the extra back, so the margin
    box is one line tall and the note keeps an even line spacing. */
@@ -584,6 +624,9 @@ header.top {
   color: var(--ink-dim); font-size: var(--t-5); line-height: 1; min-width: 24px;
 }
 .help-chip-close:hover { color: var(--ink); }
+/* While the chip is up, the body keeps room for it at its end, so the last
+   line of the panel can always be scrolled out from under it. */
+.margin:has(> .help-chip:not([hidden])) .margin-body { padding-bottom: 2.6rem; }
 kbd {
   font-family: var(--mono); font-size: max(10px, 0.92em); font-weight: 700;
   border: 1px solid var(--line-strong); border-radius: 3px; padding: 0 0.28em;
@@ -637,6 +680,10 @@ kbd {
 }
 .margin-body p:last-child { margin-bottom: 0; }
 .margin-body a { color: var(--accent); }
+/* A claim weaker than it reads — a quiet notice feed read from Earth Star's
+   copy, an odds table NOAA has stopped issuing — in amber. */
+.margin-body p.is-warn, .margin-body .tile-meta.is-stale, .margin-body .warn { color: var(--warn); }
+.nowrap { white-space: nowrap; }
 
 /* The foot's left cell: the short form, with the whole sentence in its title.
    Up to three lines, then an ellipsis. Beside the buttons the column leaves
@@ -807,7 +854,8 @@ kbd {
   .controls { gap: 0.5rem; }
   .ctl-set { gap: 0; }
 }
-@media (max-width: 1500px) {
+/* From 1560, not 1500: at 1536 the notice was 6 px short and lost its last words. */
+@media (max-width: 1560px) {
   :root { --ctl-fs: 0.64rem; }
   .ctl { padding: 0.3rem 0.4rem; }
   .controls { gap: 0.42rem; }
@@ -957,12 +1005,12 @@ kbd {
     display: block; padding: 0.5rem; overflow: visible;
     background: linear-gradient(180deg, transparent, var(--bg) 42px);
   }
-  /* The notes hang from the stage's top edge, which is the scene band's
-     bottom: they sit at the band's bottom right, clear of the rail and the
-     header, and scroll up with the page as the report rises over the band.
-     Absolute, never fixed — a fixed note would float over the report. */
+  /* The notes stand at the band's top, just under the header, one line
+     each: hung from the band's foot they lay over the Sun, which Deck seats
+     at the band's lower right. Absolute, never fixed — a fixed note would
+     float over the report. */
   .stage-notes {
-    top: -0.5rem; right: 0.5rem; transform: translateY(-100%);
+    top: calc(var(--header-real-h, var(--header-h)) - 42vh + 0.4rem); right: 0.5rem; transform: none;
     max-width: calc(100vw - 3.5rem);
   }
   /* The rail, opened, overlays the band's left side down to its foot; the
@@ -1015,16 +1063,12 @@ kbd {
   .tab { padding: 0.6rem 0.2rem; }
 }
 
-/* Under 420 px the header's notice is its word alone. With the help's button
-   beside Controls its words had about 30 px left, "Ele…", which said nothing;
-   they are the ticker's first item, just under the band, and stay in the
-   link's name. */
+/* Under 420 px the header's notice leaves the row. With the help's button
+   beside Controls its words had about 30 px left, and its word alone was a
+   red NOW box saying nothing the ticker a band below does not say whole —
+   the reason the 861–1200 range drops it too. */
 @media (max-width: 420px) {
-  .headline-alert { flex: none; }
-  .headline-alert .alert-text {
-    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
-    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
-  }
+  .headline-alert { display: none; }
 }
 
 /* A phone's ticker: each notice's word stands over its time, and the words
@@ -1119,6 +1163,18 @@ kbd {
      buttons: the buttons give up some padding before the status its words. */
   .margin-actions { gap: 0.25rem; padding: 0.3rem 0.5rem; }
   .ctl-sm { padding: 0.3rem 0.4rem; }
+  /* On its side the panel's body is a few lines tall, and the chip floated
+     over its readings. It takes a row of its own above the foot instead,
+     for as long as it is up, and covers nothing. */
+  .margin {
+    grid-template-rows: auto 1fr auto auto;
+    grid-template-areas: 'tabs tabs' 'body body' 'chip chip' 'status actions';
+  }
+  .help-chip {
+    grid-area: chip; position: static; align-self: center; justify-self: end;
+    margin: 0.25rem 0.5rem; box-shadow: none;
+  }
+  .margin:has(> .help-chip:not([hidden])) .margin-body { padding-bottom: 0.7rem; }
 }
 
 /* Touch targets. A finger is about 9 mm; these are the controls a phone or
@@ -1155,6 +1211,15 @@ kbd {
     width: 44px; height: 44px;
   }
   .rail-more::after { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 44px; }
+  /* Stand-alone targets in the panel's lists: the subject links grow their
+     boxes, being one to a line already; the links in the provenance and
+     Sources tables grow an invisible band instead, so the table keeps its
+     rows' height. */
+  .subject-links .subject-link { min-height: 44px; display: inline-flex; align-items: center; flex-wrap: wrap; }
+  .margin-body .prov a { position: relative; }
+  .margin-body .prov a::after {
+    content: ''; position: absolute; left: 0; right: 0; top: calc(50% - 22px); height: 44px;
+  }
   /* The scale note's button is a phrase in a line of text, so it grows its
      target rather than its box: an invisible 44 px band around the words. */
   .scale-flip { position: relative; }
@@ -1216,7 +1281,7 @@ kbd {
 .sentence-age { font-size: 0.74em; }
 /* A line may break between clauses, never inside a reading or between a glyph
    and its word. */
-.state-sentence .clause-head, .state-sentence .reading { white-space: nowrap; }
+.state-sentence .clause-head, .state-sentence .reading, .state-sentence .ss-pair { white-space: nowrap; }
 /* The cold start's placeholder: no claim at all, just a pulse. */
 .sentence-loading { color: var(--ink-faint); letter-spacing: 0.2em; }
 
@@ -1430,6 +1495,8 @@ text.l1-idle { fill: var(--ink-faint); }
   .card-close { min-width: 44px; min-height: 44px; }
 }
 .subject-card p { margin: 0.5rem 0 0; }
+/* Which one was clicked, and when it was observed: "AR 4256 · observed 13:00 UTC". */
+.subject-card .card-record { font-family: var(--mono); color: var(--ink); }
 .card-one { color: var(--ink-dim); font-style: italic; }
 /* The limits line is the charter made visible, so it is set apart rather than
    left to blend into the paragraph above it. */
@@ -1488,14 +1555,22 @@ text.l1-idle { fill: var(--ink-faint); }
   border-top: 1px solid var(--line);
   padding-top: 0.5rem;
 }
+/* A sub-disclosure, marked as the sections are — the same › that turns —
+   one step smaller: the browser's own ▶, in larger type, sat among the
+   sections' marks as if it were a different control. */
 .limits > summary {
-  cursor: pointer;
-  color: var(--ink-dim);
-  font-size: var(--t-3);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  cursor: pointer; list-style: none;
+  font-family: var(--sans); font-size: var(--t-1); letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ink-dim);
+  display: flex; align-items: center; gap: 0.4rem;
 }
-.limits > summary:hover { color: var(--ink); }
+.limits > summary::-webkit-details-marker { display: none; }
+.limits > summary::before {
+  content: '›'; display: inline-block; transition: transform 0.15s ease;
+  color: var(--ink-faint); font-size: var(--t-3); line-height: 1;
+}
+.limits[open] > summary::before { transform: rotate(90deg); }
+.limits > summary:hover, .limits > summary:focus-visible { color: var(--ink); }
 .limits > ul { margin-top: 0.5rem; }
 
 .index-tier {
@@ -1526,6 +1601,9 @@ text.l1-idle { fill: var(--ink-faint); }
   opacity: 0;
 }
 .scene-name.is-shown { opacity: 0.92; transition: opacity 0.35s ease; }
+/* Cormorant's figures are old-style by default: "L1 · SOLAR1" read "Lı · SOLARı".
+   Every serif name that can carry a digit is set in lining figures. */
+.scene-name, .subject-card h2, .help-head h2, .margin-body h2, .brand { font-variant-numeric: lining-nums; }
 .scene-name.is-minor { color: var(--ink-faint); font-size: var(--t-3); }
 .scene-names.is-still .scene-name { transition: none; }
 
@@ -1541,6 +1619,11 @@ text.l1-idle { fill: var(--ink-faint); }
   font-size: var(--t-5); line-height: 1.5;
 }
 .help[open] { display: flex; flex-direction: column; }
+/* Only the body scrolls. A modal dialog is overflow: auto by the UA's own
+   sheet, and the visually-hidden spans inside the body took the dialog as
+   their containing block, so the dialog itself scrolled: PageDown slid the
+   head away and left half a phone's screen blank. */
+.help { overflow: hidden; }
 .help::backdrop { background: rgba(5, 7, 13, 0.62); }
 .help-head {
   display: flex; align-items: center; justify-content: space-between; gap: 0.6rem;
@@ -1552,7 +1635,10 @@ text.l1-idle { fill: var(--ink-faint); }
   font-size: var(--t-7); line-height: 1; min-width: 36px; min-height: 36px; border-radius: 4px;
 }
 .help-close:hover { color: var(--ink); }
-.help-body { overflow-y: auto; padding: 0 1.1rem 1.2rem; }
+.help-body {
+  position: relative; flex: 1 1 auto; min-height: 0;
+  overflow-y: auto; overscroll-behavior: contain; padding: 0 1.1rem 1.2rem;
+}
 .help-body h3 {
   font-family: var(--sans); font-size: var(--t-1); font-weight: 500; letter-spacing: 0.13em;
   text-transform: uppercase; color: var(--ink-dim); margin: 1.1rem 0 0.35rem;
@@ -1596,3 +1682,30 @@ text.l1-idle { fill: var(--ink-faint); }
   .help-close { min-width: 44px; min-height: 44px; }
 }
 
+
+/* ---------- without script ----------
+   The page's frame is static markup, so with no script it would stand empty:
+   controls that do nothing, a rail and a margin with nothing in them. The
+   noscript sheet hides those and this card says why, on the stage. */
+.noscript-note {
+  position: fixed; z-index: 50; left: calc((100vw - var(--margin-w)) / 2); top: 50%; transform: translate(-50%, -50%);
+  width: min(30rem, calc(100vw - 2rem)); padding: 1rem 1.2rem;
+  background: rgba(9, 14, 24, 0.96); border: 1px solid var(--line-strong); border-radius: 0.5rem;
+  font-size: var(--t-5); line-height: 1.5; color: var(--ink-dim);
+}
+.noscript-note p { margin: 0 0 0.5rem; }
+.noscript-note p:last-child { margin: 0; }
+.noscript-note a { color: var(--accent); }
+
+/* ---------- forced colours ----------
+   Windows High Contrast drops every colour, and with them the only thing that
+   told a layer on from a layer off and the selected tab from the rest. The
+   system's own Highlight says it instead. */
+@media (forced-colors: active) {
+  .ctl[aria-pressed='true'], .ctl-toggles .ctl[aria-pressed='true'] {
+    forced-color-adjust: none; background: Highlight; color: HighlightText; border-color: Highlight;
+  }
+  .ctl-toggles .ctl[aria-pressed='false'] { color: GrayText; border-color: GrayText; }
+  [role='tab'][aria-selected='true'] { border-bottom: 3px solid Highlight; }
+  .badge { forced-color-adjust: auto; }
+}

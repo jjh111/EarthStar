@@ -43,6 +43,23 @@ export function minus(s: string): string {
   return s.replace(/^-(?=\d)/, '\u2212');
 }
 
+const SUPER: Record<string, string> = {
+  '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹', '-': '⁻',
+};
+
+/**
+ * A number in scientific notation as the page writes one: "3.3 × 10⁻⁷", with
+ * the superscript minus, never `toExponential`'s "3.3e-7" — which is how a
+ * program writes a number and not how a reader reads one.
+ */
+export function sci(v: number | null | undefined, digits = 1): string {
+  if (v === null || v === undefined || !Number.isFinite(v)) return NO_DATA;
+  if (v === 0) return '0';
+  const [m, e] = v.toExponential(digits).split('e') as [string, string];
+  const exp = String(Number(e));
+  return `${minus(m)} × 10${[...exp].map((c) => SUPER[c] ?? c).join('')}`;
+}
+
 /**
  * NOAA writes the K index in thirds: "3P" / "3M" / "3Z" for 3+ / 3− / 3.
  * Ported from the splash (`src/js/sky.js`), so both surfaces print NOAA's
@@ -125,13 +142,13 @@ export function stalenessOf(
   if (ageS > meta.stale_after_s) {
     return {
       state: 'stale', ageS,
-      label: `stale · no data since ${hhmmUTC(meta.data_time)} UTC (${ages(meta.data_time)} old)`,
+      label: `stale · no data since ${whenUTC(meta.data_time, now)} (${ages(meta.data_time)} old)`,
       short: `stale · ${ages(meta.data_time)}`,
     };
   }
   return {
     state: 'fresh', ageS,
-    label: `${hhmmUTC(meta.data_time)} UTC · ${ages(meta.data_time)} old`,
+    label: `${whenUTC(meta.data_time, now)} · ${ages(meta.data_time)} old`,
     short: `${ages(meta.data_time)} old`,
   };
 }
@@ -149,6 +166,24 @@ export function whenUTC(iso: string | null | undefined, now = new Date()): strin
   const d = new Date(t);
   if (d.toISOString().slice(0, 10) === now.toISOString().slice(0, 10)) return `${hhmmUTC(iso)} UTC`;
   return `${String(d.getUTCDate()).padStart(2, '0')} ${MON[d.getUTCMonth()]} ${hhmmUTC(iso)} UTC`;
+}
+
+/**
+ * When Earth Star's mirror copy was taken, from any part that was read from
+ * it: the time is the same for every part, being one manifest. Null when
+ * nothing came from the mirror; `at` null when the copy's time is unknown.
+ */
+export function mirrorCopy(
+  parts: Record<string, PartMeta | undefined> | null | undefined,
+): { at: string | null } | null {
+  const on = Object.values(parts ?? {}).filter((p): p is PartMeta => !!p?.mirrored);
+  if (on.length === 0) return null;
+  return { at: on.find((p) => p.mirrored_at)?.mirrored_at ?? null };
+}
+
+/** "copy taken 27 Oct 13:27 UTC", or "copy time unknown" — never "checked". */
+export function copyTaken(at: string | null | undefined, now = new Date()): string {
+  return at && Number.isFinite(Date.parse(at)) ? `copy taken ${whenUTC(at, now)}` : 'copy time unknown';
 }
 
 /**
@@ -187,14 +222,16 @@ export function splitNotices(
   return { current, ended };
 }
 
-/** "now", "expected"… while in force; "cancelled" or "ended" after. */
+/** "now", "expected"… while in force; "cancelled" or "ended" after; "reported" for an event. */
 export function noticeWord(a: AlertItem, now = new Date()): string {
+  if (a.event) return 'reported';
   if (inForce(a, now)) return LEVEL_WORD[a.level] ?? 'notice';
   return a.level === 'cancel' ? 'cancelled' : 'ended';
 }
 
 /** `in force until 27 Oct 05:17 UTC`, `ended 23 Oct 21:00 UTC`, or `validity not stated`. */
 export function validityText(a: AlertItem, now = new Date()): string {
+  if (a.event) return 'an event report, not a condition in force';
   if (!a.validityStated) return 'validity not stated';
   if (inForce(a, now)) return `in force until ${whenUTC(a.validUntil, now)}`;
   return a.validUntil ? `ended ${whenUTC(a.validUntil, now)}` : 'ended';

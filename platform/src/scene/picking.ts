@@ -15,7 +15,7 @@
  */
 
 import { Raycaster, Vector2, Vector3 } from 'three';
-import type { Camera, PerspectiveCamera } from 'three';
+import type { Camera, Object3D, PerspectiveCamera } from 'three';
 import type { Pickables } from './pickables.js';
 
 export type PickKind = 'planet' | 'sun' | 'moon' | 'spacecraft';
@@ -34,6 +34,8 @@ export interface Pick extends Candidate {
   /** Where it landed on screen, CSS pixels from the canvas top-left. */
   screen: { x: number; y: number };
   distancePx: number;
+  /** The body's drawn radius on screen, CSS pixels. */
+  radiusPx: number;
 }
 
 /** Pointer slop, in CSS pixels, for something drawn smaller than this. */
@@ -69,7 +71,7 @@ export function pickAt(
     if (d > tolerance) continue;
     // Nearest to the pointer wins; ties go to whichever is closer to the camera.
     if (!best || d < best.distancePx) {
-      best = { ...c, screen: { x, y }, distancePx: d };
+      best = { ...c, screen: { x, y }, distancePx: d, radiusPx };
     }
   }
   return best;
@@ -108,6 +110,49 @@ export interface LayerPick {
   screen: { x: number; y: number };
   /** World-space hit point, for anything that needs to know where. */
   point: Vector3;
+  /**
+   * The one record under the pointer, where the layer draws one per marker —
+   * a quake, a CME cone, an active region — so a tip or a card can say which
+   * one, and when it was observed, not only what kind of thing it is.
+   */
+  record?: { kind: 'quake' | 'cme' | 'region'; data: unknown };
+}
+
+/** The record a hit object, or the marker it belongs to, carries in `userData`. */
+function recordOf(o: Object3D | null): LayerPick['record'] {
+  for (let n: Object3D | null = o; n; n = n.parent) {
+    const u = n.userData as Record<string, unknown>;
+    if (u['quake']) return { kind: 'quake', data: u['quake'] };
+    if (u['cme']) return { kind: 'cme', data: u['cme'] };
+    if (u['region']) return { kind: 'region', data: u['region'] };
+  }
+  return undefined;
+}
+
+/**
+ * The layers drawn ON a body's surface. Only these may beat the body they sit
+ * on: a quake marker or an active region under the pointer is the more
+ * specific answer than Earth or the Sun. Everything else that passes over a
+ * body — an orbit ring through Earth's centre, a CME cone leaving the Sun, the
+ * field lines hanging from Earth, the wind, the boundaries — never does. The
+ * old rule let any layer hit inside 1.05 radii of a body's centre win, and a
+ * click on Earth's centre opened "Orbits and the Sun–Earth line".
+ */
+export const ON_SURFACE: ReadonlySet<string> = new Set(['layer.quakes', 'layer.active-regions']);
+
+/**
+ * Does this layer hit beat the body under the pointer? Only a surface layer,
+ * and only where it lands within the body's radius of its centre — plus a
+ * little for the marker's own height above the surface.
+ */
+export function layerBeatsBody(
+  layer: LayerPick | null, body: Pick | null, radiusOf: (b: Pick) => number,
+): boolean {
+  if (!layer || !body) return false;
+  if (!ON_SURFACE.has(layer.subject)) return false;
+  const r = radiusOf(body);
+  if (r <= 0) return false;
+  return layer.point.distanceTo(body.position) <= r * 1.05;
 }
 
 /**
@@ -190,21 +235,23 @@ export function pickLayerAt(
     raycaster.params.Line.threshold = local;
     raycaster.params.Points.threshold = local;
 
-    let rootBest: { subject: string; point: import('three').Vector3; dist: number } | null = null;
+    let rootBest: { subject: string; point: import('three').Vector3; dist: number; record: LayerPick['record'] } | null = null;
     for (const h of raycaster.intersectObject(root, true)) {
       const subject = pickables.subjectFor(h.object);
       if (!subject) continue;
-      rootBest = { subject, point: h.point.clone(), dist: h.distance };
+      rootBest = { subject, point: h.point.clone(), dist: h.distance, record: recordOf(h.object) };
       break;
     }
     if (rootBest) {
+      const pick: LayerPick = {
+        subject: rootBest.subject, screen: { ...pointer }, point: rootBest.point,
+        ...(rootBest.record ? { record: rootBest.record } : {}),
+      };
       if (rootBest.dist < bestDist) {
         bestDist = rootBest.dist;
-        best = { subject: rootBest.subject, screen: { ...pointer }, point: rootBest.point };
+        best = pick;
       }
-      if (PRIORITY.has(rootBest.subject) && !priority) {
-        priority = { subject: rootBest.subject, screen: { ...pointer }, point: rootBest.point };
-      }
+      if (PRIORITY.has(rootBest.subject) && !priority) priority = pick;
     }
   }
 
@@ -220,7 +267,7 @@ export function pickLayerAt(
       const subject = pickables.subjectFor(root);
       if (!subject || !PRIORITY.has(subject)) continue;
       let bestPx = Infinity;
-      let bestChild: { position: import('three').Vector3 } | null = null;
+      let bestChild: { position: import('three').Vector3; object: Object3D } | null = null;
       for (const child of root.children) {
         const wp = child.getWorldPosition(new Vector3());
         const ndc = wp.clone().project(camera);
@@ -228,10 +275,11 @@ export function pickLayerAt(
         const sx = (ndc.x * 0.5 + 0.5) * size.width;
         const sy = (-ndc.y * 0.5 + 0.5) * size.height;
         const d = Math.hypot(sx - pointer.x, sy - pointer.y);
-        if (d < bestPx) { bestPx = d; bestChild = { position: wp }; }
+        if (d < bestPx) { bestPx = d; bestChild = { position: wp, object: child }; }
       }
       if (bestChild && bestPx <= MARKER_TOLERANCE_PX) {
-        priority = { subject, screen: { ...pointer }, point: bestChild.position };
+        const record = recordOf(bestChild.object);
+        priority = { subject, screen: { ...pointer }, point: bestChild.position, ...(record ? { record } : {}) };
         break;
       }
     }

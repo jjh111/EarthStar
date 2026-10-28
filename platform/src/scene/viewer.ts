@@ -36,7 +36,7 @@ import type { QuakeFeature } from '../data/earth-quakes.js';
 import { MARKER_SIZE_PER_DISTANCE, SpacecraftMarkers } from './spacecraft.js';
 import { calibrateDisk } from './disk-calibration.js';
 import {
-  isClick, pickAt, pickLayerAt, type Candidate, type LayerPick, type Pick,
+  isClick, layerBeatsBody, pickAt, pickLayerAt, type Candidate, type LayerPick, type Pick,
 } from './picking.js';
 import { Pickables } from './pickables.js';
 import { activeCmes, type Cme } from '../data/cme.js';
@@ -236,6 +236,25 @@ export interface SceneDisc extends ScreenSpot { key: string; occludes: boolean }
  */
 const NAME_THETAS_DEG = [0, 25, 50, 75];
 const NAME_PHI_STEPS = 12;
+/**
+ * Under this many pixels across its radius, Earth's neighbours go unnamed. At
+ * System, Earth is a 5 px dot and its boundaries and monitors a knot round it:
+ * four names on one diamond named nothing the reader could tell apart.
+ */
+const MIN_NAMED_DISC_PX = 8;
+/** A marker this close to Earth's limb is named as part of Earth, i.e. not at all. */
+const POINT_FROM_EARTH_PX = 8;
+/** About one scene name's height at the 10 px floor and up. */
+const NAME_HEIGHT_PX = 18;
+
+/** For a layer that can be on with nothing in it: whether it is empty now. */
+const EMPTY_WHEN: Record<string, (v: Viewer) => boolean> = {
+  'layer.quakes': (v) => v.quakeCount === 0,
+  'layer.active-regions': (v) => v.regionCount === 0,
+  'layer.cme-cones': (v) => v.cmeCount === 0,
+  'layer.magnetopause': (v) => !v.boundariesDrawn,
+  'layer.bow-shock': (v) => !v.boundariesDrawn,
+};
 
 export class Viewer {
   readonly scene = new Scene();
@@ -277,6 +296,10 @@ export class Viewer {
   onSelect: ((p: Pick) => void) | null = null;
   /** After each frame is drawn, for whatever follows the scene on screen. */
   onFrame: (() => void) | null = null;
+  /** A retrace of the field lines has finished and the new set is drawn. */
+  onTraced: (() => void) | null = null;
+  /** Whether the magnetopause and bow shock are on screen: the field is on and the wind reached us. */
+  get boundariesDrawn(): boolean { return this.shieldDrawn !== null; }
   /** The Shue solution and Sun direction the boundaries were last drawn from; null while they are not. */
   private shieldDrawn: { mp: Magnetopause; sunDir: Vector3; earthRadius: number } | null = null;
   private shieldVisible = true;
@@ -357,6 +380,7 @@ export class Viewer {
     this.pickables.register(this.spacecraft.group, 'layer.l1-monitors', false);
     this.pickables.register(this.earth.group, 'layer.terminator', false);
     this.pickables.register(this.fieldLines.group, 'layer.field-lines');
+    this.fieldLines.onTraced = () => this.onTraced?.();
     this.pickables.register(this.magnetosphere.magnetopauseObject, 'layer.magnetopause');
     this.pickables.register(this.magnetosphere.bowShockObject, 'layer.bow-shock');
     // Mid-range devices choke on a large point cloud; halve it when the GPU
@@ -576,10 +600,11 @@ export class Viewer {
   get fieldLineStats(): {
     lines: number; points: number; far: boolean;
     external: ExternalModel | null; tiltDeg: number | null;
-    truncated: number; traceMs: number;
+    truncated: number; traceMs: number; tracing: boolean;
   } {
     const ext = this.fieldLines.externalUsed;
     return {
+      tracing: this.fieldLines.retracing,
       lines: this.fieldLines.lineCount,
       points: this.fieldLines.pointCount,
       far: this.fieldLines.farSet,
@@ -601,6 +626,7 @@ export class Viewer {
   }
 
   setView(view: ViewName, immediate = false): void {
+    this.applyTopInset(view);
     const date = new Date();
     const { earthPos, earthRadius, sunDir } = this.geometryNow(date);
     // What the Sun is actually showing, so the Corona view frames the picture
@@ -628,6 +654,13 @@ export class Viewer {
    */
   earthScreen(): { x: number; y: number; r: number } | null {
     const s = this.onScreen(this.earth.group.position, radiusToScene('Earth', this.mode),
+      this.canvas.getBoundingClientRect());
+    return s && { x: s.x, y: s.y, r: s.r };
+  }
+
+  /** Where the Sun is drawn on screen, as `earthScreen` gives Earth. */
+  sunScreen(): { x: number; y: number; r: number } | null {
+    const s = this.onScreen(this.sun.group.position, radiusToScene('Sun', this.mode),
       this.canvas.getBoundingClientRect());
     return s && { x: s.x, y: s.y, r: s.r };
   }
@@ -672,19 +705,30 @@ export class Viewer {
     // Earth's disc for the names runs to its glowing rim, which is drawn
     // past the surface: a name at the bare limb sat in the glow.
     body('earth', 'Earth', this.earth.group.position, radiusToScene('Earth', this.mode) * ATMOSPHERE_RADIUS);
+    const earth = discs.find((d) => d.key === 'earth') ?? null;
+    // Where Earth is drawn under a few pixels — System, True scale — what
+    // stands round it (the boundaries, L1, the Moon) is far below a pixel
+    // from it, and naming each stacked four labels on one diamond.
+    const tiny = !earth || earth.r < MIN_NAMED_DISC_PX;
+    const nearEarth = (sx: number, sy: number, gap: number): boolean =>
+      !!earth && Math.hypot(sx - earth.x, sy - earth.y) - earth.r < gap;
     for (const c of this.candidates) {
       // The planets are not named, but no name may cover one either.
-      if (c.kind === 'sun' || c.kind === 'moon') body(c.kind, c.label, c.position, c.radius);
-      else if (c.kind === 'planet' && c.id !== 'Earth') body(c.id, null, c.position, c.radius);
+      if (c.kind === 'sun') body(c.kind, c.label, c.position, c.radius);
+      else if (c.kind === 'moon') {
+        // Named only a name's height clear of Earth; its disc is still kept clear.
+        const sp = spot(c.position, c.radius);
+        body(c.kind, sp && !nearEarth(sp.x, sp.y, sp.r + NAME_HEIGHT_PX) ? c.label : null, c.position, c.radius);
+      } else if (c.kind === 'planet' && c.id !== 'Earth') body(c.id, null, c.position, c.radius);
     }
-    if (this.spacecraft.group.visible) {
+    if (this.spacecraft.group.visible && !tiny) {
       const active = new Set(this.spacecraftPos.filter((p) => p.active).map((p) => p.source));
       const cam = this.rig.camera.position;
       for (const c of this.candidates) {
         if (c.kind !== 'spacecraft') continue;
         // The marker's own size on screen, so its name clears the diamond.
         const s = spot(c.position, c.position.distanceTo(cam) * MARKER_SIZE_PER_DISTANCE);
-        if (!s) continue;
+        if (!s || nearEarth(s.x, s.y, POINT_FROM_EARTH_PX)) continue;
         const key = `l1-${c.id}`;
         discs.push({ key, occludes: false, ...s });
         // The one feeding the panel is L1's name; the others stand beside it.
@@ -694,7 +738,7 @@ export class Viewer {
       }
     }
     const shield = this.shieldDrawn;
-    if (shield && this.shieldVisible) {
+    if (shield && this.shieldVisible && !tiny) {
       const surface = (key: string, label: string, r0: number, alpha: number) => {
         const spots: ScreenSpot[] = [];
         const axis = shield.sunDir.clone().normalize();
@@ -942,15 +986,11 @@ export class Viewer {
    * behind a field line is still the planet.
    */
   private layerOnBody(layer: LayerPick | null, body: Pick | null): boolean {
-    if (!layer || !body) return false;
-    const centre = body.position;
-    const bodyRadius =
-      body.kind === 'sun' ? radiusToScene('Sun', this.mode)
-      : body.kind === 'moon' ? radiusToScene('Moon', this.mode)
-      : body.kind === 'planet' ? radiusToScene(body.id as PlanetName, this.mode)
-      : 0;
-    if (bodyRadius <= 0) return false;
-    return layer.point.distanceTo(centre) <= bodyRadius * 1.05;
+    return layerBeatsBody(layer, body, (b) =>
+      b.kind === 'sun' ? radiusToScene('Sun', this.mode)
+        : b.kind === 'moon' ? radiusToScene('Moon', this.mode)
+          : b.kind === 'planet' ? radiusToScene(b.id as PlanetName, this.mode)
+            : 0);
   }
 
   private pointerPick(e: PointerEvent | MouseEvent): Pick | null {
@@ -1025,10 +1065,17 @@ export class Viewer {
    * and the scene are the same fact.
    */
   get drawnSubjects(): string[] {
-    const out = [...this.pickables.visibleSubjects];
+    const out = [...this.pickables.visibleSubjects]
+      // The Sun is "Solar imagery" [E] only while a SUVI frame is on it; until
+      // then it is the plain placeholder [M], as the stage note says.
+      .map((id) => (id === 'layer.sun-disc' && !this.sun.hasImage ? 'layer.sun-placeholder' : id))
+      // A layer that is on but has nothing to draw — no quakes, no regions,
+      // no cones, no wind for the boundaries — draws nothing, and the index
+      // lists what is drawn: offline it listed all five as on screen.
+      .filter((id) => !(EMPTY_WHEN[id]?.(this) ?? false));
     // Two layers are shader state on the globe rather than objects of their
     // own, so nothing in the registry can report whether they are on.
-    if (this.auroraVisible && !out.includes('layer.aurora')) out.push('layer.aurora');
+    if (this.auroraVisible && this.aurora && !out.includes('layer.aurora')) out.push('layer.aurora');
     if (this.sun.coronagraphShown && !out.includes('layer.coronagraph')) {
       out.push('layer.coronagraph');
     }
@@ -1061,7 +1108,48 @@ export class Viewer {
     const h = this.canvas.clientHeight || window.innerHeight;
     this.renderer.setSize(w, h, false);
     this.rig.resize(w / Math.max(1, h));
+    this.applyTopInset();
   };
+
+  /** CSS px of the canvas's top that chrome covers; see `setTopInset`. */
+  private topInsetPx = 0;
+  /** And how much further down the notes under it reach. */
+  private notesInsetPx = 0;
+
+  /**
+   * Frame the scene in the part of the canvas a reader can see. On the phone
+   * page the opaque header covers the band's top, and a camera centred on the
+   * whole canvas put Polar's Earth 26 px under it. The principal point moves to
+   * the middle of what is left, and the views are framed for that band
+   * (`CameraRig.fill`), so everything that projects through the camera —
+   * picking, the names, Earth's place for the card — follows without knowing.
+   * Polar, whose Earth fills the frame, also clears the notes under the header.
+   * Zero on a desktop, whose header is glass over a scene framed to the window.
+   */
+  setTopInset(header: number, notes = 0): void {
+    const h = Math.max(0, Math.round(header));
+    const n = Math.max(0, Math.round(notes));
+    if (h === this.topInsetPx && n === this.notesInsetPx) return;
+    this.topInsetPx = h;
+    this.notesInsetPx = n;
+    // Framed again for the band that is left: a glide while the scene runs,
+    // so a note arriving mid-flight between views does not cut the flight.
+    this.setView(this.rig.view, !this.raf);
+  }
+
+  private applyTopInset(view: ViewName = this.rig.view): void {
+    const cam = this.rig.camera;
+    const w = this.canvas.clientWidth;
+    const h = this.canvas.clientHeight;
+    const top = this.topInsetPx + (view === 'polar' ? this.notesInsetPx : 0);
+    if (top > 0 && w > 0 && h > top) {
+      cam.setViewOffset(w, h, 0, -top / 2, w, h);
+      this.rig.fill = (h - top) / h;
+    } else {
+      cam.clearViewOffset();
+      this.rig.fill = 1;
+    }
+  }
 
   dispose(): void {
     this.stop();

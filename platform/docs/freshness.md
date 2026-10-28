@@ -75,7 +75,12 @@ cannot read never reaches the branch.
 **Timestamps stay upstream's own**, so a reader on the mirror sees the true age of each
 measurement and the page still marks it stale on schedule. The only age the mirror could
 hide is its own — which is why `manifest.json` records `mirrored_at` separately and
-`npm run health` fails when it exceeds twelve hours (§ the cadence note below).
+`npm run health` fails when it exceeds twelve hours (§ the cadence note below). The page
+reads that manifest too, the first time anything is served from the mirror, and says
+"copy taken 27 Oct 13:27 UTC" wherever it would otherwise say when it looked: in the
+status line, the ticker's "No notice in force in Earth Star's copy of NOAA's feed", the
+report, the Notices detail and the briefing's head. It never says "checked" of a feed
+NOAA did not answer.
 
 What is *not* mirrored: solar imagery (megabytes of PNG per frame, and a frame list is
 useless without them), and the Earth layers' USGS and NWS feeds, which are outside the
@@ -100,7 +105,10 @@ newest-*first*, so taking the last N rows keeps yesterday and discards today. Th
 shipped once and was caught only by loading the page with upstream blocked and noticing the
 wind was 18.9 hours old — the mirror was well-formed and the manifest said `0 failed`.
 Arrays spanning more than a year are archives and are copied whole, which is what keeps the
-sunspot record honest at 3 332 rows back to 1749.
+sunspot record honest at 3 332 rows back to 1749. A forecast run is the third case:
+WSA-Enlil's newest rows are the far end of the run, so for it (`AROUND_NOW` in
+`scripts/trim.mjs`) the rows kept are the 720 nearest the moment of the copy — keeping the
+newest kept +79 h to +106 h and dropped the next three days.
 
 ---
 

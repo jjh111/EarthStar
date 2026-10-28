@@ -103,3 +103,48 @@ describe('enlilSeries', () => {
     expect(s.value).toEqual([428, 560, 759, 697]);
   });
 });
+
+/**
+ * A run with no tracer values says nothing about ejecta, and a mirror that
+ * kept only the far end of a run is captioned as what it is. Both were on
+ * screen from the stage-B mirror: 720 rows, every `cloud` null, starting 79 h
+ * out — and the panel said "no ejecta reach Earth" over "the next 27 h".
+ */
+describe('a run without a tracer, starting days ahead', () => {
+  const at = (h: number) => new Date(NOW.getTime() + h * 3.6e6).toISOString().slice(0, 19);
+  const TAIL = [79, 90, 100, 106].map((h, i) => ({
+    time_tag: at(h), v_r: 400 + i * 27, earth_particles_per_cm3: 5, temperature: 1e5,
+    b_r: 1, polarity: 1, cloud: null,
+  }));
+  const run = parseEnlil(TAIL, NOW);
+
+  it('does not read a missing tracer as zero', () => {
+    expect(run.tracerPublished).toBe(false);
+    expect(run.cloudArrival).toBeNull();
+    // A published run keeps saying it published one.
+    expect(parseEnlil(FEED, NOW).tracerPublished).toBe(true);
+  });
+
+  it('says so in the Ahead tab, and spans from now rather than from its first row', async () => {
+    const { renderForecast } = await import('../src/hud/margin.js');
+    const html = renderForecast({
+      kp: [], odds: [], threeDay: null, discussion: null, flares: [], f107: { value: null, time: null }, enlil: run,
+    } as never, false, [], undefined, null, NOW);
+    expect(html).toContain("NOAA's run carries no CME tracer values, so nothing here says whether ejecta");
+    expect(html).not.toContain('stays below');
+    expect(html).toContain('Radial speed from +79 h to +106 h');
+    expect(html).not.toMatch(/over the next 27 h/);
+    expect(html).toContain("at the run's last");
+    expect(html).not.toContain('The elapsed half is checked');
+  });
+
+  it('and the briefing says the same three-way thing', async () => {
+    const { buildBriefing } = await import('../src/hud/briefing.js');
+    const md = buildBriefing({
+      state: { now: { data: { alerts: [] }, parts: {} }, lanes: { snapshot: false } } as never,
+      narration: [], checks: null, forecast: { enlil: run } as never, now: NOW,
+    });
+    expect(md).toContain('NOAA’s run carries no CME tracer values');
+    expect(md).not.toContain('No ejecta reach Earth');
+  });
+});

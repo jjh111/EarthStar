@@ -33,7 +33,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { DONKI, SWPC, discover, mirrorPath } from './endpoints.mjs';
-import { MAX_ROWS, trim } from './trim.mjs';
+import { AROUND_NOW, MAX_ROWS, trim } from './trim.mjs';
 
 const OUT = process.argv[2] ?? 'mirror-out';
 const ORIGIN = 'https://earthstar.space';
@@ -79,13 +79,15 @@ for (const url of urls) {
       // []. Same meaning; storing [] keeps a quiet week from reading as a
       // failed copy.
       const src = url.startsWith(DONKI) && text.trim() === '' ? '[]' : text;
-      const { value, trimmed, archive, byTime } = trim(JSON.parse(src));  // throws on a bad body
+      // A forecast run keeps the rows around the copy, not its far end.
+      const around = AROUND_NOW.some((p) => url.endsWith(p)) ? Date.now() : null;
+      const { value, trimmed, archive, byTime } = trim(JSON.parse(src), MAX_ROWS, around);  // throws on a bad body
       body = JSON.stringify(value);
       record.trimmed = trimmed;
       if (archive) record.archive = true;
       // Recorded because it is the difference between keeping today's rows and
       // keeping yesterday's, and the two look identical from outside.
-      if (trimmed) record.selected_by = byTime ? 'timestamp' : 'position';
+      if (trimmed) record.selected_by = !byTime ? 'position' : around !== null ? 'nearest the copy' : 'timestamp';
     }
     const dest = join(OUT, rel);
     mkdirSync(dirname(dest), { recursive: true });

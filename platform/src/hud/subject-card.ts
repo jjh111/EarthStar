@@ -60,7 +60,31 @@ export interface CardHost {
    * click from it, so the answer does not cover the planet it is about.
    */
   earthScreen?: () => { x: number; y: number; r: number } | null;
+  /**
+   * Other discs the card keeps clear of where it can — the Sun, which Deck
+   * frames beside Earth: an Earth card the full height of the stage covered it.
+   */
+  keepClear?: () => Array<{ x: number; y: number; r: number }>;
+  /**
+   * The card has opened (`fresh`) or swapped its subject in place — a step
+   * the address records, so Back closes what was opened.
+   */
+  onOpened?: (id: string, fresh: boolean) => void;
+  /**
+   * The card has closed: by the reader ('user' — ×, Escape, a click away),
+   * for its "Full detail" ('more'), or because the address no longer names it
+   * ('address'), which the host already knows.
+   */
+  onClosed?: (reason: CloseReason) => void;
 }
+
+export type CloseReason = 'user' | 'more' | 'address';
+
+/** What the card was opened on, kept clear of the card: a body's disc, or the click itself. */
+export interface Anchor { x: number; y: number; r: number }
+
+/** A click's own clearance, when the thing clicked has no disc of its own. */
+const CLICK_R_PX = 24;
 
 export interface Box { left: number; right: number; top: number; bottom: number }
 
@@ -118,7 +142,7 @@ export class SubjectCard {
   private el: HTMLElement;
   private current: string | null = null;
   /** Where the card was asked for, so a walk through related subjects keeps its place. */
-  private anchor = { x: 0, y: 0 };
+  private anchor: Anchor = { x: 0, y: 0, r: CLICK_R_PX };
   /** Where focus was before the card took it, so Escape can give it back. */
   private returnTo: HTMLElement | null = null;
 
@@ -157,9 +181,9 @@ export class SubjectCard {
    * to close, the next to select. Nothing is lost, because the thing you
    * clicked is still there to click again.
    */
-  sceneClick(subjectId: string | null, at: { x: number; y: number }): void {
+  sceneClick(subjectId: string | null, at: { x: number; y: number; r?: number }, note: string | null = null): void {
     if (this.isOpen) { this.close(); return; }
-    if (subjectId) this.open(subjectId, at);
+    if (subjectId) this.open(subjectId, at, note);
   }
 
   /**
@@ -169,7 +193,7 @@ export class SubjectCard {
    * re-render, so a second click on the same field line does not steal focus
    * back from wherever the reader has moved it.
    */
-  open(id: string, at: { x: number; y: number }): void {
+  open(id: string, at: { x: number; y: number; r?: number }, note: string | null = null): void {
     const s = subject(id);
     if (!s) return;
     if (!this.roomInStage()) {
@@ -177,12 +201,14 @@ export class SubjectCard {
       this.host.showSubject(id);
       return;
     }
-    this.anchor = at;
-    if (this.current === id && !this.el.hidden) { this.place(at); return; }
+    const anchor: Anchor = { x: at.x, y: at.y, r: Math.max(at.r ?? 0, CLICK_R_PX) };
+    this.anchor = anchor;
+    if (this.current === id && !this.el.hidden) { this.place(anchor); return; }
 
     // Only remember where focus was on a fresh open. Swapping the card's
     // subject in place must not overwrite it with the card itself.
-    if (this.el.hidden) this.returnTo = document.activeElement as HTMLElement | null;
+    const fresh = this.el.hidden;
+    if (fresh) this.returnTo = document.activeElement as HTMLElement | null;
     this.current = id;
 
     const related = s.related.map((rid) => {
@@ -205,6 +231,7 @@ export class SubjectCard {
       </div>
       <p class="tile-meta">${tierBadge(s.tier, '', false)}
         ${escapeHtml(TIER_LABEL[s.tier])}</p>
+      ${note ? `<p class="tile-meta card-record">${escapeHtml(note)}</p>` : ''}
       <p class="card-one">${escapeHtml(s.oneLine)}</p>
       <p class="card-meaning">${escapeHtml(s.meaning)}</p>
       ${s.keyedTo
@@ -216,14 +243,26 @@ export class SubjectCard {
       <button type="button" class="card-more" data-card-more>Full detail</button>`;
 
     this.el.hidden = false;
-    this.place(at);
+    if (!this.place(anchor)) {
+      // Neither side of Earth has room clear of both Earth and what was
+      // clicked: the answer goes to the margin, at full length, rather than
+      // over the thing it is about.
+      this.el.hidden = true;
+      this.current = null;
+      this.returnTo?.focus?.({ preventScroll: true });
+      this.returnTo = null;
+      if (!fresh) this.host.onClosed?.('more');
+      this.host.showSubject(id);
+      return;
+    }
     // Focus the card itself rather than a control inside it: the reader is
     // reading, not operating. Escape and Tab both work from here.
     this.el.tabIndex = -1;
     this.el.focus({ preventScroll: true });
+    this.host.onOpened?.(id, fresh);
   }
 
-  close(): void {
+  close(reason: CloseReason = 'user'): void {
     if (this.el.hidden) return;
     this.el.hidden = true;
     this.current = null;
@@ -231,6 +270,7 @@ export class SubjectCard {
     // been dropped on the body, and a keyboard reader loses their place.
     this.returnTo?.focus?.({ preventScroll: true });
     this.returnTo = null;
+    this.host.onClosed?.(reason);
   }
 
   /**
@@ -247,7 +287,10 @@ export class SubjectCard {
   }
 
   /**
-   * Beside `at`, inside the stage, on the side of the click away from Earth.
+   * Beside `at`, inside the stage, on the side of the click away from Earth,
+   * and never over either: not over Earth, and not over what was clicked —
+   * a body's disc, or the click's own neighbourhood. Returns false when no
+   * placement clears both, and the caller opens the subject in the margin.
    *
    * The card is as wide as 24rem or the room beside Earth on that side,
    * whichever is less; when that side has less than the narrowest card, the
@@ -257,20 +300,21 @@ export class SubjectCard {
    * Its height is whatever is left between the header, the notes and the
    * ticker over the span it takes, and it scrolls inside that.
    */
-  private place(at: { x: number; y: number }): void {
+  private place(at: Anchor): boolean {
     if (window.matchMedia(PAGE_LAYOUT).matches) {
       this.el.classList.add('is-sheet');
       this.el.style.left = '';
       this.el.style.top = '';
       this.el.style.width = '';
       this.el.style.maxHeight = '';
-      return;
+      return true;
     }
     this.el.classList.remove('is-sheet');
     const stage = stageBox();
     const u = cardRem(this.el);
     const minW = MIN_CARD_REM * u;
     const earth = this.host.earthScreen?.() ?? null;
+    const keep = this.host.keepClear?.() ?? [];
 
     // The room beside Earth on one side, within the stage.
     const beside = (toRight: boolean): [number, number] => {
@@ -279,28 +323,63 @@ export class SubjectCard {
         ? [Math.max(stage.left, earth.x + earth.r + GAP_PX), stage.right]
         : [stage.left, Math.min(stage.right, earth.x - earth.r - GAP_PX)];
     };
-    const away = !earth || at.x >= earth.x;
-    let toRight = away;
-    let span = beside(toRight);
-    let flush = false;
-    if (span[1] - span[0] < minW) {
-      const other = beside(!away);
-      if (other[1] - other[0] >= minW) { toRight = !away; span = other; }
-      else { span = [stage.left, stage.right]; flush = true; }
-    }
-    const w = Math.min(flush ? minW : CARD_REM * u, span[1] - span[0]);
-    const clampX = (x: number) => Math.min(Math.max(x, span[0]), span[1] - w);
-    const x = flush
-      ? (toRight ? span[1] - w : span[0])
-      : clampX(toRight ? at.x + GAP_PX : at.x - GAP_PX - w);
 
-    const box = clearNotes(stage, x, x + w);
-    this.el.style.width = `${Math.round(w)}px`;
-    this.el.style.maxHeight = `${Math.max(0, Math.round(box.bottom - box.top))}px`;
-    const h = this.el.getBoundingClientRect().height;
-    const y = Math.min(Math.max(at.y - h / 3, box.top), box.bottom - h);
-    this.el.style.left = `${Math.round(x)}px`;
-    this.el.style.top = `${Math.round(Math.max(box.top, y))}px`;
+    /** A placement on one side, or null when it would cover what was clicked. */
+    const tryOn = (toRight: boolean, allowFlush: boolean): { x: number; y: number; w: number; maxH: number } | null => {
+      let span = beside(toRight);
+      let flush = false;
+      if (span[1] - span[0] < minW) {
+        if (!allowFlush) return null;
+        span = [stage.left, stage.right];
+        flush = true;
+      }
+      const w = Math.min(flush ? minW : CARD_REM * u, span[1] - span[0]);
+      const clampX = (x: number) => Math.min(Math.max(x, span[0]), span[1] - w);
+      let x = flush
+        ? (toRight ? span[1] - w : span[0])
+        : clampX(toRight ? at.x + GAP_PX : at.x - GAP_PX - w);
+      // Clear of the anchor sideways where the span allows it.
+      const anchorL = at.x - at.r - GAP_PX;
+      const anchorR = at.x + at.r + GAP_PX;
+      if (x < anchorR && x + w > anchorL) {
+        if (anchorR + w <= span[1]) x = Math.max(x, anchorR);
+        else if (anchorL - w >= span[0]) x = Math.min(x, anchorL - w);
+      }
+      let box = clearNotes(stage, x, x + w);
+      // Off the other discs too, where what is left above or below one of
+      // them still holds a readable card.
+      for (const k of keep) {
+        if (k.x + k.r + GAP_PX <= x || k.x - k.r - GAP_PX >= x + w) continue;
+        const above = { ...box, bottom: Math.min(box.bottom, k.y - k.r - GAP_PX) };
+        const below = { ...box, top: Math.max(box.top, k.y + k.r + GAP_PX) };
+        const fits = (b: Box) => b.bottom - b.top >= MIN_CARD_HEIGHT_REM * u;
+        const near = at.y < k.y ? above : below;
+        const far = near === above ? below : above;
+        if (fits(near)) box = near;
+        else if (fits(far)) box = far;
+      }
+      const maxH = Math.max(0, box.bottom - box.top);
+      this.el.style.width = `${Math.round(w)}px`;
+      this.el.style.maxHeight = `${Math.round(maxH)}px`;
+      const h = this.el.getBoundingClientRect().height;
+      let y = Math.max(box.top, Math.min(Math.max(at.y - h / 3, box.top), box.bottom - h));
+      // Still over the anchor horizontally: clear it vertically, above or below.
+      if (x < anchorR && x + w > anchorL && y < at.y + at.r + GAP_PX && y + h > at.y - at.r - GAP_PX) {
+        if (at.y + at.r + GAP_PX + h <= box.bottom) y = at.y + at.r + GAP_PX;
+        else if (at.y - at.r - GAP_PX - h >= box.top) y = at.y - at.r - GAP_PX - h;
+        else return null;
+      }
+      return { x, y, w, maxH };
+    };
+
+    const away = !earth || at.x >= earth.x;
+    const spot = tryOn(away, false) ?? tryOn(!away, false) ?? tryOn(away, true) ?? tryOn(!away, true);
+    if (!spot) return false;
+    this.el.style.width = `${Math.round(spot.w)}px`;
+    this.el.style.maxHeight = `${Math.round(spot.maxH)}px`;
+    this.el.style.left = `${Math.round(spot.x)}px`;
+    this.el.style.top = `${Math.round(spot.y)}px`;
+    return true;
   }
 
   private onClick = (e: Event): void => {
@@ -308,7 +387,7 @@ export class SubjectCard {
     if (t?.closest('[data-card-close]')) { this.close(); return; }
     if (t?.closest('[data-card-more]')) {
       const id = this.current;
-      this.close();
+      this.close('more');
       if (id) this.host.showSubject(id);
       return;
     }

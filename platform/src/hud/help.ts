@@ -88,7 +88,7 @@ export function helpHtml(): string {
       <h2 id="help-title">What you are seeing</h2>
       <button type="button" class="help-close" data-help-close aria-label="Close help">×</button>
     </div>
-    <div class="help-body">
+    <div class="help-body" tabindex="0" aria-label="Help text">
       <section aria-labelledby="help-tiers">
         <h3 id="help-tiers">Tiers</h3>
         <p>Every reading, model and mark here carries one of three badges.</p>

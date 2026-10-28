@@ -65,7 +65,7 @@ describe('buildBriefing', () => {
     expect(md).toContain('18:03 UTC');
     expect(md).toContain('18:01 UTC');
     // And an age, because a timestamp alone still needs arithmetic to read.
-    expect(md).toMatch(/\d+ min old|\ds old/);
+    expect(md).toMatch(/\d+ min old|\d s old/);
   });
 
   it('names the evidence tier in words, not as a letter that needs a key', () => {
@@ -87,16 +87,18 @@ describe('buildBriefing', () => {
     const md = build({
       checks: {
         rows: [
-          { name: 'A', ours: '1', theirs: '1', ok: true, note: '' },
-          { name: 'B', ours: '2', theirs: '3', ok: false, note: '' },
-          { name: 'C', ours: '4', theirs: '4', ok: false, note: '', inconclusive: true },
+          { name: 'A', ours: '1', theirs: '1', against: 'NOAA SWPC', ok: true, note: '' },
+          { name: 'B', ours: '2', theirs: '3', against: 'GOES-19', ok: false, note: '' },
+          { name: 'C', ours: '4', theirs: '4', against: 'Shue 1998 (ours)', ok: false, note: '', inconclusive: true },
         ],
         ranAt: NOW.toISOString(), passed: 1, inconclusive: 1,
       },
     });
     expect(md).toContain('1 of 2 cross-checks pass');
     expect(md).toContain("1 could not be settled on today's data");
-    expect(md).toContain('**A** — pass');
+    expect(md).toContain('**A** — pass: ours 1 vs NOAA SWPC 1');
+    // Whose figure it is, not "NOAA" for a second instrument or our own model.
+    expect(md).toContain('**B** — DRIFT: ours 2 vs GOES-19 3');
     expect(md).toContain('**B** — DRIFT');
     expect(md).toContain('**C** — no signal');
   });

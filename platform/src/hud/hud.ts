@@ -15,8 +15,8 @@ import type { ForecastBundle } from '../data/forecast.js';
 import type { SolarCycle } from '../data/solar-cycle.js';
 import { LOOPS, type ImageLoop } from '../data/solar-imagery.js';
 import {
-  NO_DATA, TIER_WORD, badgeFor, badgeTitle, formatAge, hhmmUTC, noticeWord, splitNotices,
-  validityText, whenUTC,
+  NO_DATA, TIER_WORD, badgeFor, badgeTitle, copyTaken, formatAge, hhmmUTC, mirrorCopy, noticeWord,
+  splitNotices, validityText, whenUTC,
 } from './format.js';
 import { INSTRUMENTS } from './instruments.js';
 import { auroraMeta, partState, snapshotOutage } from './state-sentence.js';
@@ -25,8 +25,8 @@ import type { SunPlaneCalibration } from '../scene/sun-plane.js';
 import { tileSpark } from './tile-spark.js';
 import { inlineSpark } from './sparkline.js';
 import {
-  BODY_PREFIX, NOTICES_DETAIL, TABS, detailFor, detailSubject, escapeHtml, renderChecks,
-  renderDetail, renderForecast, renderReport, renderSources, renderSun, sunStamp,
+  BODY_PREFIX, NOTICES_DETAIL, TABS, detailFor, detailSubject, escapeHtml, renderChecks, type SourcesExtra,
+  renderDetail, renderForecast, renderReport, renderSources, renderSun, reportLanes, sunStamp,
   type SunState, type TabId,
 } from './margin.js';
 import { buildSituationReport, type SceneNarration } from './situation-report.js';
@@ -54,6 +54,16 @@ export interface HudCallbacks {
    * ignores the calls its own applying of an address makes.
    */
   onNavigate?(tab: TabId, detailId: string | null): void;
+}
+
+/**
+ * A time as a tile has room for it: "13:23" today, "27 Oct" on any other UTC
+ * day — the stale age beside it gives the hours. The rail's head says UTC once
+ * for every tile, and each time's full form is in its tile's name and title.
+ */
+export function tileTime(iso: string, now = new Date()): string {
+  const w = whenUTC(iso, now);
+  return /^\d{2} [A-Z][a-z]{2} /.test(w) ? w.slice(0, 6) : hhmmUTC(iso);
 }
 
 /** What the status line is saying, in the four kinds a reader must tell apart. */
@@ -151,11 +161,17 @@ export function noticeTicker(state: StoreState, now = new Date()): { top: AlertI
   const { current, ended } = splitNotices(env?.data?.alerts ?? [], now);
   if (current.length === 0) {
     const last = ended[0];
+    const tail = last ? ` · last: ${last.text || last.product} ${whenUTC(last.issued, now)}` : '';
+    // Read from the mirror, "none in force" is a statement about Earth Star's
+    // copy, taken hours or days ago — said so, in amber, and never "checked".
+    const alerts = env?.parts?.alerts;
     return {
       top: null,
-      items: env ? fact(`No NOAA notice in force · checked ${hhmmUTC(env.fetched_at)} UTC${
-        last ? ` · last: ${last.text || last.product} ${whenUTC(last.issued, now)}` : ''}`)
-        : fact(NO_DATA),
+      items: !env ? fact(NO_DATA)
+        : alerts?.mirrored
+          ? fact(`No notice in force in Earth Star's copy of NOAA's feed · ${
+            copyTaken(alerts.mirrored_at, now)}${tail}`, ' is-mirror')
+          : fact(`No NOAA notice in force · checked ${hhmmUTC(env.fetched_at)} UTC${tail}`),
     };
   }
 
@@ -165,8 +181,10 @@ export function noticeTicker(state: StoreState, now = new Date()): { top: AlertI
   const items = shown.map((a) => {
     const live = current.includes(a);
     return `<span class="ticker-item level-${live ? a.level : 'summary'}" title="${
-      escapeHtml(`${validityText(a, now)} — ${a.message.slice(0, 400)}`)}">`
+      escapeHtml(`${a.tier ? `[${a.tier}] ${TIER_WORD[a.tier]} · ` : ''}${validityText(a, now)} — ${
+        a.message.slice(0, 400)}`)}">`
       + `<span class="alert-level">${escapeHtml(noticeWord(a, now))}</span>`
+      + (a.tier ? `<span class="sr-only"> (${TIER_WORD[a.tier]})</span>` : '')
       + `<span class="alert-text">${escapeHtml(a.text || a.product)}</span>`
       + `<span class="alert-time">${escapeHtml(whenUTC(a.issued, now))}${
         a.validityStated ? '' : ' · validity not stated'}</span></span>`;
@@ -207,17 +225,36 @@ export function statusLine(state: StoreState, now = new Date()): {
   if (env && onMirror) {
     // The mirror is a byte-for-byte copy, so each value still carries the
     // time NOAA observed it — which is the number that decides whether it is
-    // worth anything, and it is already on every tile.
+    // worth anything, and it is already on every tile. What the bytes cannot
+    // carry is when Earth Star copied them: that is the manifest's time, and
+    // never the moment this page fetched the copy.
+    const at = mirrorCopy(env.parts)?.at ?? null;
+    const age = at ? ` (${formatAge((now.getTime() - Date.parse(at)) / 1000)} ago)` : '';
+    const copy = `${copyTaken(at, now)}${age}`;
     return {
-      text: `Mirror · NOAA unreachable · captured ${hhmmUTC(env.fetched_at)} UTC`,
-      title: `NOAA SWPC unreachable · reading Earth Star's mirror (stage B), captured ${
-        hhmmUTC(env.fetched_at)} UTC · every value keeps NOAA's own timestamp`,
+      text: `Mirror · NOAA unreachable · ${copy}`,
+      title: `NOAA SWPC unreachable · reading Earth Star's mirror (stage B), ${copy} · every value `
+        + "keeps NOAA's own timestamp",
       tone: 'mirror',
     };
   }
   if (env && !gotAny) {
     return same(`NOAA SWPC unreachable — nothing has loaded yet. Retrying${
       state.nextAttempt ? ` at ${hhmmUTC(state.nextAttempt)} UTC` : ''}.`, 'degraded');
+  }
+  // Some feeds answered and some did not: "Live" with four tiles saying
+  // "unavailable" beside it would be the line contradicting the rail.
+  const failed = env ? [...new Set(INSTRUMENTS.map((i) => i.part))]
+    .filter((p) => env.parts[p]?.error && !env.parts[p]?.data_time) : [];
+  if (env && failed.length > 0) {
+    const names = INSTRUMENTS.filter((i) => failed.includes(i.part)).map((i) => i.label);
+    const retry = state.nextAttempt ? ` · retry ${hhmmUTC(state.nextAttempt)} UTC` : '';
+    return {
+      text: `Live · ${names.length} reading${names.length === 1 ? '' : 's'} unavailable (${names.join(', ')})`,
+      title: `Live · NOAA SWPC · refreshed ${hhmmUTC(env.fetched_at)} UTC · unavailable: ${
+        names.join(', ')}${retry}`,
+      tone: 'degraded',
+    };
   }
   if (env && newest !== null) {
     // "Live fetch", never plain "Live": the fetch is live, the readings are not.
@@ -511,7 +548,7 @@ export class Hud {
    */
   private writeMeta(
     el: HTMLElement, meta: PartMeta | undefined, st: ValueStateResult, freshDetail: string,
-    retry: string | null, b: Badge = badgeFor(meta),
+    retry: string | null, b: Badge = badgeFor(meta), now = new Date(),
   ): void {
     const badge = el.querySelector('[data-badge]') as HTMLElement;
     badge.textContent = b;
@@ -519,18 +556,20 @@ export class Hud {
     badge.title = badgeTitle(meta) || TIER_WORD[b].replace(/^./, (c) => c.toUpperCase());
     const time = el.querySelector('[data-time]') as HTMLTimeElement;
     if (meta?.data_time && st.state !== 'loading') {
-      time.textContent = hhmmUTC(meta.data_time);
+      time.textContent = tileTime(meta.data_time, now);
       time.dateTime = meta.data_time;
     } else {
       time.textContent = '';
       time.removeAttribute('datetime');
     }
     // The value slot already says "unavailable" or "no data"; the meta line
-    // does not say it again. A failure says when it is tried next instead.
+    // does not say it again. A failure says when it is tried next instead —
+    // unless every feed is down, when the rail's head says it once for all
+    // thirteen (`retry` is null then).
     (el.querySelector('[data-detail]') as HTMLElement).textContent =
       st.state === 'fresh' ? freshDetail
         : st.state === 'stale' ? st.short
-          : st.state === 'error' ? (retry ? `retry ${retry}` : 'retrying')
+          : st.state === 'error' ? (retry ? `retry ${retry}` : '')
             : st.state === 'loading' ? '…' : '';
     el.setAttribute('data-state', st.state);
   }
@@ -540,7 +579,7 @@ export class Hud {
     label: string, reading: string | null, meta: PartMeta | undefined, st: ValueStateResult,
     action: string, b: Badge = badgeFor(meta),
   ): string {
-    const when = meta?.data_time ? `, ${hhmmUTC(meta.data_time)} UTC` : '';
+    const when = meta?.data_time ? `, ${whenUTC(meta.data_time)}` : '';
     const tier = TIER_WORD[b];
     const said = st.state === 'loading' ? `${label} loading`
       // "unavailable · offline or blocked · next attempt 19:02 UTC", said as a list.
@@ -656,9 +695,7 @@ export class Hud {
       state: this.state,
       narration: buildSituationReport(
         this.state.now, this.narration, now, this.state.aurora, this.state.cmes,
-        this.state.spacecraft?.data ?? [],
-        { snapshot: this.state.lanes.snapshot, aurora: this.state.lanes.aurora,
-          cmes: this.state.lanes.cmes, nextAttempt: this.state.nextAttempt },
+        this.state.spacecraft?.data ?? [], reportLanes(this.state),
       ),
       checks: this.checks,
       forecast: this.forecast,
@@ -818,7 +855,18 @@ export class Hud {
     this.statusEl.classList.toggle('is-error', status.tone === 'error');
     this.statusEl.classList.toggle('is-mirror', status.tone === 'mirror');
     this.statusEl.classList.toggle('is-degraded', status.tone === 'degraded');
-    if (this.statusEl.textContent !== status.text) this.statusEl.textContent = status.text;
+    if (this.statusEl.textContent !== status.text) {
+      // A time and its zone are one word: "13:33" at a line's end and "UTC"
+      // alone on the next read as two things.
+      this.statusEl.replaceChildren(...status.text.split(/((?:\d{2} [A-Z][a-z]{2} )?\d{2}:\d{2} UTC)/)
+        .filter(Boolean).map((part) => {
+          if (!/\d{2}:\d{2} UTC$/.test(part)) return document.createTextNode(part);
+          const t = document.createElement('span');
+          t.className = 'nowrap';
+          t.textContent = part;
+          return t;
+        }));
+    }
     this.statusEl.title = status.title;
     const kind: StatusKind = status.tone ?? 'live';
     if (kind !== this.statusKind) {
@@ -860,7 +908,11 @@ export class Hud {
     const snapshotLane = {
       loading: state.lanes.snapshot, error: env ? null : state.lastError, nextAttempt: state.nextAttempt,
     };
-    const retry = state.nextAttempt ? hhmmUTC(state.nextAttempt) : null;
+    const retryAt = state.nextAttempt ? tileTime(state.nextAttempt, now) : null;
+    // A total outage is said once, at the rail's head; the tiles keep their
+    // one red "unavailable" and nothing more.
+    const outage = snapshotOutage(state);
+    const retry = outage ? null : retryAt;
     for (const inst of INSTRUMENTS) {
       const el = this.tiles.get(inst.id)!;
       const meta: PartMeta | undefined = env?.parts?.[inst.part];
@@ -879,7 +931,7 @@ export class Hud {
       // Before its feed has answered, the tile takes its tier from the registry,
       // so a modelled reading never shows [E] while it loads.
       const b = meta ? badgeFor(meta) : subject(inst.subject)?.tier ?? 'E';
-      this.writeMeta(el, meta, st, inst.detail?.(d) ?? '', retry, b);
+      this.writeMeta(el, meta, st, inst.detail?.(d) ?? '', retry, b, now);
       const reading = `${raw} ${inst.unit}`.trim();
       const valueTitle = st.state === 'fresh' || st.state === 'stale' ? reading
         : st.state === 'loading' ? 'loading'
@@ -919,7 +971,7 @@ export class Hud {
       // Failed is "unavailable", like every other tile — never "no data".
       : scS.state === 'loading' ? '…'
         : scS.state === 'error' ? 'unavailable' : NO_DATA;
-    this.writeMeta(scalesEl, scMeta, scS, '', retry, scMeta ? badgeFor(scMeta) : 'D');
+    this.writeMeta(scalesEl, scMeta, scS, '', retry, scMeta ? badgeFor(scMeta) : 'D', now);
     scalesEl.setAttribute('title', `NOAA scales · ${scS.label} · ${badgeTitle(scMeta)}`);
     scalesEl.setAttribute('aria-label', this.ariaReading('NOAA scales',
       sc ? (['R', 'S', 'G'] as const).map((k) => `${k}${sc[k].scale ?? ' no data'}`).join(' ') : null,
@@ -936,7 +988,7 @@ export class Hud {
           : auS.state === 'error' ? 'unavailable' : NO_DATA;
     // Observed at the time on the meta line; the forecast is for the time after it.
     // A model's output whether or not it has arrived: [D] before its envelope does too.
-    this.writeMeta(auEl, auMeta, auS, au?.data ? `for ${hhmmUTC(au.data.forecast_time)}` : '', retry, 'D');
+    this.writeMeta(auEl, auMeta, auS, au?.data ? `for ${tileTime(au.data.forecast_time, now)}` : '', retry, 'D', now);
     auEl.setAttribute('title', `Aurora peak · ${auS.label}${au?.data
       ? ` · OVATION forecast for ${hhmmUTC(au.data.forecast_time)} UTC` : ''} · ${badgeTitle(auMeta)}`);
     auEl.setAttribute('aria-label', this.ariaReading(
@@ -944,18 +996,20 @@ export class Hud {
 
     // A total outage is said once, here and in the sentence; each tile keeps
     // its one red "unavailable" and nothing more.
-    const outage = snapshotOutage(state);
     this.outageEl.hidden = !outage;
     this.outageEl.textContent = outage
-      ? `NOAA unreachable · retrying ${retry ? `${retry} UTC` : 'on the next refresh'}` : '';
+      ? `NOAA unreachable · retrying ${state.nextAttempt ? whenUTC(state.nextAttempt, now) : 'on the next refresh'}` : '';
 
     // Layer toggles carry the same four states: a layer whose data has not
     // landed is dimmed rather than pretending to be ready.
     this.setToggleState('aurora-toggle', auS.state);
-    this.setToggleState('cme-toggle',
-      state.lanes.cmes && state.cmes.length === 0 ? 'loading'
-        : state.laneErrors.cmes ? 'error'
-          : state.cmes.length === 0 ? 'no-data' : 'fresh');
+    const cmeState: DataState = state.lanes.cmes && state.cmes.length === 0 ? 'loading'
+      : state.laneErrors.cmes ? 'error'
+        : state.cmes.length === 0 ? 'no-data' : 'fresh';
+    this.setToggleState('cme-toggle', cmeState, cmeState === 'error'
+      ? `CME analyses unavailable (${errorReason(state.laneErrors.cmes)}) · retry ${
+        state.nextSlowAttempt ? whenUTC(state.nextSlowAttempt, now) : 'on the next refresh'}`
+      : null);
     this.setToggleState('wind-toggle', snapshotLane.loading ? 'loading'
       : d?.solar_wind ? 'fresh'
         : (env?.parts?.solar_wind?.error ?? state.lastError) ? 'error' : 'no-data');
@@ -967,6 +1021,28 @@ export class Hud {
   private earthCoast = false;
 
   setEarthLights(v: boolean): void { this.earthLights = v; }
+
+  /** The USGS lane, for the Sources tab: its newest event, its count and its state. */
+  private quakes: SourcesExtra['quakes'] | null = null;
+  setQuakes(q: NonNullable<SourcesExtra['quakes']>): void {
+    const same = this.quakes && this.quakes.time === q.time && this.quakes.count === q.count
+      && this.quakes.error === q.error && this.quakes.loading === q.loading;
+    this.quakes = q;
+    if (!same && this.tab === 'sources') this.renderMargin();
+  }
+
+  /** The Sun's two selections, each with its newest frame's time or why it has none. */
+  private imageryRows(): NonNullable<SourcesExtra['imagery']> {
+    const row = (key: string, loop: ImageLoop | null, error: string | null, loading: boolean, fallback: string) => ({
+      key, source: loop?.instrument ?? fallback, url: loop?.sourceUrl ?? 'https://services.swpc.noaa.gov/images/animations/',
+      time: loop ? loop.frames[loop.newestGood]?.time ?? null : null, error, loading,
+    });
+    const out = [row('solar disc', this.sun.loop, this.sun.error, this.sun.loading, 'GOES SUVI')];
+    if (this.sun.coronaId) {
+      out.push(row('corona', this.sun.corona, this.sun.coronaError, this.sun.coronaLoading, 'SOHO LASCO'));
+    }
+    return out;
+  }
   get lightsLoaded(): boolean { return this.earthLights; }
   setSunPlanes(on: boolean): void {
     this.sunPlanesOn = on;
@@ -975,8 +1051,18 @@ export class Hud {
   get planesOn(): boolean { return this.sunPlanesOn; }
   setEarthCoast(v: boolean): void { this.earthCoast = v; }
 
-  private setToggleState(id: string, state: DataState): void {
-    document.getElementById(id)?.setAttribute('data-state', state);
+  /**
+   * A layer toggle's data state, and — while its feed has failed — a title
+   * that says so: the red alone does not say what is missing or when it is
+   * tried again. The toggle's own title comes back when the feed does.
+   */
+  private setToggleState(id: string, state: DataState, failure: string | null = null): void {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.setAttribute('data-state', state);
+    el.dataset['title'] ??= el.title;
+    const title = failure ?? el.dataset['title'] ?? '';
+    if (el.title !== title) el.title = title;
   }
 
   /**
@@ -1038,14 +1124,14 @@ export class Hud {
       case 'forecast':
         return renderForecast(
           this.forecast, this.forecastLoading, state?.cmes ?? [], this.remembered,
-          this.forecastError,
+          this.forecastError, now,
         );
       case 'sun': return renderSun(this.sun, LOOPS, this.cycle, this.cycleLoading, this.cycleError);
       case 'sources':
         return renderSources(state, this.checks, this.remembered, {
           surface: this.narration.earthSurface ?? 'vector',
           lights: this.earthLights, coast: this.earthCoast,
-        }, this.rendering);
+        }, this.rendering, { quakes: this.quakes ?? undefined, imagery: this.imageryRows() }, now);
       case 'checks': return renderChecks(this.checks, this.checksRunning);
       case 'detail': return this.detailId ? renderDetail(this.detailId, state, now) : '';
     }

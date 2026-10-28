@@ -9,10 +9,11 @@
 import type { NowEnvelope } from '../data/source.js';
 import { VIEWS } from '../scene/camera-rig.js';
 import type { SpacecraftPos } from '../data/ephemerides.js';
-import { hhmmUTC } from '../contract/types.js';
+import { formatAge } from '../contract/types.js';
 import type { AuroraNow, Envelope } from '../contract/types.js';
+import type { PartMeta } from '../data/source.js';
 import type { Cme } from '../data/cme.js';
-import { WORDS, kpLabel, minus, splitNotices, stalenessOf, whenUTC } from './format.js';
+import { WORDS, copyTaken, kpLabel, minus, sci, splitNotices, stalenessOf, whenUTC } from './format.js';
 import { liveAge, liveClock, liveSubsolar, liveText } from './live.js';
 import { errorReason, valueState } from '../data/state.js';
 import { ALERT_LIMIT } from '../data/swpc.js';
@@ -47,6 +48,11 @@ export interface ReportLine {
   section: ReportSectionId;
   /** Subject ids this sentence is about. Rendered as links; absent from export. */
   subjects: string[];
+  /**
+   * 'warn' for a sentence whose claim is weaker than it looks — a quiet notice
+   * feed read from Earth Star's copy rather than from NOAA — set in amber.
+   */
+  tone?: 'warn';
 }
 
 export interface ReportSection {
@@ -89,6 +95,9 @@ export interface ReportLanes {
   cmes: boolean;
   /** When the store's next poll is due, so an error text can be exact. */
   nextAttempt?: string | null;
+  /** The CME catalogue's last failure, and when the slow lane tries again. */
+  cmesError?: string | null;
+  cmesNextAttempt?: string | null;
 }
 
 export interface SceneNarration {
@@ -107,14 +116,28 @@ export interface SceneNarration {
     external?: ExternalModel | null;
     tiltDeg?: number | null;
     truncated?: number;
+    /**
+     * A retrace is being spread over frames: the lines on screen (none, on a
+     * cold start) are not yet the field the drivers describe.
+     */
+    tracing?: boolean;
   };
+  /**
+   * The Shue magnetopause and the bow shock are drawn: the wind they are
+   * computed from reached us. Off with the field, and absent without the wind.
+   */
+  boundaries?: boolean;
   aurora: boolean;
   wind?: boolean;
   /**
    * The realtime-Earth seismic layer. Count is the number of markers drawn;
    * largest carries the biggest event of the day so the report can rank it.
    */
-  quakes?: { shown: boolean; count: number; largest: { mag: number; place: string } | null };
+  quakes?: {
+    shown: boolean; count: number; largest: { mag: number; place: string } | null;
+    /** The USGS lane's last failure, and whether its first fetch is in flight. */
+    error?: string | null; loading?: boolean;
+  };
   /** Which Earth surface is on the sphere — measured imagery or the vector base. */
   earthSurface?: 'vector' | 'imagery' | 'loading';
   /**
@@ -142,11 +165,30 @@ function kpWord(kp: number | null): string {
  * polls on a fixed cadence and reports when the next one is due, so the
  * sentence states a time rather than "soon".
  */
-function nextAttemptText(lanes: ReportLanes): string {
-  const t = lanes.nextAttempt ? Date.parse(lanes.nextAttempt) : NaN;
+function nextAttemptText(lanes: ReportLanes, now: Date, at = lanes.nextAttempt): string {
+  const t = at ? Date.parse(at) : NaN;
   return Number.isFinite(t)
-    ? ` The next attempt is at ${hhmmUTC(new Date(t).toISOString())} UTC.`
+    ? ` The next attempt is at ${whenUTC(new Date(t).toISOString(), now)}.`
     : ' The next attempt is the next refresh cycle.';
+}
+
+/**
+ * The notices feed answered live, but every other NOAA feed has stopped: then
+ * the notices list may have stopped with them, and its "none in force" is as
+ * old as they are.
+ */
+function frozenNote(parts: Record<string, PartMeta>, now: Date): string {
+  const others = Object.entries(parts).filter(([k, m]) => k !== 'alerts' && m.data_time);
+  if (parts['alerts']?.mirrored || others.length === 0) return '';
+  const ages = others.map(([, m]) => ({ age: (now.getTime() - Date.parse(m.data_time!)) / 1000, after: m.stale_after_s }));
+  if (!ages.every((a) => a.age > a.after)) return '';
+  const newest = Math.min(...ages.map((a) => a.age));
+  return ` NOAA's other feeds have not updated for ${formatAge(newest)}; this list may be frozen too.`;
+}
+
+/** "on 27 Oct 20:14 UTC" on another day, "at 20:14 UTC" on this one. */
+function onOrAt(w: string): string {
+  return /^\d{2} [A-Z][a-z]{2} /.test(w) ? `on ${w}` : `at ${w}`;
 }
 
 /**
@@ -197,6 +239,16 @@ export function buildReportLines(
   /** A number as the panel writes one: U+2212 for its minus. */
   const num = (v: number, digits: number): string => minus(v.toFixed(digits));
   const at = `${liveClock()} UTC`;
+  /** When a reading was taken: "13:24 UTC" today, "27 Oct 13:24 UTC" on another day. */
+  const when = (iso: string | null | undefined): string => whenUTC(iso, now);
+  /**
+   * The mark a paragraph carries when its own part is past its window, so no
+   * sentence reads as current while the tile it describes says stale.
+   */
+  const staleMark = (meta: PartMeta | undefined): string => {
+    const st = stalenessOf(meta, now);
+    return st.state === 'stale' && meta?.data_time ? ` — STALE, ${liveAge(meta.data_time)} old` : '';
+  };
 
   /**
    * Cold start. Nothing has been measured *yet* — a different claim from
@@ -237,7 +289,7 @@ export function buildReportLines(
       // A failed feed reads as "unavailable" with its reason; a feed that
       // answered with nothing usable reads as "no data" — different claims.
       say('wind', p.solar_wind?.error
-        ? `Solar wind: unavailable (${errorReason(p.solar_wind.error)}). ${nextAttemptText(lanes)} Nothing is being substituted for it.`
+        ? `Solar wind: unavailable (${errorReason(p.solar_wind.error)}).${nextAttemptText(lanes, now)} Nothing is being substituted for it.`
         : `Solar wind: no data. Nothing is being substituted for it.`, 'inst.bz', 'inst.speed', 'inst.density');
     } else {
       const bz = sw.bz_gsm;
@@ -252,7 +304,7 @@ export function buildReportLines(
         `total field ${sw.bt === null ? 'no data' : `${sw.bt.toFixed(1)} ${code('nT')}`}; ` +
         `speed ${sw.speed === null ? 'no data' : `${Math.round(sw.speed)} kilometres per second`}; ` +
         `density ${sw.density === null ? 'no data' : `${sw.density.toFixed(1)} protons per cubic centimetre`}. ` +
-        `Measured [E], timestamped ${hhmmUTC(sw.time)} UTC` +
+        `Measured [E], timestamped ${when(sw.time)}` +
         (s.state === 'stale' ? `, and now STALE — ${liveAge(p.solar_wind?.data_time ?? '')} old.`
           : `, ${liveAge(p.solar_wind?.data_time ?? '')} old.`),
         'inst.bz', 'inst.bt', 'inst.speed', 'inst.density', 'layer.l1-monitors',
@@ -271,17 +323,35 @@ export function buildReportLines(
           + `sunward and ${craft.offAxisRe.toFixed(0)} Earth radii off the Sun–Earth line `
           + `(${craft.offAxisDeg.toFixed(1)}°) [E]`
         : 'at L1, about 1.5 million kilometres sunward';
+      // "Right now" only while the newest propagated sample is arriving now.
+      // A feed that stalled after a good load leaves its last sample behind,
+      // and two days later it was still being called what is reaching Earth.
+      const arrives = d.propagated.arrives_at;
+      const ago = (now.getTime() - Date.parse(arrives ?? '')) / 60_000;
+      const reaching = !Number.isFinite(ago)
+        ? `the newest propagated wind was observed at ${when(d.propagated.observed_at)}`
+        : ago < 0
+          ? `nothing measured has arrived yet; the first of it arrives at ${when(arrives)}, observed at ${
+            when(d.propagated.observed_at)}`
+          : ago <= 5
+            ? `what is reaching Earth right now was observed at ${when(d.propagated.observed_at)}`
+            : `the newest propagated wind reached Earth at ${when(arrives)}, ${
+              liveAge(arrives)} ago; nothing newer is known. It was observed at ${
+              when(d.propagated.observed_at)}`;
+      const fresh = Number.isFinite(ago) && ago <= 5;
       say('wind', 
         `That wind was measured ${where}, and takes ` +
         `roughly an hour to arrive. NOAA propagates it to the bow shock nose [D · NOAA]: ` +
-        `what is reaching Earth right now was observed at ` +
-        `${hhmmUTC(d.propagated.observed_at)} UTC, with Bz ` +
+        `${reaching}, with Bz ` +
         `${d.propagated.bz === null ? 'no data' : `${num(d.propagated.bz, 1)} ${code('nT')}`} and ` +
-        `speed ${d.propagated.speed === null ? 'no data' : `${Math.round(d.propagated.speed)} km/s`}. ` +
-        (lead !== null && lead > 0
+        `speed ${d.propagated.speed === null ? 'no data' : `${Math.round(d.propagated.speed)} km/s`}` +
+        // Its age is already said where the feed has stopped.
+        `${fresh || !Number.isFinite(ago) ? staleMark(p.propagated) : ''}. ` +
+        (lead !== null && lead > 0 && (fresh || !Number.isFinite(ago))
           ? `There are about ${Math.round(lead)} minutes of already-measured wind still in ` +
             `flight — that is the warning currently in hand.`
-          : 'No further measured wind is in flight.'),
+          : fresh || !Number.isFinite(ago) ? 'No further measured wind is in flight.'
+            : 'How much measured wind is still in flight is not known until the feed moves again.'),
         'layer.l1-monitors', 'inst.speed',
       );
     }
@@ -292,12 +362,17 @@ export function buildReportLines(
       const standoff = d.magnetopause?.standoff_re ?? null;
       say('geomagnetic', 
         `GOES-${gs.satellite ?? '?'} measures ${gs.total_nt.toFixed(0)} ${code('nT')} at geostationary ` +
-        `orbit, 6.6 ${code('Rₑ')} out [E], ${hhmmUTC(gs.time)} UTC` +
+        `orbit, 6.6 ${code('Rₑ')} out [E], ${when(gs.time)}${staleMark(p.geosync)}` +
         (gs.arcjet ? ' — though its thruster was firing, so the reading is suspect' : '') +
-        `. That is ${gs.deficit_nt !== null && gs.deficit_nt > 0
-          ? `${gs.deficit_nt.toFixed(0)} ${code('nT')} below` : 'about'} the dipole value for that ` +
-        `distance; the difference is the ring current and magnetopause currents subtracting ` +
-        `from Earth's own field. ` +
+        // Which way it differs is the physics: on the dayside the magnetopause
+        // currents add to Earth's field; the ring current takes from it.
+        `. That is ${gs.deficit_nt !== null && gs.deficit_nt > 2
+          ? `${gs.deficit_nt.toFixed(0)} ${code('nT')} below the dipole value for that distance; the ` +
+            `difference is the ring current and magnetopause currents subtracting from Earth's own field. `
+          : gs.deficit_nt !== null && gs.deficit_nt < -2
+            ? `${(-gs.deficit_nt).toFixed(0)} ${code('nT')} above the dipole value for that distance — on ` +
+              `the dayside the magnetopause currents add to Earth's own field. `
+            : `about the dipole value for that distance. `}` +
         (standoff !== null
           ? standoff <= 6.6
             ? `With the modelled boundary inside 6.6 ${code('Rₑ')}, the spacecraft should be out in ` +
@@ -316,7 +391,7 @@ export function buildReportLines(
         : `S${pt.s_scale}${pt.s_text ? ` (${pt.s_text})` : ''}`;
       say('geomagnetic', 
         `Energetic particles at geostationary orbit, measured by GOES [E], ` +
-        `${hhmmUTC(pt.time)} UTC: protons above 10 MeV at ` +
+        `${when(pt.time)}${staleMark(p.particles)}: protons above 10 MeV at ` +
         `${pt.proton_10mev === null ? 'no data' : `${pt.proton_10mev.toFixed(2)} ${code('pfu')}`}, ` +
         `radiation storm level ${sTxt}` +
         (pt.s_scale !== null && pt.s_scale >= 3
@@ -330,7 +405,7 @@ export function buildReportLines(
       );
     } else {
       say('geomagnetic', p.particles?.error
-        ? `Energetic particle flux: unavailable (${errorReason(p.particles.error)}). ${nextAttemptText(lanes)} No radiation storm level is shown.`
+        ? `Energetic particle flux: unavailable (${errorReason(p.particles.error)}).${nextAttemptText(lanes, now)} No radiation storm level is shown.`
         : 'Energetic particle flux: no data. No radiation storm level is shown.', 'inst.protons', 'inst.electrons');
     }
 
@@ -338,7 +413,7 @@ export function buildReportLines(
     const ks = stalenessOf(p.kp, now);
     if (!d.kp || ks.state === 'no-data') {
       say('geomagnetic', p.kp?.error
-        ? `Planetary K index: unavailable (${errorReason(p.kp.error)}). ${nextAttemptText(lanes)}`
+        ? `Planetary K index: unavailable (${errorReason(p.kp.error)}).${nextAttemptText(lanes, now)}`
         : 'Planetary K index: no data.', 'inst.kp');
     } else {
       // NOAA's 1-minute estimate to one decimal, as the tile and the splash
@@ -347,8 +422,8 @@ export function buildReportLines(
       say('geomagnetic', 
         `Planetary K index (Kp) ${d.kp.estimated_kp === null ? 'no data' : d.kp.estimated_kp.toFixed(1)}` +
         `${thirds ? `, NOAA Kp ${thirds}` : ''} — ` +
-        `geomagnetic conditions are ${kpWord(d.kp.estimated_kp)}. Measured [E], ` +
-        `${hhmmUTC(d.kp.time)} UTC${ks.state === 'stale' ? ' — STALE' : ''}.`,
+        `geomagnetic conditions ${ks.state === 'stale' ? 'were' : 'are'} ${kpWord(d.kp.estimated_kp)}. Measured [E], ` +
+        `${when(d.kp.time)}${staleMark(p.kp)}.`,
         'inst.kp',
       );
     }
@@ -357,7 +432,7 @@ export function buildReportLines(
     const ds = stalenessOf(p.dst, now);
     if (!d.dst || ds.state === 'no-data') {
       say('geomagnetic', p.dst?.error
-        ? `Ring current (Dst): unavailable (${errorReason(p.dst.error)}). ${nextAttemptText(lanes)}`
+        ? `Ring current (Dst): unavailable (${errorReason(p.dst.error)}).${nextAttemptText(lanes, now)}`
         : 'Ring current (Dst): no data.', 'inst.dst');
     } else {
       const ahead = d.dst.lead_minutes;
@@ -367,8 +442,8 @@ export function buildReportLines(
         `drifting around Earth is subtracting from the surface field; it is the ` +
         `single number that best tracks the size of a storm. Modelled [D] by NOAA's ` +
         `Geospace run from the L1 solar wind — not Kyoto's measured index, which has no ` +
-        `route into a browser — for ${hhmmUTC(d.dst.time)} UTC` +
-        `${ds.state === 'stale' ? ' — STALE' : ''}. ` +
+        `route into a browser — for ${when(d.dst.time)}` +
+        `${staleMark(p.dst)}. ` +
         (ahead !== null && ahead > 0
           ? `The model runs ${ahead} minutes ahead of that; the value quoted is the newest ` +
             `one whose time has arrived, not the newest one in the file.`
@@ -381,14 +456,14 @@ export function buildReportLines(
     const xs = stalenessOf(p.xray, now);
     if (!d.xray || xs.state === 'no-data') {
       say('sun', p.xray?.error
-        ? `GOES X-ray flux: unavailable (${errorReason(p.xray.error)}). ${nextAttemptText(lanes)}`
+        ? `GOES X-ray flux: unavailable (${errorReason(p.xray.error)}).${nextAttemptText(lanes, now)}`
         : 'GOES X-ray flux: no data.', 'inst.xray');
     } else {
       say('sun', 
-        `Solar X-ray background is class ${d.xray.class ?? 'no data'} ` +
-        `(${d.xray.flux_long === null ? 'no data' : `${d.xray.flux_long.toExponential(1)} watts per square metre`}, ` +
-        `0.1–0.8 nanometre band, GOES). Measured [E], ${hhmmUTC(d.xray.time)} UTC` +
-        `${xs.state === 'stale' ? ' — STALE' : ''}.`,
+        `Solar X-ray background ${xs.state === 'stale' ? 'was' : 'is'} class ${d.xray.class ?? 'no data'} ` +
+        `(${d.xray.flux_long === null ? 'no data' : `${sci(d.xray.flux_long, 1)} watts per square metre`}, ` +
+        `0.1–0.8 nanometre band, GOES). Measured [E], ${when(d.xray.time)}` +
+        `${staleMark(p.xray)}.`,
         'inst.xray', 'layer.active-regions',
       );
     }
@@ -396,27 +471,34 @@ export function buildReportLines(
     /* --- NOAA scales --------------------------------------------------- */
     if (d.scales) {
       const g = d.scales.G, r = d.scales.R, sS = d.scales.S;
+      // "Today" only while NOAA's scales are today's.
+      const scalesStale = staleMark(p.scales);
       say('geomagnetic', 
-        `NOAA scales today: radio blackouts R${r.scale ?? '–'} (${r.text ?? 'no data'}), ` +
+        `NOAA scales ${scalesStale ? `at ${when(d.scales.time ?? p.scales?.data_time)}${scalesStale}` : 'today'}: ` +
+        `radio blackouts R${r.scale ?? '–'} (${r.text ?? 'no data'}), ` +
         `solar radiation S${sS.scale ?? '–'} (${sS.text ?? 'no data'}), ` +
         `geomagnetic storms G${g.scale ?? '–'} (${g.text ?? 'no data'}). ` +
         `NOAA's own product, modeled [D].`,
       );
     } else {
       say('geomagnetic', p.scales?.error
-        ? `NOAA R/S/G scales: unavailable (${errorReason(p.scales.error)}). ${nextAttemptText(lanes)}`
+        ? `NOAA R/S/G scales: unavailable (${errorReason(p.scales.error)}).${nextAttemptText(lanes, now)}`
         : 'NOAA R/S/G scales: no data.');
     }
 
     /* --- The shield (modeled) ------------------------------------------ */
     const mp = d.magnetopause;
     if (mp?.standoff_re != null) {
+      // A verdict on an old reading is about then, not now.
+      const old = !!staleMark(p.magnetopause);
       const compressed = mp.standoff_re < 9
-        ? ' That is a compressed magnetosphere — the shield is being pushed in.'
-        : mp.standoff_re > 11.5 ? ' That is an expanded, quiet magnetosphere.' : '';
+        ? (old ? ' That was a compressed magnetosphere.' : ' That is a compressed magnetosphere — the shield is being pushed in.')
+        : mp.standoff_re > 11.5 ? ` That ${old ? 'was' : 'is'} an expanded, quiet magnetosphere.` : '';
       say('shield', 
         `Modeled [D] magnetopause standoff: ${mp.standoff_re.toFixed(1)} Earth radii on the ` +
-        `sunward side, with flaring parameter ${mp.alpha?.toFixed(2) ?? 'no data'}, computed from ` +
+        `sunward side${staleMark(p.magnetopause)
+          ? ` (from the wind of ${when(p.magnetopause?.data_time)}${staleMark(p.magnetopause)})` : ''}, ` +
+        `with flaring parameter ${mp.alpha?.toFixed(2) ?? 'no data'}, computed from ` +
         `the ${d.propagated ? 'propagated' : 'L1'} solar wind above (dynamic pressure ` +
         `${mp.dyn_pressure_npa?.toFixed(2) ?? 'no data'} nanopascals) using Shue et al. 1998, ` +
         `doi:10.1029/98JA01103.${compressed}` +
@@ -441,7 +523,7 @@ export function buildReportLines(
     });
     if (ns.state === 'error') {
       say('geomagnetic',
-        `NOAA notices: unavailable (${errorReason(p.alerts?.error)}).${nextAttemptText(lanes)}`,
+        `NOAA notices: unavailable (${errorReason(p.alerts?.error)}).${nextAttemptText(lanes, now)}`,
         'concept.noaa-notices');
     } else {
       const { current, ended } = splitNotices(d.alerts, now);
@@ -458,7 +540,8 @@ export function buildReportLines(
         const onset = a.beganAt && Date.parse(a.issued) - Date.parse(a.beganAt) > 3.6e6
           ? `; the condition began ${whenUTC(a.beganAt, now)}` : '';
         say('geomagnetic',
-          `NOAA notice in force: ${a.headline || a.product}, issued ${whenUTC(a.issued, now)}` +
+          `NOAA notice in force${p.alerts?.mirrored ? ` in Earth Star's copy of NOAA's feed (${
+            copyTaken(p.alerts.mirrored_at, now)})` : ''}: ${a.headline || a.product}, issued ${whenUTC(a.issued, now)}` +
           (a.validityStated
             ? ` and in force until ${whenUTC(a.validUntil, now)}`
             : `; its validity is not stated, so it is held in force until ${whenUTC(a.validUntil, now)}`) +
@@ -468,15 +551,23 @@ export function buildReportLines(
           'concept.noaa-notices');
       } else {
         const last = ended[0];
+        // From the mirror, "none in force" is a statement about Earth Star's
+        // copy, taken hours or days before this was read — never "checked".
+        const mirrored = !!p.alerts?.mirrored;
         say('geomagnetic',
-          `No NOAA notice is in force (checked ${hhmmUTC(env?.fetched_at)} UTC).` +
+          (mirrored
+            ? `No notice is in force in Earth Star's copy of NOAA's feed (${
+              copyTaken(p.alerts?.mirrored_at, now)}); NOAA itself could not be reached.`
+            : `No NOAA notice is in force (checked ${when(env?.fetched_at)}).`) +
           (last
-            ? ` The most recent, ${last.headline || last.product}, was issued ${whenUTC(last.issued, now)}` +
-              (!last.validityStated ? ' (validity not stated).'
+            ? ` The most recent, ${last.headline || last.product}, was ${last.event ? 'reported' : 'issued'} ${whenUTC(last.issued, now)}` +
+              (last.event ? '.'
+                : !last.validityStated ? ' (validity not stated).'
                 : last.validUntil ? ` and ended ${whenUTC(last.validUntil, now)}.` : ' and has ended.')
             : ' The feed carried none.') +
-          count,
+          count + frozenNote(p, now),
           'concept.noaa-notices');
+        if (mirrored) acc[acc.length - 1]!.tone = 'warn';
       }
     }
   }
@@ -491,11 +582,11 @@ export function buildReportLines(
     const hours = (Date.parse(c.arrival!.time) - now.getTime()) / 3.6e6;
     say('sun', 
       `A coronal mass ejection is on its way. NASA's DONKI catalogue analysed it leaving ` +
-      `the Sun at ${Math.round(c.speedKms)} km/s on ${hhmmUTC(c.time215)} UTC, with a ` +
+      `the Sun at ${Math.round(c.speedKms)} km/s, crossing 21.5 solar radii ${onOrAt(when(c.time215))}, with a ` +
       `${Math.round(c.halfAngle)}° half-angle cone pointed ${c.offAxisDeg < 5 ? 'almost directly at Earth'
         : `${Math.round(c.offAxisDeg)}° off the Earth line`} [D · NASA]. ` +
       `Propagating it radially at that constant speed puts arrival near ` +
-      `${hhmmUTC(c.arrival!.time)} UTC, about ${hours < 24 ? `${Math.round(hours)} hours`
+      `${when(c.arrival!.time)}, about ${hours < 24 ? `${Math.round(hours)} hours`
         : `${(hours / 24).toFixed(1)} days`} from now, give or take ` +
       `${c.arrival!.windowHours} hours [D · cone]. ` +
       `${c.arrivalFromEnlil ? 'That arrival time is NOAA/NASA\u2019s own Enlil run.'
@@ -506,12 +597,29 @@ export function buildReportLines(
       'model.cme-cone', 'model.enlil', 'layer.cme-cones',
     );
   } else if (cmes.length > 0) {
+    // When the catalogue's window opens and its newest analysis, so "nothing
+    // inbound" is a statement about a stated week of DONKI, not a vague "lately".
+    const newest = cmes.reduce((m, c) => (c.time215 > m ? c.time215 : m), cmes[0]!.time215);
+    const since = new Date(now.getTime() - 7 * 86_400_000).toISOString();
     say('sun', 
       `${cmes.length} coronal mass ejection${cmes.length > 1 ? 's have' : ' has'} been ` +
-      `analysed in the last few days, none of them Earth-directed with an arrival still ` +
-      `ahead of us. Nothing is inbound.`,
+      `analysed since ${when(since).slice(0, 6)} (NASA DONKI, newest ${when(newest)}), none of ` +
+      `them Earth-directed with an arrival still ahead of us. Nothing is inbound.`,
       'model.cme-cone',
     );
+  } else if (lanes.cmesError) {
+    // A failed catalogue is said, never left out: a Sun section with no CME
+    // line reads as a quiet week, which a failed read cannot claim.
+    say('sun',
+      `CME analyses (NASA DONKI): unavailable (${errorReason(lanes.cmesError)}).${
+        nextAttemptText(lanes, now, lanes.cmesNextAttempt ?? lanes.nextAttempt)} No cones are drawn, ` +
+      `and nothing here says whether one is inbound.`,
+      'model.cme-cone', 'layer.cme-cones',
+    );
+  } else if (lanes.cmes) {
+    say('sun', 'CME analyses (NASA DONKI): loading. No cones are drawn yet.', 'model.cme-cone');
+  } else if (!scene.cmes || scene.cmes.count === 0) {
+    say('sun', 'NASA DONKI lists no CME analyses in the past week, so no cones are drawn.', 'model.cme-cone');
   }
 
   if (scene.cmes && scene.cmes.count > 0) {
@@ -551,7 +659,13 @@ export function buildReportLines(
   /* --- Earthquakes: the solid Earth is not quiet either ----------------- */
   if (scene.quakes) {
     const q = scene.quakes;
-    if (!q.shown || q.count === 0) {
+    if (q.error && q.count === 0) {
+      say('scene',
+        `Earthquakes (USGS): unavailable (${errorReason(q.error)}). No markers are drawn.`,
+        'layer.quakes');
+    } else if (q.loading && q.count === 0) {
+      say('scene', 'Earthquakes (USGS): loading. No markers are drawn yet.', 'layer.quakes');
+    } else if (!q.shown || q.count === 0) {
       say('scene',
         q.shown
           ? 'Earthquakes: the USGS feed answered with nothing usable in the past 24 hours, so no markers are drawn. Nothing is being substituted.'
@@ -580,8 +694,8 @@ export function buildReportLines(
     const stale = ageS > aurora.stale_after_s;
     say('geomagnetic', 
       `Aurora: NOAA's OVATION Prime model [D · NOAA] puts the peak probability of visible ` +
-      `aurora at ${a.max_probability}% in this forecast, valid ${hhmmUTC(a.forecast_time)} UTC ` +
-      `and computed from an observation at ${hhmmUTC(a.observation_time)} UTC ` +
+      `aurora at ${a.max_probability}% in this forecast, valid ${when(a.forecast_time)} ` +
+      `and computed from an observation at ${when(a.observation_time)} ` +
       `(${liveAge(a.observation_time)} old${stale ? ', STALE' : ''}). It is drawn as the glowing oval over ` +
       `the poles, on a 1°-by-1° grid, teal through magenta with increasing probability — ` +
       `a legend for intensity, not the aurora's real colours. ` +
@@ -595,7 +709,18 @@ export function buildReportLines(
     say('geomagnetic', 'Aurora: the OVATION forecast is unavailable, so no oval is drawn.', 'layer.aurora', 'model.ovation');
   }
 
-  if (scene.shield) {
+  if (scene.shield && scene.fieldLines.tracing && scene.fieldLines.lines === 0) {
+    // On a cold start nothing is drawn until the trace finishes, a few seconds
+    // on a real machine: "0 field lines … neither the wind nor Kp reached us"
+    // would be a false sentence about a page whose wind is already in.
+    say('shield',
+      `The field lines are being traced (${igrfCitation(new Date())} plus ` +
+      `${scene.fieldLines.external === null || scene.fieldLines.external === undefined
+        ? 'an external field from whichever drivers have arrived' : scene.fieldLines.external.name === 't96'
+          ? 'T96 from the measured wind' : 'T89 from Kp'}); this paragraph updates when they are drawn.`,
+      'layer.field-lines', 'model.igrf14',
+    );
+  } else if (scene.shield) {
     const far = scene.fieldLines.far === true;
     const external = scene.fieldLines.external ?? null;
     const tilt = scene.fieldLines.tiltDeg ?? null;
@@ -643,12 +768,16 @@ export function buildReportLines(
           : '');
     }
 
+    const boundaries = scene.boundaries === true;
     say('shield',
       `The magnetic shield is drawn: ${scene.fieldLines.lines} field lines traced through ` +
       `${igrfCitation(new Date())} [D], blue where they close ` +
-      `between hemispheres and violet where they stay open toward the solar wind. The ` +
-      `teal boundary is the Shue et al. 1998 magnetopause and the orange one the ` +
-      `Farris & Russell 1994 bow shock, both re-shaped by the live solar wind above. ` +
+      `between hemispheres and violet where they stay open toward the solar wind. ` +
+      (boundaries
+        ? `The teal boundary is the Shue et al. 1998 magnetopause and the orange one the ` +
+          `Farris & Russell 1994 bow shock, both re-shaped by the measured solar wind above. `
+        : `No boundary is drawn: the magnetopause and the bow shock are computed from the ` +
+          `solar wind, and it has not reached us. `) +
       externalSaid +
       (cut > 0
         ? ` ${cut} line${cut === 1 ? '' : 's'} run past where ${cut === 1 ? 'it is' : 'they are'} ` +
@@ -660,16 +789,18 @@ export function buildReportLines(
             : `T89 is fitted inside 70 ${code('Rₑ')} and has no magnetopause, so the trace stops at ` +
               `the edge of what the model describes — down the tail, and 20 Rₑ sunward.`)
         : '') +
-      ` The boundary surfaces stop at 100° ` +
-      `from the sunward axis, inside the range Shue et al. fitted; the real magnetotail ` +
-      `continues far beyond.` +
+      (boundaries
+        ? ` The boundary surfaces stop at 100° ` +
+          `from the sunward axis, inside the range Shue et al. fitted; the real magnetotail ` +
+          `continues far beyond.`
+        : '') +
       (far
         ? ' From this far out the full line cage would read as noise, so it gives way to ' +
           'twelve signature lines and the boundary silhouette; the cage returns as the ' +
           'camera closes in.'
         : ''),
       'layer.field-lines', 'model.igrf14', ...externalSubjects,
-      'layer.magnetopause', 'layer.bow-shock',
+      ...(boundaries ? ['layer.magnetopause', 'layer.bow-shock'] : []),
     );
   } else {
     say('shield', 'The magnetic shield is hidden.', 'layer.field-lines');

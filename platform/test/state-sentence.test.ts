@@ -92,7 +92,19 @@ describe('the state sentence, fresh', () => {
   const html = stateSentence(store(), NOW);
 
   it('writes a reading with a real space before its unit, and the field as a clause of the wind', () => {
-    expect(words(html)).toContain('330 km/s; field southward −1.6 nT — field opens, energy enters.');
+    // −1.6 nT is south but not coupling: the consequence waits for −5, as the report's does.
+    expect(words(html)).toContain('330 km/s; field southward −1.6 nT.');
+    expect(words(html)).not.toContain('field opens');
+  });
+
+  it('says what a strongly southward field does, while the reading is fresh', () => {
+    const s = store();
+    s.now!.data.solar_wind!.bz_gsm = -7.2;
+    expect(words(stateSentence(s, NOW))).toContain('field strongly southward −7.2 nT — field opens, energy enters.');
+  });
+
+  it('keeps a clause head and its reading on one line', () => {
+    expect(html).toMatch(/<span class="ss-pair"><span class="clause-head">.*?shield<\/span> <span class="reading">/);
   });
 
   it('uses the minus sign, not a hyphen', () => {

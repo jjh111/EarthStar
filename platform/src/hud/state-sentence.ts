@@ -155,6 +155,8 @@ const head = (glyph: string | null, words: string): string =>
   `<span class="clause-head">${glyph ? `${GLYPH[glyph]} ` : ''}${words}</span>`;
 const read = (spark: string, r: string): string =>
   `<span class="reading">${spark ? `${spark} ` : ''}${r}</span>`;
+/** A clause's head and its reading, kept on one line: "shield" over "11.4 Rₑ" read as two things. */
+const pair = (h: string, r: string): string => `<span class="ss-pair">${h} ${r}</span>`;
 
 /**
  * Returns HTML. The caller inserts it as a single flowing paragraph — the
@@ -186,10 +188,13 @@ export function stateSentence(state: StoreState, now = new Date(), ages: Ages = 
     const bz = sw?.bz_gsm ?? null;
     const bzWord = bz === null ? ''
       : bz < -5 ? ' strongly southward' : bz < 0 ? ' southward' : ' northward';
-    const bzConsequence = bz !== null && bz < 0 ? ' &mdash; field opens, energy enters' : '';
+    // The consequence is a claim about now, at the threshold the report uses
+    // for energy coupling: never for a reading hours old, nor a field barely south.
+    const bzConsequence = wS.state === 'fresh' && bz !== null && bz < -5
+      ? ' &mdash; field opens, energy enters' : '';
     out.push(
-      `${head('wind', 'wind')} ${read(speedSpark, value(sw?.speed, 0, 'km/s', wS, null))}; ` +
-      `${head(null, `field${bzWord}`)} ${read(bzSpark, value(bz, 1, 'nT', wS, 'solar_wind'))}${bzConsequence}.`,
+      `${pair(head('wind', 'wind'), read(speedSpark, value(sw?.speed, 0, 'km/s', wS, null)))}; ` +
+      `${pair(head(null, `field${bzWord}`), read(bzSpark, value(bz, 1, 'nT', wS, 'solar_wind')))}${bzConsequence}.`,
     );
   } else {
     // Speed and field are one feed: one word for both.
@@ -199,20 +204,23 @@ export function stateSentence(state: StoreState, now = new Date(), ages: Ages = 
   /* --- the shield it meets --- */
   const mS = partState(state, 'magnetopause', now);
   const mp = live(mS) ? d?.magnetopause?.standoff_re ?? null : null;
-  const mpWord = mp === null ? ''
+  // A verdict on the shield is about now; on an old reading it is left out.
+  const mpWord = mp === null || mS.state !== 'fresh' ? ''
     : mp < 8 ? ', compressed' : mp > 11.5 ? ', expanded' : '';
   // Rₑ, as the tile and the report write it: the sentence alone had R⊕.
-  out.push(`${head('shield', 'shield')} ${read('', value(mp, 1, 'Rₑ', mS, 'magnetopause'))}${mpWord}.`);
+  out.push(`${pair(head('shield', 'shield'), read('', value(mp, 1, 'Rₑ', mS, 'magnetopause')))}${mpWord}.`);
 
   /* --- geomagnetic response at the ground --- */
   const kS = partState(state, 'kp', now);
   const kp = live(kS) ? d?.kp?.estimated_kp ?? null : null;
+  // In the past tense on a stale reading: "ground was quiet", not "ground quiet".
+  const was = kS.state === 'stale' ? ' was' : '';
   const kpWord = kp === null ? ''
-    : kp >= 5 ? ' storming' : kp >= 4 ? ' unsettled' : ' quiet';
+    : `${was}${kp >= 5 ? ' storming' : kp >= 4 ? ' unsettled' : ' quiet'}`;
   const kpSpark = live(kS) && state.kpSeries
     ? inlineSpark(state.kpSeries, { band: [0, 4], extremes: true, label: 'Kp, 6 h' }) : '';
   // One decimal, as the tile and the splash write it.
-  out.push(`${head('field', `ground${kpWord}`)} ${read(kpSpark, value(kp, 1, 'Kp', kS, 'kp'))}.`);
+  out.push(`${pair(head('field', `ground${kpWord}`), read(kpSpark, value(kp, 1, 'Kp', kS, 'kp')))}.`);
 
   /* --- particle radiation --- */
   const pS = partState(state, 'particles', now);
@@ -223,9 +231,9 @@ export function stateSentence(state: StoreState, now = new Date(), ages: Ages = 
     ? inlineSpark(state.protonSeries, { log: true, extremes: true, label: 'proton flux above 10 MeV, last 6 hours, logarithmic' })
     : '';
   out.push(
-    `${head('particle', 'radiation')} ${read('', value(sStep, 0, '', pS, null))}`
+    `${pair(head('particle', 'radiation'), read('', value(sStep, 0, '', pS, null)))}`
     + (sStep ? ` ${read(pSpark, value(s10, 2, 'pfu', pS, 'particles'))}`
-      + ((pt?.s_scale ?? 0) >= 1 ? ' &mdash; storm' : '') : '')
+      + ((pt?.s_scale ?? 0) >= 1 && pS.state === 'fresh' ? ' &mdash; storm' : '') : '')
     + '.',
   );
 
@@ -237,8 +245,8 @@ export function stateSentence(state: StoreState, now = new Date(), ages: Ages = 
   const aS = partState(state, 'aurora', now);
   const au = live(aS) ? state.aurora?.data ?? null : null;
   out.push(
-    `${head('flare', 'X-ray')} ${read(xSpark, value(xr?.class ?? null, 0, '', xS, 'xray'))} ` +
-    `${head('aurora', 'aurora')} ${read('', value(au?.max_probability, 0, '%', aS, 'aurora'))}.`,
+    `${pair(head('flare', 'X-ray'), read(xSpark, value(xr?.class ?? null, 0, '', xS, 'xray')))} ` +
+    `${pair(head('aurora', 'aurora'), read('', value(au?.max_probability, 0, '%', aS, 'aurora')))}.`,
   );
 
   return out.join(' ');

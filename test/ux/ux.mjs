@@ -372,9 +372,13 @@ export async function measure(browser, surface, bp, out, state = STATE) {
 
 /** The first-screen columns: sentenceTop, headerRows, earthR, earthCovered%, openStage%, tiles. */
 function firstCells(f) {
-  if (!f) return ['—', '—', '—', '—', '—', '—'];
+  if (!f) return ['—', '—', '—', '—', '—', '—', '—'];
   const v = (x) => x ?? '—';
-  return [v(f.sentenceTop), f.headerRows, v(f.earthR), v(f.earthCoveredPct), f.openStagePct, `${f.tilesVisible}/${f.tiles}`];
+  // A disc more than 5% under chrome is flagged: the scene is the stage, and
+  // the Sun at the band's lower right went wholly under the notes on a phone.
+  const flag = (x) => (x == null ? '—' : x > 5 ? `${x} ⚠` : x);
+  return [v(f.sentenceTop), f.headerRows, v(f.earthR), flag(f.earthCoveredPct), flag(f.sunCoveredPct),
+    f.openStagePct, `${f.tilesVisible}/${f.tiles}`];
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -390,13 +394,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       const f = r.fold, p = r.page, s = r.firstScreen;
       console.log(`${surface.padEnd(6)} ${bp.name.padEnd(11)} ${String(bp.width).padStart(4)}×${String(bp.height).padEnd(4)}  fold: content ${f.content}% chrome ${f.chrome}% art ${f.art}% empty ${f.empty}% ratio ${f.ratio}` +
         (surface === 'splash' ? `   page(${r.screens}): content ${p.content}% chrome ${p.chrome}% art ${p.art}% empty ${p.empty}% ratio ${p.ratio}` : '') +
-        (s ? `   first: sentence ${s.sentenceTop} rows ${s.headerRows} earthR ${s.earthR} covered ${s.earthCoveredPct}% open ${s.openStagePct}% tiles ${s.tilesVisible}/${s.tiles}` : '') +
+        (s ? `   first: sentence ${s.sentenceTop} rows ${s.headerRows} earthR ${s.earthR} covered ${s.earthCoveredPct}% sun ${s.sunCoveredPct}% open ${s.openStagePct}% tiles ${s.tilesVisible}/${s.tiles}` : '') +
         (r.state ? `  [${r.state}]` : '') + (s?.perfNotice ? '  PERF-NOTICE' : '') + (r.hScroll ? '  H-SCROLL' : '') + (r.errors.length ? `  errors: ${r.errors.join(' | ')}` : ''));
     }
   }
   writeFileSync(join(OUT, 'results.json'), JSON.stringify(rows, null, 2));
-  const md = ['| surface | breakpoint | size | fold: content / chrome / art / empty | fold ratio | page: content / chrome / art / empty | page ratio | sentenceTop | headerRows | earthR | earthCovered% | openStage% | tiles |',
-    '|---|---|---|---|---|---|---|---|---|---|---|---|---|',
+  const md = ['| surface | breakpoint | size | fold: content / chrome / art / empty | fold ratio | page: content / chrome / art / empty | page ratio | sentenceTop | headerRows | earthR | earthCovered% | sunCovered% | openStage% | tiles |',
+    '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
     ...rows.map((r) => `| ${r.surface}${r.state ? ` (${r.state})` : ''} | ${r.bp} | ${r.width}×${r.height} | ${r.fold.content} / ${r.fold.chrome} / ${r.fold.art} / ${r.fold.empty} | ${r.fold.ratio}${r.firstScreen?.perfNotice ? ' †' : ''} | ` +
       (r.screens > 1 ? `${r.page.content} / ${r.page.chrome} / ${r.page.art} / ${r.page.empty} | ${r.page.ratio} |` : '— | — |') +
       ` ${firstCells(r.firstScreen).join(' | ')} |`)];

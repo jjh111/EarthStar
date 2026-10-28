@@ -29,7 +29,8 @@
  */
 
 import type { PartMeta } from './source.js';
-import { formatAge, hhmmUTC } from '../contract/types.js';
+import { formatAge } from '../contract/types.js';
+import { whenUTC } from '../hud/format.js';
 
 export type DataState = 'loading' | 'fresh' | 'stale' | 'no-data' | 'error';
 
@@ -110,14 +111,14 @@ export function valueState(input: ValueStateInput): ValueStateResult {
   if (ageS > meta.stale_after_s) {
     return {
       state: 'stale',
-      label: `stale · no data since ${hhmmUTC(meta.data_time)} UTC (${formatAge(ageS)} old)`,
+      label: `stale · no data since ${whenUTC(meta.data_time, now)} (${formatAge(ageS)} old)`,
       short: `stale · ${formatAge(ageS)}`,
       ageS,
     };
   }
   return {
     state: 'fresh',
-    label: `${hhmmUTC(meta.data_time)} UTC · ${formatAge(ageS)} old`,
+    label: `${whenUTC(meta.data_time, now)} · ${formatAge(ageS)} old`,
     short: `${formatAge(ageS)} old`,
     ageS,
   };
@@ -127,7 +128,7 @@ export function valueState(input: ValueStateInput): ValueStateResult {
 function nextAttemptSuffix(lane: LaneItem & { nextAttempt?: string | null }, now: Date): string {
   const t = lane.nextAttempt ? Date.parse(lane.nextAttempt) : NaN;
   if (Number.isFinite(t) && t > now.getTime()) {
-    return ` · next attempt ${hhmmUTC(new Date(t).toISOString())} UTC`;
+    return ` · next attempt ${whenUTC(new Date(t).toISOString(), now)}`;
   }
   return '';
 }

@@ -29,6 +29,8 @@ export interface PartMeta {
   /** These bytes came from Earth Star's mirror because upstream was
    *  unreachable. The timestamps inside them are still upstream's own. */
   mirrored?: boolean;
+  /** When Earth Star's copy was taken (the mirror's manifest); null when unknown. */
+  mirrored_at?: string | null;
 }
 
 export interface NowEnvelope extends Envelope<Now> {

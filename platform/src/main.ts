@@ -26,6 +26,10 @@ import { errorReason } from './data/state.js';
 import { TIER_WORD, whenUTC } from './hud/format.js';
 import { SubjectCard } from './hud/subject-card.js';
 import { bodySubjectId, subject } from './hud/subjects.js';
+import type { LayerPick } from './scene/picking.js';
+import type { ActiveRegion } from './data/swpc.js';
+import type { Cme } from './data/cme.js';
+import type { QuakeFeature } from './data/earth-quakes.js';
 import { Help } from './hud/help.js';
 import { SceneNames } from './hud/scene-names.js';
 import {
@@ -48,6 +52,8 @@ const store = new NowStore(new DirectSource(), 60_000);
  * lanes need no curation and start immediately.
  */
 const earthStore = new EarthStore([]);
+/** The quake layer has no toggle of its own yet: it is on whenever USGS answers. */
+const quakesOn = true;
 const motion = new MotionPreference();
 
 /* ---------------- solar imagery ---------------- */
@@ -182,6 +188,7 @@ function syncStageNote(): void {
   const { disk, corona } = imageryGap;
   if ((!disk && !corona) || !SUN_IN_FRAME.has(view)) {
     stageNote.hidden = true;
+    syncTopInset();
     return;
   }
   // The four label states hold here too: a feed that answered with nothing
@@ -191,20 +198,40 @@ function syncStageNote(): void {
     : `${what} unavailable`);
   const retry = (gap: NonNullable<ImageryGap>): string => (gap === 'no-data'
     ? '' : ` · retrying ${whenUTC(gap.retryAt)}`);
+  // Two forms, as the scale note has: the sentence, and on a phone one line
+  // over the band's top ("Sun: placeholder [M] · retry 13:34 UTC") that
+  // leaves the Sun below it uncovered. styles.css shows one or the other.
+  const forms = (long: (string | Node)[], short: (string | Node)[]): void => {
+    const l = document.createElement('span');
+    l.className = 'note-long';
+    l.append(...long);
+    const sh = document.createElement('span');
+    sh.className = 'note-short';
+    sh.append(...short);
+    stageNote.replaceChildren(l, sh);
+    stageNote.title = l.textContent ?? '';
+  };
   if (disk) {
     // The placeholder's tier is the registry's, as the help's key shows it.
     const tier = subject('layer.sun-placeholder')?.tier ?? 'M';
-    const badge = document.createElement('span');
-    badge.className = `badge badge-${tier.toLowerCase()}`;
-    badge.title = TIER_WORD[tier].replace(/^./, (c) => c.toUpperCase());
-    badge.textContent = tier;
-    stageNote.replaceChildren(
-      `${missing('Solar imagery', disk)} — the Sun is drawn as the unobserved placeholder `,
-      badge, retry(disk));
+    const badge = (): HTMLElement => {
+      const b = document.createElement('span');
+      b.className = `badge badge-${tier.toLowerCase()}`;
+      b.title = TIER_WORD[tier].replace(/^./, (c) => c.toUpperCase());
+      b.textContent = tier;
+      return b;
+    };
+    forms(
+      [`${missing('Solar imagery', disk)} — the Sun is drawn as the unobserved placeholder `, badge(), retry(disk)],
+      [`Sun: ${disk === 'no-data' ? 'no usable frames, ' : ''}placeholder `, badge(),
+        disk === 'no-data' ? '' : ` · retry ${whenUTC(disk.retryAt)}`],
+    );
   } else if (corona) {
-    stageNote.textContent = `${missing('Coronagraph imagery', corona)}${retry(corona)}`;
+    forms([`${missing('Coronagraph imagery', corona)}${retry(corona)}`],
+      [`Corona: ${corona === 'no-data' ? 'no usable frames' : `unavailable · retry ${whenUTC(corona.retryAt)}`}`]);
   }
   stageNote.hidden = false;
+  syncTopInset();
 }
 
 /**
@@ -291,7 +318,7 @@ async function doChecks(): Promise<void> {
   } catch (e) {
     checkResult = {
       rows: [{
-        name: 'Checks could not run', ours: 'no data', theirs: '—', ok: false,
+        name: 'Checks could not run', ours: 'no data', theirs: '—', against: 'NOAA SWPC', ok: false,
         // Not a failed check — an absent one. The checks deliberately fetch
         // NOAA by their own path, so an outage stops them while the page may
         // still be serving good bytes from the mirror. Reporting that as a
@@ -370,37 +397,49 @@ const btnCoast = btn('coast-toggle');
 const btnNames = btn('names-toggle');
 
 /**
- * The view buttons are generated from the same list the camera reads, so a
- * vantage point cannot exist in one and not the other.
+ * The view buttons are in the page's own markup, so the header has its width
+ * before any script runs: built here, they arrived 360 ms in and moved the
+ * controls 311 px, which was most of the page's layout shift. They are the
+ * same list the camera reads — `test/views-markup.test.ts` holds the markup
+ * to VIEWS — and one missing from the markup is still made here.
  */
 const viewGroup = document.getElementById('view-group') as HTMLElement;
 const viewButtons = new Map<ViewName, HTMLButtonElement>();
 for (const v of VIEWS) {
-  const b = document.createElement('button');
-  b.className = 'ctl';
-  b.type = 'button';
-  b.id = `view-${v.id}`;
-  b.textContent = v.label;
-  b.title = v.title;
-  b.setAttribute('aria-pressed', String(v.id === 'deck'));
+  let b = document.getElementById(`view-${v.id}`) as HTMLButtonElement | null;
+  if (!b) {
+    b = document.createElement('button');
+    b.className = 'ctl';
+    b.type = 'button';
+    b.id = `view-${v.id}`;
+    b.textContent = v.label;
+    b.title = v.title;
+    b.setAttribute('aria-pressed', String(v.id === 'deck'));
+    viewGroup.append(b);
+  }
   b.addEventListener('click', () => setView(v.id));
-  viewGroup.append(b);
   viewButtons.set(v.id, b);
 }
 
 let view: ViewName = 'deck';
 
 function syncNarration(): void {
+  const quakes = earthStore.get();
   hud.setNarration({
     mode: viewer.scaleMode, view, reducedMotion: motion.reduced,
     shield: viewer.shieldOn, fieldLines: viewer.fieldLineStats,
+    boundaries: viewer.boundariesDrawn,
     aurora: viewer.auroraOn, wind: viewer.windOn,
     earthSurface: viewer.earthSurfaceState,
     cmes: { shown: viewer.cmesOn, count: viewer.cmeCount },
+    // Whether the layer is on, not whether it drew anything: a feed that
+    // answered with nothing, or failed, is said as such, not as "hidden".
     quakes: {
-      shown: viewer.quakesOn && viewer.quakeCount > 0,
+      shown: quakesOn,
       count: viewer.quakeCount,
       largest: viewer.largestQuake,
+      error: quakes.laneErrors.quakes,
+      loading: quakes.lanes.quakes && !quakes.quakesDay,
     },
     drawn: viewer.drawnSubjects,
   });
@@ -436,9 +475,18 @@ function setScale(mode: ScaleMode): void {
   btnScaleGlobe.setAttribute('aria-pressed', String(mode === 'globe'));
   btnScaleTrue.setAttribute('aria-pressed', String(mode === 'true'));
   const note = scaleNote(mode);
-  scaleNoteText.textContent = note.text;
+  // The sentence, and on a phone its one-line form; styles.css shows one.
+  const long = document.createElement('span');
+  long.className = 'note-long';
+  long.textContent = note.text;
+  const short = document.createElement('span');
+  short.className = 'note-short';
+  short.textContent = note.short;
+  scaleNoteText.replaceChildren(long, short);
+  scaleNoteEl.title = note.text;
   btnScaleFlip.textContent = note.flip;
   scaleNoteEl.hidden = false;
+  syncTopInset();
   announce(scaleLabel(mode));
   syncNarration();
   writeHash(false);
@@ -480,7 +528,28 @@ function publishHeaderHeight(): void {
   document.documentElement.style.setProperty(
     '--header-real-h', `${Math.round(headerEl.getBoundingClientRect().height)}px`,
   );
+  syncTopInset();
 }
+
+/**
+ * On the phone page the opaque header, and the notes under it, cover the top
+ * of the scene band; the camera frames what is left (Viewer.setTopInset).
+ * Measured with the page at its top, since the band is fixed and the notes
+ * scroll with the page. Nothing to do on a desktop.
+ */
+function syncTopInset(): void {
+  if (!window.matchMedia(PAGE_LAYOUT).matches) { viewer.setTopInset(0); return; }
+  const scene = canvas.getBoundingClientRect();
+  const header = headerEl.getBoundingClientRect().bottom;
+  let notes = header;
+  for (const n of document.querySelectorAll('#stage-notes > :not([hidden])')) {
+    const r = n.getBoundingClientRect();
+    const top = r.top + window.scrollY;
+    if (r.height > 0 && top < scene.height / 2) notes = Math.max(notes, r.bottom + window.scrollY);
+  }
+  viewer.setTopInset(header - scene.top, notes > header ? notes - header + 4 : 0);
+}
+window.addEventListener('resize', syncTopInset);
 publishHeaderHeight();
 if (typeof ResizeObserver !== 'undefined') {
   new ResizeObserver(publishHeaderHeight).observe(headerEl);
@@ -548,9 +617,17 @@ railToggle.addEventListener('click', () => setRail(!railOpenNow()));
 const instrumentsEl = document.getElementById('instruments') as HTMLElement;
 const railMore = btn('rail-more');
 function countBelow(): void {
-  const foot = instrumentsEl.getBoundingClientRect().bottom + 1;
-  const below = railOpenNow()
+  const box = instrumentsEl.getBoundingClientRect();
+  const foot = box.bottom + 1;
+  const open = railOpenNow();
+  const below = open
     ? [...instrumentsEl.children].filter((t) => t.getBoundingClientRect().bottom > foot).length : 0;
+  // Tiles scrolled up past the head are said too, by a fade at the top: a
+  // half-cut tile there was the only sign the rail had been scrolled.
+  const above = open
+    ? [...instrumentsEl.children].filter((t) => t.getBoundingClientRect().top < box.top - 1).length : 0;
+  railEl.classList.toggle('has-below', below > 0);
+  railEl.classList.toggle('has-above', above > 0);
   // The count leaves once the last tile is up; a reader who pressed it from
   // the keyboard goes on from that tile rather than from nowhere.
   if (below === 0 && document.activeElement === railMore) {
@@ -632,6 +709,8 @@ function setNames(on: boolean, remember = true): void {
 btnNames.addEventListener('click', () => setNames(!names.shown));
 // After each frame, so a name follows what it names through a camera move.
 viewer.onFrame = () => { if (names.shown) names.update(viewer.sceneNames()); };
+// A trace lands seconds after the wind does; the report says what is drawn.
+viewer.onTraced = () => syncNarration();
 
 /* ---------------- the help ---------------- */
 
@@ -685,6 +764,48 @@ function dismissChip(): void { chipEl.hidden = true; }
 btn('help-chip-open').addEventListener('click', openHelp);
 btn('help-chip-close').addEventListener('click', dismissChip);
 
+/* ---------------- the card ---------------- */
+
+/**
+ * The card is a step of its own, like the help: opening one adds an entry,
+ * so Back closes it — on a phone, where it is a sheet over the page, Back
+ * left the Viewer. Closed by its own means it takes that step back again; its
+ * "Full detail" hands the step to the detail it opens.
+ */
+let cardPushed = false;
+let cardHandover = false;
+const card = new SubjectCard({
+  showSubject,
+  earthScreen: () => viewer.earthScreen(),
+  keepClear: () => { const sun = viewer.sunScreen(); return sun ? [sun] : []; },
+  onOpened: (_id, fresh) => {
+    if (fresh) cardPushed = true;
+    writeHash(fresh);
+  },
+  onClosed: (reason) => {
+    if (reason === 'address') { cardPushed = false; return; }
+    if (reason === 'more') { cardHandover = cardPushed && ownEntry(); cardPushed = false; return; }
+    if (cardPushed && ownEntry() && parseHash(location.hash)?.card) { cardPushed = false; history.back(); return; }
+    cardPushed = false;
+    writeHash(false);
+  },
+});
+
+/** What a tip or a card says about the one record picked: which region, which cone, which quake. */
+function recordNote(r: LayerPick['record']): string | null {
+  if (!r) return null;
+  if (r.kind === 'region') {
+    const a = r.data as ActiveRegion;
+    return `AR ${a.region} · observed ${whenUTC(a.observed)}`;
+  }
+  if (r.kind === 'cme') {
+    const c = r.data as Cme;
+    return `DONKI analysis · past 21.5 R☉ ${whenUTC(c.time215)} · ${Math.round(c.speedKms)} km/s`;
+  }
+  const q = r.data as QuakeFeature;
+  return `M${q.mag === null ? '?' : q.mag.toFixed(1)} · ${whenUTC(q.time)}${q.place ? ` · ${q.place}` : ''}`;
+}
+
 /* ---------------- the address ---------------- */
 
 /**
@@ -723,9 +844,12 @@ function writeHash(push: boolean): void {
   if (routing) return;
   const hash = formatHash({
     view, scale: viewer.scaleMode, tab: hud.activeTab, detail: hud.activeDetail, layers: layersNow(),
-    help: help.isOpen,
+    help: help.isOpen, card: card.openId,
   });
   if (hash === location.hash && ownEntry()) return;
+  // A card's "Full detail" gives its step to the detail, rather than leaving
+  // a step behind that Back would land on with nothing open.
+  if (push && cardHandover) { push = false; cardHandover = false; }
   const url = `${location.pathname}${location.search}${hash}`;
   if (push && hash !== location.hash) history.pushState(ROUTE_STATE, '', url);
   else history.replaceState(ROUTE_STATE, '', url);
@@ -780,6 +904,9 @@ function onAddress(): void {
   const r = parseHash(location.hash);
   if (!r) return;
   if (!r.help) helpPushed = false;
+  // Back past a card closes it. A card the address names but the page has not
+  // open — a reload, a shared link — is left closed: it has no click to stand at.
+  if (!r.card && card.isOpen) card.close('address');
   const moved = applyRoute(r, !ownEntry(), false);
   writeHash(false);
   if (moved) hud.scrollToPanel();
@@ -850,11 +977,17 @@ store.subscribe((state) => {
 
 /* ---------------- realtime Earth ---------------- */
 
-let quakesOn = true;
 earthStore.subscribe((state) => {
   // The day feed drives the globe; the week envelope is fetched alongside it
   // and is there for the time-machine work when it lands.
-  viewer.setQuakes(quakesOn ? (state.quakesDay?.data ?? []) : []);
+  const day = state.quakesDay?.data ?? [];
+  viewer.setQuakes(quakesOn ? day : []);
+  const newest = day.reduce<string | null>((m, q) => (m === null || q.time > m ? q.time : m), null);
+  hud.setQuakes({
+    time: newest ?? (state.quakesDay ? state.quakesDay.data_time : null), count: day.length,
+    error: state.laneErrors.quakes, loading: state.lanes.quakes,
+  });
+  syncNarration();
 });
 earthStore.start();
 
@@ -969,8 +1102,6 @@ function showSubject(id: string): void {
   else hud.showSubject(id);
 }
 
-const card = new SubjectCard({ showSubject, earthScreen: () => viewer.earthScreen() });
-
 /** A point in canvas coordinates, as the viewport has it. */
 function onPage(at: { x: number; y: number }): { x: number; y: number } {
   const r = canvas.getBoundingClientRect();
@@ -1038,8 +1169,9 @@ viewer.onLayerHover = (p) => {
   }
   const s = subject(p.subject);
   if (!s) return;
-  const key = `layer:${s.id}`;
-  if (key !== tipKey) { tipEl.textContent = `${s.label} · ${s.oneLine}`; tipKey = key; }
+  const note = recordNote(p.record);
+  const key = `layer:${s.id}:${note ?? ''}`;
+  if (key !== tipKey) { tipEl.textContent = `${s.label} · ${note ?? s.oneLine}`; tipKey = key; }
   tipEl.hidden = false;
   placeTip(p.screen);
 };
@@ -1048,7 +1180,7 @@ viewer.onLayerSelect = (p) => {
   hideTip();
   // One click to put a card away, the next to open one — see `sceneClick`.
   // Empty sky dismisses too: a click that hits nothing means "never mind".
-  card.sceneClick(p?.subject ?? null, onPage(p?.screen ?? { x: 0, y: 0 }));
+  card.sceneClick(p?.subject ?? null, onPage(p?.screen ?? { x: 0, y: 0 }), recordNote(p?.record));
 };
 
 viewer.onSelect = (p) => {
@@ -1058,7 +1190,8 @@ viewer.onSelect = (p) => {
   // to a detail with no tab lit; the card's "Full detail" is still the door.
   const id = bodySubjectId(p.id);
   if (p.kind !== 'sun' && p.kind !== 'spacecraft' && subject(id)) {
-    card.sceneClick(id, onPage(p.screen));
+    // Anchored on the body's own disc, so the card opens clear of it.
+    card.sceneClick(id, { ...onPage(p.screen), r: p.radiusPx });
     return;
   }
   // A body click puts an open card away first, for the same reason a layer

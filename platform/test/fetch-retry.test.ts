@@ -65,3 +65,22 @@ describe('cold-start resilience', () => {
     await expect(new DirectSource().fetchAurora()).rejects.toThrow('Failed to fetch');
   });
 });
+
+describe('the mirror says when its copy was taken', () => {
+  it('reads the manifest once and stamps every mirrored part with its time', async () => {
+    const COPY = '2026-10-27T13:27:28.801Z';
+    let manifests = 0;
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith('https://services.swpc.noaa.gov')) throw new TypeError('Failed to fetch');
+      if (url.endsWith('/manifest.json')) { manifests++; return ok({ mirrored_at: COPY }); }
+      return ok([]);
+    });
+    const env = await new DirectSource().fetchNow();
+    const parts = Object.values(env.parts);
+    expect(parts.every((p) => p.mirrored)).toBe(true);
+    // The manifest's time — not this fetch's, which is the page's own clock.
+    expect(parts.every((p) => p.mirrored_at === COPY)).toBe(true);
+    expect(manifests).toBe(1);
+  });
+});

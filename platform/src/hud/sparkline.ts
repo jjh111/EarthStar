@@ -13,6 +13,7 @@
  */
 
 import type { Series } from '../data/swpc.js';
+import { minus } from './format.js';
 
 export interface SparkOptions {
   /** Rendered size in ex-units of the surrounding text. */
@@ -139,6 +140,11 @@ export function panelSpark(
     unit?: string;
     format?: (v: number) => string;
     direction?: 'past' | 'future';
+    /**
+     * The span in words, where the series' own ends would misstate it: a
+     * forecast that starts days from now is not "the next 27 h".
+     */
+    span?: string;
   } = {},
 ): string {
   const o = { width: 268, height: 46, extremes: true, ...opts };
@@ -153,8 +159,8 @@ export function panelSpark(
 
   const future = o.direction === 'future';
   return `${inlineSpark(s, { ...o, label: o.label ?? (future ? 'forecast' : 'history') })}
-    <p class="tile-meta">${fmt(inv(p.lo!.v))} to ${fmt(inv(p.hi!.v))}${o.unit ? ` ${o.unit}` : ''}
-    ${future ? `over the next ${humanSpan(ms)} · <span class="spark-key-last">●</span> end of run`
+    <p class="tile-meta">${minus(fmt(inv(p.lo!.v)))} to ${minus(fmt(inv(p.hi!.v)))}${o.unit ? ` ${o.unit}` : ''}
+    ${future ? `${o.span ?? `over the next ${humanSpan(ms)}`} · <span class="spark-key-last">●</span> end of run`
       : `over the last ${humanSpan(ms)} · <span class="spark-key-last">●</span> now`}
     <span class="spark-key-ex">●</span> range</p>`;
 }

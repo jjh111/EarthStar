@@ -61,6 +61,11 @@ export interface EnlilRun {
   cloudArrival: EnlilSample | null;
   firstTime: string | null;
   lastTime: string | null;
+  /**
+   * Whether the run carries any tracer value at all. A run whose every
+   * `cloud` is null says nothing about ejecta — not that none reach Earth.
+   */
+  tracerPublished: boolean;
 }
 
 /**
@@ -76,7 +81,7 @@ type Rec = Record<string, unknown>;
 export function parseEnlil(json: unknown, now = new Date()): EnlilRun {
   const empty: EnlilRun = {
     past: [], ahead: [], peakSpeed: null, peakCloud: null,
-    cloudArrival: null, firstTime: null, lastTime: null,
+    cloudArrival: null, firstTime: null, lastTime: null, tracerPublished: false,
   };
   if (!Array.isArray(json)) return empty;
 
@@ -111,9 +116,11 @@ export function parseEnlil(json: unknown, now = new Date()): EnlilRun {
     past, ahead,
     peakSpeed: best(ahead, 'speed'),
     peakCloud: best(ahead, 'cloud'),
-    cloudArrival: ahead.find((s) => (s.cloud ?? 0) >= CLOUD_ARRIVAL) ?? null,
+    // A missing tracer value is not a zero (README rule 1): it crosses nothing.
+    cloudArrival: ahead.find((s) => s.cloud !== null && s.cloud >= CLOUD_ARRIVAL) ?? null,
     firstTime: all[0]!.time,
     lastTime: all[all.length - 1]!.time,
+    tracerPublished: all.some((s) => s.cloud !== null),
   };
 }
 

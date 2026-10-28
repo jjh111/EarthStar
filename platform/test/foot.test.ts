@@ -58,11 +58,29 @@ describe('the status line: short in the foot, whole in the title', () => {
     });
   });
 
-  it('the mirror, in amber, still saying NOAA is unreachable', () => {
-    const s = statusLine(store({ now: env('2026-10-26T12:05:00Z', { mirrored: true }) }), NOW);
-    expect(s.text).toBe('Mirror · NOAA unreachable · captured 12:11 UTC');
-    expect(s.title).toContain("reading Earth Star's mirror (stage B), captured 12:11 UTC");
+  it('the mirror, in amber, still saying NOAA is unreachable, and when the copy was taken', () => {
+    const s = statusLine(store({
+      now: env('2026-10-26T12:05:00Z', { mirrored: true, mirrored_at: '2026-10-26T09:27:00Z' }),
+    }), NOW);
+    // The manifest's time, never the moment this page fetched the copy.
+    expect(s.text).toBe('Mirror · NOAA unreachable · copy taken 09:27 UTC (2.7 h ago)');
+    expect(s.title).toContain("reading Earth Star's mirror (stage B), copy taken 09:27 UTC");
+    expect(s.text).not.toContain('12:11');
     expect(s.tone).toBe('mirror');
+  });
+
+  it('the mirror with no manifest says the copy time is unknown', () => {
+    const s = statusLine(store({ now: env('2026-10-26T12:05:00Z', { mirrored: true, mirrored_at: null }) }), NOW);
+    expect(s.text).toBe('Mirror · NOAA unreachable · copy time unknown');
+  });
+
+  it('some feeds failed: not plain "Live", and which readings are missing', () => {
+    const e = env('2026-10-26T12:05:00Z');
+    e.parts.solar_wind = meta(null, { error: 'Failed to fetch' });
+    const s = statusLine(store({ now: e }), NOW);
+    expect(s.text).toBe('Live · 4 readings unavailable (IMF Bz, IMF total, Wind speed, Proton density)');
+    expect(s.title).toContain('retry 12:12 UTC');
+    expect(s.tone).toBe('degraded');
   });
 
   it('every reading stale: never plain "Live", and the newest age in both forms', () => {
@@ -116,10 +134,10 @@ describe('the render scale', () => {
 describe('the checks fit their column', () => {
   const checks: CheckResult = {
     rows: [
-      { name: 'IMF Bz (GSM), nT', ours: '-2.13', theirs: '-2', ok: true, note: 'both at 11:55 UTC · tol ±0.55' },
+      { name: 'IMF Bz (GSM), nT', ours: '−2.13', theirs: '−2', against: 'NOAA SWPC', ok: true, note: 'both at 11:55 UTC · tol ±0.55' },
       { name: 'Shield model vs GOES at 6.6 Rₑ', ours: 'standoff 11.7 Rₑ → inside', theirs: '108 nT → inside',
-        ok: false, note: 'a long note that has to wrap in the column' },
-      { name: 'Kp', ours: '0.00', theirs: 'minute not in feed', ok: false, inconclusive: true, note: 'no minute' },
+        against: 'GOES-19', ok: false, note: 'a long note that has to wrap in the column' },
+      { name: 'Kp', ours: '0.00', theirs: 'minute not in feed', against: 'NOAA SWPC', ok: false, inconclusive: true, note: 'no minute' },
     ],
     ranAt: '2026-10-26T12:11:00Z', passed: 1, inconclusive: 1,
   } as CheckResult;
@@ -130,9 +148,11 @@ describe('the checks fit their column', () => {
     expect(html).not.toContain('<table');
   });
 
-  it('labels our value and NOAA’s on lines of their own', () => {
+  it('labels our value and whose figure it is set against, on lines of their own', () => {
     expect(html).toContain('<dt>ours</dt><dd>standoff 11.7 Rₑ → inside</dd>');
-    expect(html).toContain('<dt>NOAA</dt><dd>108 nT → inside</dd>');
+    // GOES measures it; crediting NOAA with a second instrument misstates the evidence.
+    expect(html).toContain('<dt>GOES-19</dt><dd>108 nT → inside</dd>');
+    expect(html).toContain('<dt>NOAA SWPC</dt><dd>−2</dd>');
   });
 
   it('keeps the verdict words and their colours', () => {

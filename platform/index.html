@@ -8,6 +8,8 @@
   <link rel="canonical" href="https://earthstar.space/viewer/" />
   <meta name="theme-color" content="#05070d" />
   <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
 
   <!-- Open Graph / Twitter card. og.jpg is a deck-view frame, 1200×630. -->
   <meta property="og:type" content="website" />
@@ -18,7 +20,7 @@
   <meta property="og:image" content="https://earthstar.space/viewer/og.jpg" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
-  <meta property="og:image:alt" content="The deck view: Earth from the tree-ship's rail, the Sun beyond, and the space-weather instruments alongside." />
+  <meta property="og:image:alt" content="The Viewer's Deck view: Earth and its traced magnetic field with the Sun beyond, the instrument rail of live NOAA readings down the left, and the margin's state sentence and Situation Report on the right." />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Earth Star Viewer — live space weather" />
   <meta name="twitter:description" content="Earth's space-weather environment in one live view: solar wind, the modelled shield, aurora and the Sun, every value with its source, timestamp and evidence tier." />
@@ -27,6 +29,16 @@
   <link rel="preconnect" href="https://services.swpc.noaa.gov" crossorigin />
 </head>
 <body>
+  <noscript>
+    <style>.controls, .controls-toggle, .margin-actions, .rail, .ticker, .help-toggle, .stage-notes, .tabs, .margin-body, .status { display: none !important; }</style>
+    <div class="noscript-note">
+      <p>The Viewer draws NOAA’s live space-weather readings with JavaScript and WebGL,
+        and neither is running here.</p>
+      <p><a href="https://www.swpc.noaa.gov/" rel="noreferrer noopener" target="_blank">NOAA SWPC<span
+        class="sr-only"> (opens in a new tab)</span></a> publishes them directly ·
+        <a href="/">Earth Star home</a></p>
+    </div>
+  </noscript>
   <a class="skip-link" href="#margin-body">Skip to the Situation Report</a>
   <canvas id="scene" aria-hidden="true"></canvas>
   <!-- The names in the scene: Earth, the Sun, the Moon, L1, the boundaries.
@@ -72,7 +84,22 @@
 
         <span class="ctl-set">
           <span class="ctl-legend" id="lg-view">View</span>
-          <span class="ctl-group" id="view-group" role="group" aria-labelledby="lg-view"></span>
+          <!-- In the markup, so the header has its width before any script runs;
+               test/views-markup.test.ts holds these to VIEWS in camera-rig.ts. -->
+          <span class="ctl-group" id="view-group" role="group" aria-labelledby="lg-view"
+            ><button class="ctl" type="button" id="view-deck" aria-pressed="true"
+              title="Behind Earth looking back down the Sun–Earth line: both bodies in frame, with the wind and the field lines running between them">Deck</button
+            ><button class="ctl" type="button" id="view-sunward" aria-pressed="false"
+              title="Looking down the Sun–Earth line from the Sun: the magnetopause face-on">Sunward</button
+            ><button class="ctl" type="button" id="view-profile" aria-pressed="false"
+              title="The noon–midnight meridian: nose compression against tail flaring">Profile</button
+            ><button class="ctl" type="button" id="view-polar" aria-pressed="false"
+              title="Over the north pole with noon at the top: the auroral oval as a ring, offset because it encircles the magnetic pole rather than this one">Polar</button
+            ><button class="ctl" type="button" id="view-corona" aria-pressed="false"
+              title="The Sun from where we stand, framed for the coronagraphs: LASCO photographs down this exact line, so its image plane is face-on here">Corona</button
+            ><button class="ctl" type="button" id="view-system" aria-pressed="false"
+              title="The whole solar system, all eight planets at their true positions">System</button
+          ></span>
         </span>
 
         <span class="ctl-set">
@@ -107,7 +134,7 @@
     <!-- Focusable, so a keyboard reader can put the scene's keys in scope:
          they act only here, on the scene or on the page itself. -->
     <main class="stage" tabindex="0" aria-label="Scene"
-      aria-keyshortcuts="1 2 3 4 5 S M F A W C T R">
+      aria-keyshortcuts="1 2 3 4 5 6 S M F A W C T R">
       <!-- The instrument tiles live in a rail at the left edge of the scene,
            not stacked across its top: thirteen readings are a column of
            marginal notes beside the planet, and a grid across the sky was
@@ -115,7 +142,12 @@
            collapses to its chevron and remembers the choice. -->
       <div class="rail" id="rail">
         <div class="rail-head">
-          <span class="rail-legend">Instruments</span>
+          <!-- Every tile's time is UTC; said once here, where a 116 px tile
+               has no room to say it thirteen times. Stacked under the legend,
+               as the clock is under the wordmark: the head's row has no width
+               to spare beside the chevron, and two 10 px lines fit its height. -->
+          <span class="rail-titles"><span class="rail-legend">Instruments</span>
+            <span class="rail-zone" title="Every time on the tiles is UTC">times UTC</span></span>
           <button class="rail-toggle" id="rail-toggle" type="button"
             aria-expanded="true" aria-controls="instruments"
             aria-label="Hide instrument tiles"

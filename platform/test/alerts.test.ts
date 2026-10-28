@@ -12,7 +12,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { parseAlerts } from '../src/data/swpc.js';
-import { inForce, splitNotices, whenUTC } from '../src/hud/format.js';
+import { inForce, noticeWord, splitNotices, validityText, whenUTC } from '../src/hud/format.js';
 import { noticeTicker } from '../src/hud/hud.js';
 import { buildSituationReport } from '../src/hud/situation-report.js';
 import { buildBriefing } from '../src/hud/briefing.js';
@@ -161,6 +161,31 @@ describe('NOAA validity, read from the messages themselves', () => {
     expect(inForce(a!, NOW)).toBe(true);
   });
 
+  it('holds an alert with no stated end for a day, and says the day is ours', () => {
+    const [a] = parseAlerts([row('2026-10-26 10:11:00', 'ALERT: Electron 2MeV Integral Flux exceeded 1000pfu', 'EF3A')]);
+    expect(a!.level).toBe('alert');
+    expect(a!.validityStated).toBe(false);
+    expect(inForce(a!, NOW)).toBe(true);
+    expect(validityText(a!, NOW)).toBe('validity not stated');
+  });
+
+  it('reports a one-off event, and never holds it in force', () => {
+    const [a] = parseAlerts([row('2026-10-26 10:11:00', 'ALERT: Type II Radio Emission', 'XM2A')]);
+    expect(a!.event).toBe(true);
+    expect(inForce(a!, NOW)).toBe(false);
+    expect(noticeWord(a!, NOW)).toBe('reported');
+    const t = noticeTicker(store(live([a!])), NOW);
+    expect(t.top).toBeNull();
+  });
+
+  it('gives each notice its tier: alerts measured, watches and warnings forecast', () => {
+    const tiers = new Map(parseAlerts(FEED, 100).map((n) => [n.level, n.tier]));
+    expect(tiers.get('alert')).toBe('E');
+    expect(tiers.get('summary')).toBe('E');
+    expect(tiers.get('warning')).toBe('D');
+    expect(tiers.get('watch')).toBe('D');
+  });
+
   it('holds a warning with no window in force for a day, marked unstated', () => {
     const [a] = parseAlerts([row('2026-10-26 10:11:00', 'WARNING: Something expected', 'XXXW')]);
     expect(a!.level).toBe('warning');
@@ -256,8 +281,10 @@ describe('a successful read', () => {
 
   it('names what is in force and until when', () => {
     const report = buildSituationReport(live(), scene, NOW, null, [], [], lanes).join('\n');
+    // NOAA states no end for a continued alert: the 24 h is Earth Star's, and says so.
     expect(report).toContain('NOAA notice in force: CONTINUED ALERT: Electron 2MeV Integral Flux '
-      + 'exceeded 1,000pfu, issued 05:17 UTC and in force until 27 Oct 05:17 UTC');
+      + 'exceeded 1,000pfu, issued 05:17 UTC; its validity is not stated, so it is held in force '
+      + 'until 27 Oct 05:17 UTC');
     // Counted from issue times: 3758, 2694 and 5443 — not the length of the list.
     expect(report).toContain('3 notices in the last 72 h.');
   });
@@ -273,8 +300,10 @@ describe('a successful read', () => {
   it('lists each notice in the briefing with its state', () => {
     const md = buildBriefing({ state: store(live()), narration: [], checks: null, forecast: null, now: NOW });
     expect(md).toContain('- 05:17 UTC — CONTINUED ALERT: Electron 2MeV Integral Flux exceeded '
-      + '1,000pfu — in force until 27 Oct 05:17 UTC');
-    expect(md).toContain('- 23 Oct 19:55 UTC — ALERT: Geomagnetic K-index of 4 — ended 23 Oct 21:00 UTC');
+      + '1,000pfu [E] — validity not stated; held in force until 27 Oct 05:17 UTC');
+    expect(md).toContain('- 23 Oct 19:55 UTC — ALERT: Geomagnetic K-index of 4 [E] — ended 23 Oct 21:00 UTC');
+    // A warning is NOAA's forecast, and carries its tier.
+    expect(md).toContain('WARNING: Geomagnetic K-index of 4 expected [D]');
   });
 
   it('orders the current ones by what NOAA means, then by time', () => {

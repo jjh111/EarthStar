@@ -12,17 +12,18 @@ import type { StoreState } from '../data/store.js';
 import type { CheckResult } from '../data/checks.js';
 import { l1Inset } from './l1-inset.js';
 import { CLOUD_ARRIVAL, enlilSeries, type EnlilRun } from '../data/enlil.js';
-import type { Cme } from '../data/cme.js';
+import { DONKI_BASE, type Cme } from '../data/cme.js';
+import { USGS_URLS } from '../data/earth-quakes.js';
 import { SPACECRAFT_NOTE, type SpacecraftPos } from '../data/ephemerides.js';
 import { instrumentFor, type ImageLoop, type LoopKind } from '../data/solar-imagery.js';
 import { igrfCitation } from '../models/igrf14.js';
 import { coverageBands, type SunPlaneCalibration } from '../scene/sun-plane.js';
 import {
-  NO_DATA, badgeFor, badgeTitle, hhmmUTC, inForce, noticeWord, stalenessOf,
+  NO_DATA, badgeFor, badgeTitle, copyTaken, formatAge, hhmmUTC, inForce, noticeWord, sci, stalenessOf,
   WORDS, abbr, tierBadge, validityText, whenUTC,
 } from './format.js';
 import { ageHtml, liveAge, liveHtml } from './live.js';
-import { valueState } from '../data/state.js';
+import { errorReason, valueState } from '../data/state.js';
 import { panelSpark } from './sparkline.js';
 import { sentenceAsOf, stateSentence, stateSentenceText } from './state-sentence.js';
 import type { ForecastBundle } from '../data/forecast.js';
@@ -37,7 +38,7 @@ import {
 import { bodyFacts, distanceText, lightTimeText } from './body-facts.js';
 import type { BodyName } from '../scene/scales.js';
 import {
-  buildReportLines, reportSections, type SceneNarration,
+  buildReportLines, reportSections, type ReportLanes, type SceneNarration,
 } from './situation-report.js';
 
 export type TabId = 'report' | 'forecast' | 'sun' | 'sources' | 'checks' | 'detail';
@@ -132,14 +133,22 @@ function sectionLimits(ids: string[]): string {
     : '';
 }
 
+/** The lanes as the report reads them: which are in flight, and what failed. */
+export function reportLanes(state: StoreState): ReportLanes {
+  return {
+    snapshot: state.lanes.snapshot, aurora: state.lanes.aurora, cmes: state.lanes.cmes,
+    nextAttempt: state.nextAttempt,
+    cmesError: state.laneErrors.cmes, cmesNextAttempt: state.nextSlowAttempt ?? null,
+  };
+}
+
 export function renderReport(
   state: StoreState, narration: SceneNarration, now: Date,
   remembered?: (id: string) => boolean | undefined,
 ): string {
   const lines = buildReportLines(
     state.now, narration, now, state.aurora, state.cmes, state.spacecraft?.data ?? [],
-    { snapshot: state.lanes.snapshot, aurora: state.lanes.aurora, cmes: state.lanes.cmes,
-      nextAttempt: state.nextAttempt },
+    reportLanes(state),
   );
   const sections = reportSections(lines);
 
@@ -149,7 +158,8 @@ export function renderReport(
   // reader has opened is remembered, the same way the Sources sections are.
   const body = sections.map((sec, i) => section(
     `report-${sec.id}`, sec.title,
-    sec.lines.map((l) => `<p>${linkSubjects(escapeHtml(l.live), l.subjects)}</p>`).join('')
+    sec.lines.map((l) => `<p${l.tone ? ` class="is-${l.tone}"` : ''}>${
+      linkSubjects(escapeHtml(l.live), l.subjects)}</p>`).join('')
     + sectionLimits(sec.subjects),
     i === 0, remembered,
   )).join('');
@@ -225,7 +235,7 @@ function kpBars(f: ForecastBundle): string {
     const storm = p.kp >= 5 ? ' kp-storm' : '';
     return `<rect class="${cls}${storm}" x="${(i * (bw + gap)).toFixed(2)}" y="${(h - 10 - bh).toFixed(2)}"
       width="${bw.toFixed(2)}" height="${Math.max(0.6, bh).toFixed(2)}">
-      <title>${hhmmUTC(p.time)} UTC — Kp ${p.kp.toFixed(2)} (${p.kind})</title></rect>`;
+      <title>${whenUTC(p.time)} — Kp ${p.kp.toFixed(1)} (${p.kind})</title></rect>`;
   }).join('');
   // Kp 5 is the storm threshold; the line is the reason the chart exists.
   const y5 = h - 10 - (5 / max) * (h - 10);
@@ -237,10 +247,19 @@ function kpBars(f: ForecastBundle): string {
       <span class="key-pred">▮</span> predicted · rule at Kp 5, the storm threshold</p>`;
 }
 
+/** '27 Oct' for an ISO date or instant. */
+function dayMon(iso: string): string {
+  const t = Date.parse(iso.length === 10 ? `${iso}T00:00:00Z` : iso);
+  if (!Number.isFinite(t)) return iso;
+  const d = new Date(t);
+  return `${String(d.getUTCDate()).padStart(2, '0')} ${
+    ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()]}`;
+}
+
 export function renderForecast(
   f: ForecastBundle | null, loading: boolean, cmes: Cme[] = [],
   remembered?: (id: string) => boolean | undefined,
-  error: string | null = null,
+  error: string | null = null, now = new Date(),
 ): string {
   if (!f) {
     return `<h2>Ahead</h2><p>${
@@ -251,6 +270,10 @@ export function renderForecast(
   const three = f.threeDay ? stripProductHeader(f.threeDay) : null;
   const disc = f.discussion ? stripProductHeader(f.discussion) : null;
   const odds = f.odds[0];
+  // NOAA issues the odds daily; a newest one dated before today is a product
+  // that stopped, and "next 24 h" over it would be a claim about a day gone.
+  const today = now.toISOString().slice(0, 10);
+  const oddsOld = !!odds && odds.date < today;
 
   return `
     <h2>Ahead</h2>
@@ -261,7 +284,7 @@ export function renderForecast(
     <h3>Planetary K index (Kp), observed and predicted</h3>
     ${kpBars(f)}
 
-    ${odds ? `<h3>Flare probability, next 24 h</h3>
+    ${odds ? `<h3>Flare probability, ${oddsOld ? `issued ${dayMon(odds.date)}` : 'next 24 h'}</h3>
     <table class="prov"><tbody>
       <tr><td>C class</td><td class="num">${odds.c ?? '—'}%</td>
           <td>common; minor or no effect at the ground</td></tr>
@@ -270,22 +293,25 @@ export function renderForecast(
       <tr><td>X class</td><td class="num">${odds.x ?? '—'}%</td>
           <td>strong blackouts, possible radiation storm</td></tr>
     </tbody></table>
-    <p class="tile-meta">Issued for ${escapeHtml(odds.date)}.</p>` : ''}
+    <p class="tile-meta${oddsOld ? ' is-stale' : ''}">${oddsOld
+      ? `stale · issued ${dayMon(odds.date)}, and NOAA has published none since.`
+      : `Issued for ${dayMon(odds.date)}.`}</p>` : ''}
 
     ${f.flares.length ? `<h3>Recent flares</h3>
     <table class="prov"><tbody>${f.flares.slice(0, 6).map((fl) => `
       <tr><td class="num">${escapeHtml(fl.maxClass)}</td>
-          <td class="num">${hhmmUTC(fl.max ?? fl.begin)}</td>
+          <td class="num">${whenUTC(fl.max ?? fl.begin, now)}</td>
           <td>${fl.region ? `region ${fl.region}` : ''}
             <span class="tile-meta">${ageHtml(fl.begin)} ago</span></td></tr>`).join('')}
     </tbody></table>` : ''}
 
     ${f.f107.value !== null ? `<h3>Solar radio flux</h3>
-    <p>F10.7 at <b class="sentence-num">${f.f107.value}</b> solar flux units — the standard
+    <p>F10.7 at <b class="sentence-num">${f.f107.value}</b> solar flux units ${tierBadge('E')}, NOAA SWPC${
+      f.f107.time ? `, ${whenUTC(f.f107.time, now)}` : ''} — the standard
     proxy for solar activity and the driver of upper-atmosphere density, so it sets how fast
     satellites in low orbit decay.</p>` : ''}
 
-    ${enlilSection(f.enlil, cmes, remembered)}
+    ${enlilSection(f.enlil, cmes, remembered, now)}
 
     ${section('fc-3day', 'NOAA 3-day forecast', three ? `
       <pre class="product">${escapeHtml(three.body)}</pre>
@@ -307,25 +333,56 @@ export function renderForecast(
  */
 function enlilSection(
   run: EnlilRun | null, cmes: Cme[] = [],
-  remembered?: (id: string) => boolean | undefined,
+  remembered?: (id: string) => boolean | undefined, now = new Date(),
 ): string {
   if (!run || run.ahead.length === 0) return '';
 
   const peak = run.peakSpeed;
   const arrival = run.cloudArrival;
   const nowSpeed = run.past[run.past.length - 1]?.speed ?? null;
+  const t = now.getTime();
+  const first = run.ahead[0]!.time;
+  const last = run.lastTime!;
+  const h = (iso: string): number => (Date.parse(iso) - t) / 3_600_000;
+
+  // The span the series covers from now, not the span between its own ends:
+  // a mirror that kept only the run's far end was captioned "the next 27 h"
+  // under a heading that said 106.
+  const late = h(first) > 1;
+  const span = late
+    ? `from +${Math.round(h(first))} h to +${Math.round(h(last))} h (${whenUTC(first, now)} – ${whenUTC(last, now)})`
+    : `over the next ${Math.round(h(last))} hours`;
 
   const speedSpark = panelSpark(enlilSeries(run.ahead, 'speed'), {
     unit: 'km/s', format: (v) => v.toFixed(0), extremes: true, direction: 'future',
+    ...(late ? { span } : {}),
   });
-  const cloudSpark = panelSpark(enlilSeries(run.ahead, 'cloud'), {
-    unit: '', format: (v) => v.toFixed(2), rule: CLOUD_ARRIVAL, direction: 'future',
-  });
+  const cloudSpark = run.tracerPublished
+    ? panelSpark(enlilSeries(run.ahead, 'cloud'), {
+      unit: '', format: (v) => v.toFixed(2), rule: CLOUD_ARRIVAL, direction: 'future',
+      ...(late ? { span } : {}),
+    })
+    : '';
 
-  const hours = (t: string): string => {
-    const h = (Date.parse(t) - Date.now()) / 3_600_000;
-    return h < 1 ? 'within the hour' : `in about ${Math.round(h)} h`;
+  const hours = (iso: string): string => {
+    const n = h(iso);
+    return n < 1 ? 'within the hour' : `in about ${Math.round(n)} h`;
   };
+  // A "peak" at the run's last sample is only where the run stops.
+  const peakAtEnd = !!peak && peak.time === last;
+
+  const inbound = cmes.some((c) => c.earthDirected && c.arrival && Date.parse(c.arrival.time) > t);
+  const ejecta = arrival
+    ? `<p>The tracer crosses ${CLOUD_ARRIVAL} at <b class="sentence-num">${whenUTC(arrival.time, now)}</b>,
+         ${hours(arrival.time)} — the model's arrival for the ejection now in flight.</p>
+         ${coneVsEnlil(arrival.time, cmes)}`
+    : run.tracerPublished
+      ? `<p>The tracer stays below ${CLOUD_ARRIVAL} throughout the run: no ejecta reach Earth
+         in the model's window.${inbound
+           ? ' Our cone propagation does put one here — the two disagree, and Enlil is the '
+             + 'one that solves the physics.' : ''}</p>`
+      : `<p>NOAA's run carries no CME tracer values, so nothing here says whether ejecta
+         reach Earth.${inbound ? ' Our cone propagation puts one here, with nothing from Enlil to set it against.' : ''}</p>`;
 
   return section('fc-enlil', 'WSA-Enlil — the wind at Earth', `
     <p>A magnetohydrodynamic simulation of the inner heliosphere sampled at Earth
@@ -333,33 +390,24 @@ function enlilSection(
     analysed CME cones. It is the only forecast here that solves the physics rather than
     extrapolating, and unlike our own cone propagation it accounts for drag.</p>
 
-    <p>Radial speed over the next
-    ${Math.round((Date.parse(run.lastTime!) - Date.now()) / 3_600_000)} hours${
+    <p>Radial speed ${span}${
       nowSpeed !== null ? `, from <b class="sentence-num">${nowSpeed.toFixed(0)}</b> km/s now` : ''}:</p>
     ${speedSpark}
-    ${peak?.speed != null ? `<p>Peaks at <b class="sentence-num">${peak.speed.toFixed(0)}</b> km/s
-      ${hours(peak.time)} — ${hhmmUTC(peak.time)} UTC on
-      ${new Date(peak.time).toUTCString().slice(0, 11)}.</p>` : ''}
+    ${peak?.speed != null ? (peakAtEnd
+      ? `<p>Rises to <b class="sentence-num">${peak.speed.toFixed(0)}</b> km/s at the run's last
+        sample, ${whenUTC(peak.time, now)} — the run ends there, so this is not a peak.</p>`
+      : `<p>Peaks at <b class="sentence-num">${peak.speed.toFixed(0)}</b> km/s
+        ${hours(peak.time)} — ${whenUTC(peak.time, now)}.</p>`) : ''}
 
     <h4>Ejecta at Earth</h4>
     <p class="fine">The model carries a passive tracer that marks CME plasma. It is a mixing
     fraction, not a density and not a probability — it says where the ejection is in the
     simulation, and the simulation can be wrong about that.</p>
     ${cloudSpark}
-    ${arrival
-      ? `<p>The tracer crosses ${CLOUD_ARRIVAL} at <b class="sentence-num">${hhmmUTC(arrival.time)}</b> UTC
-         on ${new Date(arrival.time).toUTCString().slice(0, 11)}, ${hours(arrival.time)} —
-         the model's arrival for the ejection now in flight.</p>
-         ${coneVsEnlil(arrival.time, cmes)}`
-      : `<p>The tracer stays below ${CLOUD_ARRIVAL} throughout the run: no ejecta reach Earth
-         in the model's window.${cmes.some((c) => c.earthDirected && c.arrival
-           && Date.parse(c.arrival.time) > Date.now())
-           ? ' Our cone propagation does put one here — the two disagree, and Enlil is the '
-             + 'one that solves the physics.' : ''}</p>`}
-    <p class="fine">Model output starts ${new Date(run.firstTime!).toUTCString().slice(0, 11)}
-    at ${hhmmUTC(run.firstTime!)} UTC — ${run.past.length}
-    samples already elapsed and ${run.ahead.length} still ahead. The elapsed half is checked
-    against the measured wind in the Checks panel.</p>`, true, remembered);
+    ${ejecta}
+    <p class="fine">Model output starts ${whenUTC(run.firstTime!, now)} — ${run.past.length}
+    samples already elapsed and ${run.ahead.length} still ahead.${run.past.length > 0
+      ? ' The elapsed half is checked against the measured wind in the Checks panel.' : ''}</p>`, true, remembered);
 }
 
 /**
@@ -385,7 +433,7 @@ export function coneVsEnlil(enlilTime: string, cmes: Cme[]): string {
   }
   const deltaH = (Date.parse(enlilTime) - Date.parse(c.arrival.time)) / 3_600_000;
   const early = deltaH > 0;
-  return `<p>Our cone puts it at <b class="sentence-num">${hhmmUTC(c.arrival.time)}</b> UTC,
+  return `<p>Our cone puts it at <b class="sentence-num">${whenUTC(c.arrival.time)}</b>,
     <b class="sentence-num">${Math.abs(deltaH).toFixed(0)} h</b>
     ${early ? 'earlier' : 'later'} than Enlil.
     ${early
@@ -402,17 +450,56 @@ const FORECAST_LINK = {
   threeDay: 'https://services.swpc.noaa.gov/text/3-day-forecast.txt',
 };
 
-function metaRow(key: string, m: PartMeta): string {
-  const b = badgeFor(m);
+function metaRow(key: string, m: PartMeta, now = new Date()): string {
+  const b = key === 'alerts' ? null : badgeFor(m);
   return `<tr>
     <td>${escapeHtml(key)}</td>
-    <td>${tierBadge(b, badgeTitle(m))}</td>
+    <td>${b ? tierBadge(b, badgeTitle(m))
+      // NOAA's notices are two tiers in one feed: alerts and summaries report
+      // a measured threshold, watches and warnings are NOAA's forecasts.
+      : `${tierBadge('E', 'Alerts and summaries: a measured threshold crossed')} ${
+        tierBadge('D', 'Watches and warnings: NOAA’s forecasts')}`}</td>
     <td><a href="${m.source_url}" rel="noreferrer noopener" target="_blank">${escapeHtml(m.source)}</a>${
-      m.model ? `<br><span class="tile-meta">${escapeHtml(m.model.name)}</span>` : ''}</td>
-    <td class="num">${m.data_time ? hhmmUTC(m.data_time) : NO_DATA}</td>
+      m.model ? `<br><span class="tile-meta">${escapeHtml(m.model.name)}</span>` : ''}${
+      m.mirrored ? `<br><span class="tile-meta warn">via Earth Star’s mirror · ${escapeHtml(copyTaken(m.mirrored_at, now))}</span>` : ''}</td>
+    <td class="num">${m.data_time ? whenUTC(m.data_time, now) : NO_DATA}</td>
     <td class="num">${m.error ? `<span class="err">${escapeHtml(m.error)}</span>`
-      : m.latency_s === null ? NO_DATA : `${m.latency_s}s`}</td>
+      : m.latency_s === null ? NO_DATA : formatAge(m.latency_s)}</td>
   </tr>`;
+}
+
+/**
+ * A Sources row for something that is not a NOAA snapshot part — DONKI, the
+ * region list, USGS, the L1 positions, the solar imagery — in the same five
+ * columns: what, tier, from where, when, and its state.
+ */
+function laneRow(
+  key: string, tier: 'E' | 'D', source: string, url: string,
+  time: string | null, state: string, now: Date,
+): string {
+  return `<tr>
+    <td>${escapeHtml(key)}</td>
+    <td>${tierBadge(tier)}</td>
+    <td><a href="${url}" rel="noreferrer noopener" target="_blank">${escapeHtml(source)}</a></td>
+    <td class="num">${time ? whenUTC(time, now) : NO_DATA}</td>
+    <td class="num">${state}</td>
+  </tr>`;
+}
+
+/** What the Sources tab is told about the lanes outside the snapshot. */
+export interface SourcesExtra {
+  quakes?: { time: string | null; count: number; error: string | null; loading: boolean };
+  /** The newest frame of each imagery selection on screen, or why there is none. */
+  imagery?: Array<{ key: string; source: string; url: string; time: string | null; error: string | null; loading: boolean }>;
+}
+
+/** A lane's state cell: its failure in red, loading, or how old its newest item is. */
+function laneState(time: string | null, error: string | null, loading: boolean, now: Date): string {
+  if (error && !time) return `<span class="err">unavailable · ${escapeHtml(errorReason(error))}</span>`;
+  if (loading && !time) return 'loading';
+  if (!time) return NO_DATA;
+  return `${formatAge((now.getTime() - Date.parse(time)) / 1000)} old${error
+    ? ` · <span class="err">refresh failed</span>` : ''}`;
 }
 
 export function renderSources(
@@ -421,6 +508,7 @@ export function renderSources(
   earth: { surface: 'vector' | 'imagery' | 'loading'; lights: boolean; coast: boolean } =
     { surface: 'vector', lights: false, coast: false },
   rendering: string | null = null,
+  extra: SourcesExtra = {}, now = new Date(),
 ): string {
   const env = state.now;
   if (!env) return '<h2>Provenance</h2><p>No envelope loaded yet.</p>';
@@ -456,9 +544,31 @@ export function renderSources(
     <td>${tierBadge('D')}</td>
     <td><a href="${au.source_url}" rel="noreferrer noopener" target="_blank">${escapeHtml(au.source)}</a>
       <br><span class="tile-meta">${escapeHtml(au.model?.name ?? '')}</span></td>
-    <td class="num">${au.data ? hhmmUTC(au.data.observation_time) : NO_DATA}</td>
-    <td class="num">${au.data ? `${au.latency_s}s` : NO_DATA}</td>
+    <td class="num">${au.data ? whenUTC(au.data.observation_time, now) : NO_DATA}</td>
+    <td class="num">${au.data ? formatAge(au.latency_s) : NO_DATA}</td>
   </tr>` : '';
+
+  // Everything else on screen that has a time of its own: the CME cones, the
+  // region markers, the quakes, the monitors' positions and the Sun's frames.
+  const newestCme = state.cmes.reduce<string | null>((m, c) => (m === null || c.time215 > m ? c.time215 : m), null);
+  const laneRows = [
+    laneRow('CME analyses', 'E', 'NASA DONKI · CME analyses', `${DONKI_BASE}/CMEAnalysis`, newestCme,
+      laneState(newestCme, state.laneErrors.cmes, state.lanes.cmes, now)
+        + (state.cmes.length ? ` · ${state.cmes.length} in the week` : ''), now),
+    laneRow('active regions', 'E', state.regions?.source ?? 'NOAA SWPC · solar region summary',
+      state.regions?.source_url ?? 'https://services.swpc.noaa.gov/json/solar_regions.json',
+      state.regions?.data_time ?? null,
+      laneState(state.regions?.data_time ?? null, state.laneErrors.regions, state.lanes.regions, now), now),
+    laneRow('L1 positions', 'E', state.spacecraft?.source ?? 'NOAA SWPC · RTSW ephemerides',
+      state.spacecraft?.source_url ?? 'https://services.swpc.noaa.gov/json/rtsw/rtsw_ephemerides_1h.json',
+      state.spacecraft?.data_time ?? null,
+      laneState(state.spacecraft?.data_time ?? null, state.laneErrors.spacecraft, state.lanes.spacecraft, now), now),
+    extra.quakes ? laneRow('earthquakes', 'E', 'USGS · past day', USGS_URLS.day, extra.quakes.time,
+      laneState(extra.quakes.time, extra.quakes.error, extra.quakes.loading, now)
+        + (extra.quakes.time ? ` · ${extra.quakes.count} events` : ''), now) : '',
+    ...(extra.imagery ?? []).map((i) => laneRow(i.key, 'E', i.source, i.url, i.time,
+      laneState(i.time, i.error, i.loading, now), now)),
+  ].join('');
 
   // How the scene is being drawn on this device. Not a feed and not a tier:
   // the resolution the renderer chose, said here as the foot's chip says it.
@@ -475,8 +585,8 @@ export function renderSources(
     ${checks ? checkSummary(checks) : ''}
     ${section('prov-table', 'Every element', `
       <table class="prov">
-        <thead><tr><th>Element</th><th>Tier</th><th>Source</th><th>Time</th><th>Lat.</th></tr></thead>
-        <tbody>${Object.entries(env.parts).map(([k, m]) => metaRow(k, m)).join('')}${auRow}${renderingRow}</tbody>
+        <thead><tr><th>Element</th><th>Tier</th><th>Source</th><th>Time</th><th>Latency · state</th></tr></thead>
+        <tbody>${Object.entries(env.parts).map(([k, m]) => metaRow(k, m, now)).join('')}${auRow}${laneRows}${renderingRow}</tbody>
       </table>`, true, remembered)}
     ${section('prov-earth', 'The Earth base — imagery, not a feed', `
       <table class="prov">
@@ -581,14 +691,15 @@ function checkSummary(c: CheckResult): string {
 
 export function renderChecks(checks: CheckResult | null, running: boolean): string {
   if (running && !checks) {
-    return '<h2>Checks</h2><p>Comparing our numbers with NOAA’s own, by an independent path…</p>';
+    return '<h2>Checks</h2><p>Comparing our numbers with independent figures, NOAA’s own first…</p>';
   }
   if (!checks) return '<h2>Checks</h2><p>Not run yet.</p>';
 
   return `
     <h2>Checks</h2>
-    <p>Our values against NOAA’s own published figures, fetched by a separate path at the
-    same timestamp. Drift is a bug, not a rounding preference.</p>
+    <p>Each row sets one of our values against an independent figure: NOAA’s own
+    publication where there is one, fetched by a separate path at the same timestamp,
+    otherwise a second instrument or model. Drift is a bug, not a rounding preference.</p>
     ${checkSummary(checks)}
     ${checks.rows.map((r) => `
       <div class="check">
@@ -597,11 +708,11 @@ export function renderChecks(checks: CheckResult | null, running: boolean): stri
             r.inconclusive ? 'no signal' : r.ok ? 'pass' : 'DRIFT'}</span></div>
         <dl class="check-vals">
           <dt>ours</dt><dd>${escapeHtml(r.ours)}</dd>
-          <dt>NOAA</dt><dd>${escapeHtml(r.theirs)}</dd>
+          <dt>${escapeHtml(r.against)}</dt><dd>${escapeHtml(r.theirs)}</dd>
         </dl>
         <p class="check-note">${escapeHtml(r.note)}</p>
       </div>`).join('')}
-    <p class="tile-meta">Last run ${hhmmUTC(checks.ranAt)} UTC.</p>`;
+    <p class="tile-meta">Last run ${whenUTC(checks.ranAt)}.</p>`;
 }
 
 export interface SunState {
@@ -660,11 +771,12 @@ function imageryState(
     return { state: 'loading', text: `<p class="tile-state loading">Loading ${kind} frames<span class="pulse">…</span></p>` };
   }
   if (error) {
-    const next = retryAt ? ` · retrying at ${hhmmUTC(retryAt)} UTC` : '';
-    return { state: 'error', text: `<p class="tile-state err"><span class="tile-state-word">unavailable</span> · ${escapeHtml(error)}${next}</p>` };
+    const next = retryAt ? ` · retrying at ${whenUTC(retryAt)}` : '';
+    return { state: 'error', text: `<p class="tile-state err"><span class="tile-state-word">${
+      escapeHtml(kind)} unavailable</span> · ${escapeHtml(error)}${next}</p>` };
   }
   if (!hasLoop) {
-    return { state: 'no-data', text: `<p class="tile-state">no data — the frame list carried no usable frames.</p>` };
+    return { state: 'no-data', text: `<p class="tile-state">${escapeHtml(kind)}: no data — the frame list carried no usable frames.</p>` };
   }
   return { state: 'fresh', text: '' };
 }
@@ -746,12 +858,12 @@ export function renderSun(
    * LASCO — the two selections are independent by design and their failures
    * are theirs alone.
    */
-  const disk = imageryState('SUVI', sun.loading, !!sun.loop, sun.error, sun.retryAt);
+  const disk = imageryState('SUVI disc', sun.loading, !!sun.loop, sun.error, sun.retryAt);
   const diskBody = sun.loop ? diskSection(sun) : disk.text;
 
   const coronaOn = sun.coronaId !== null;
   const corona = coronaOn
-    ? imageryState('coronagraph', sun.coronaLoading, !!sun.corona, sun.coronaError, sun.coronaRetryAt)
+    ? imageryState('LASCO corona', sun.coronaLoading, !!sun.corona, sun.coronaError, sun.coronaRetryAt)
     : null;
   const coronaBody = coronaOn
     ? (corona!.state === 'fresh' ? coronaPanel(sun) : corona!.text)
@@ -776,7 +888,7 @@ export function renderSun(
  * them apart from what it wrote.
  */
 export function sunStamp(time: string): string {
-  return `<span>${hhmmUTC(time)} UTC</span><span>${ageHtml(time)} ago</span>`;
+  return `<span>${whenUTC(time)}</span><span>${ageHtml(time)} ago</span>`;
 }
 
 /** The disk section as it looks when the loop is in hand. */
@@ -804,7 +916,7 @@ function diskSection(sun: SunState): string {
            cache and moved into this slot after render, so that rebuilding the
            panel does not throw away a decode that costs 380 ms. -->
       <div class="sun-slot" id="sun-slot" data-frame="${escapeHtml(f.url)}"
-           data-alt="${escapeHtml(instrument)} image of the Sun at ${hhmmUTC(f.time)} UTC"></div>
+           data-alt="${escapeHtml(instrument)} image of the Sun at ${whenUTC(f.time)}"></div>
       <div class="sun-stamp">${sunStamp(f.time)}</div>
     </div>
     <div class="sun-transport">${transport}</div>
@@ -905,7 +1017,7 @@ function coronaPanel(sun: SunState): string {
   return `
     <div class="sun-frame sun-frame-sm">
       <div class="sun-slot" id="corona-slot" data-frame="${escapeHtml(f.url)}"
-           data-alt="${escapeHtml(L.instrument)} coronagraph image at ${hhmmUTC(f.time)} UTC"></div>
+           data-alt="${escapeHtml(L.instrument)} coronagraph image at ${whenUTC(f.time)}"></div>
       <div class="sun-stamp">${sunStamp(f.time)}</div>
     </div>
     <p>${tierBadge('E')} ${escapeHtml(L.instrument)}.
@@ -916,7 +1028,7 @@ function coronaPanel(sun: SunState): string {
 /** Picks the right series and scaling for an instrument's detail sparkline. */
 function detailSpark(inst: { id: string; series?: string; unit: string }, state: StoreState): string {
   if (inst.id === 'kp' && state.kpSeries) {
-    return panelSpark(state.kpSeries, { band: [0, 4], unit: 'Kp', format: (v) => v.toFixed(2),
+    return panelSpark(state.kpSeries, { band: [0, 4], unit: 'Kp', format: (v) => v.toFixed(1),
       label: 'Kp history, quiet band shaded' });
   }
   if (inst.id === 'dst' && state.dstSeries) {
@@ -940,7 +1052,7 @@ function detailSpark(inst: { id: string; series?: string; unit: string }, state:
   }
   if (inst.id === 'xray' && state.xraySeries) {
     return panelSpark(state.xraySeries, { log: true, unit: 'W/m²',
-      format: (v) => v.toExponential(1), label: 'X-ray flux history, log scale' });
+      format: (v) => sci(v, 1), label: 'X-ray flux history, log scale' });
   }
   if (!inst.series || !state.series) return '';
   const col = inst.series as 'bz_gsm' | 'bt' | 'speed' | 'density';
@@ -1072,15 +1184,18 @@ export const NOTICES_SUBJECT = 'concept.noaa-notices';
  */
 export function renderNotices(
   alerts: AlertItem[], now: Date,
-  status: { error: string | null; checked: string | null } = { error: null, checked: null },
+  status: { error: string | null; checked: string | null; mirrored?: boolean; copyAt?: string | null } =
+    { error: null, checked: null },
 ): string {
   const items = [...alerts].sort((a, b) => Date.parse(b.issued) - Date.parse(a.issued));
   const list = items.map((a) => {
     const live = inForce(a, now);
     // An unreadable validity is still shown in force for a while; say until when.
     const held = !a.validityStated && live ? ` · held in force until ${whenUTC(a.validUntil, now)}` : '';
+    const tier = a.tier ?? (a.level === 'watch' || a.level === 'warning' ? 'D' : 'E');
     return `<li class="notice level-${live ? a.level : 'summary'}">
       <p class="notice-head"><span class="alert-level">${escapeHtml(noticeWord(a, now))}</span>
+        ${tierBadge(tier, tier === 'D' ? 'Modelled — NOAA’s forecast' : 'Measured — a threshold NOAA observed crossed')}
         <span class="notice-text">${escapeHtml(a.text || a.product)}</span></p>
       <p class="tile-meta">issued ${escapeHtml(whenUTC(a.issued, now))} ·
         ${escapeHtml(validityText(a, now) + held)}</p>
@@ -1089,16 +1204,20 @@ export function renderNotices(
   }).join('');
   const state = status.error
     ? `<span class="tile-state err"><span class="tile-state-word">unavailable</span> · ${escapeHtml(status.error)}</span>`
-    : `checked ${status.checked ? `${hhmmUTC(status.checked)} UTC` : NO_DATA}`;
+    : status.mirrored
+      ? `<span class="warn">Earth Star’s mirror · ${escapeHtml(copyTaken(status.copyAt, now))} · NOAA unreachable</span>`
+      : `checked ${status.checked ? whenUTC(status.checked, now) : NO_DATA}`;
   return `
     <p><button type="button" class="subject-link" data-back="report">‹ Situation Report</button></p>
     <h2>NOAA notices</h2>
-    <p class="tile-meta">${tierBadge('E', 'Measured — NOAA SWPC')}
-      NOAA SWPC products/alerts.json · ${state}</p>
+    <p class="tile-meta">NOAA SWPC products/alerts.json · ${state}</p>
     ${status.error ? '' : items.length
       ? `<p class="fine">Newest first. A chain of extensions or continuations shows as its
-        newest message. “In force” is NOAA’s own validity — how it is read is under
-        “What it does not say”, below.</p>
+        newest message. Alerts and summaries report a measured threshold ${tierBadge('E')};
+        watches and warnings are NOAA’s forecasts ${tierBadge('D')}. “In force” is NOAA’s
+        stated validity where it gives one; where it does not, Earth Star holds the notice
+        for 24 hours after issue and marks it “validity not stated”. An event NOAA reports
+        with only its start — a radio burst or sweep — is “reported”, never in force.</p>
         <ol class="notices">${list}</ol>`
       : '<p>The feed carried no notices.</p>'}
     ${renderSubjectProse(NOTICES_SUBJECT)}`;
@@ -1121,6 +1240,7 @@ export function renderDetail(
       : renderNotices(state.now?.data?.alerts ?? [], now, {
         error: st.state === 'error' ? st.label.replace(/^unavailable · /, '') : null,
         checked: state.now?.fetched_at ?? null,
+        mirrored: !!meta?.mirrored, copyAt: meta?.mirrored_at ?? null,
       });
   }
   const inst = INSTRUMENTS.find((i) => i.id === id);
@@ -1158,6 +1278,9 @@ export function renderDetail(
         // The unit is the reading's first use on this page, so its words stand beside it.
         WORDS[inst.unit] ? `<span class="unit-words">${WORDS[inst.unit]}</span>` : ''}
     </p>
+    ${inst.id === 'xray' && d?.xray?.flux_long != null
+      ? `<p>The class is cut from a flux of <b class="sentence-num">${sci(d.xray.flux_long, 1)}</b>
+        watts per square metre in the 0.1–0.8 nm band.</p>` : ''}
     <p class="tile-meta">${tierBadge(b, badgeTitle(meta))}
       ${liveHtml(escapeHtml(s.label))}</p>
     ${detailSpark(inst, state)}
@@ -1165,11 +1288,12 @@ export function renderDetail(
     ${meta ? `<table class="prov"><tbody>
       <tr><td>Tier</td><td>${escapeHtml(badgeTitle(meta))}</td></tr>
       <tr><td>Source</td><td><a href="${meta.source_url}" rel="noreferrer noopener" target="_blank">${escapeHtml(meta.source)}</a></td></tr>
-      <tr><td>Data time</td><td class="num">${meta.data_time ? `${hhmmUTC(meta.data_time)} UTC` : NO_DATA}</td></tr>
-      <tr><td>Latency</td><td class="num">${meta.latency_s === null ? NO_DATA : `${meta.latency_s}s`}</td></tr>
+      <tr><td>Data time</td><td class="num">${meta.data_time ? whenUTC(meta.data_time, now) : NO_DATA}</td></tr>
+      <tr><td>Latency</td><td class="num">${meta.latency_s === null ? NO_DATA : formatAge(meta.latency_s)}</td></tr>
       <tr><td>Stale after</td><td class="num">${Math.round(meta.stale_after_s / 60)} min</td></tr>
-      ${meta.mirrored ? `<tr><td>Transport</td><td class="warn">Earth Star mirror (stage B) —
-        NOAA was unreachable; these are its bytes and its timestamps, copied</td></tr>` : ''}
+      ${meta.mirrored ? `<tr><td>Transport</td><td class="warn">Earth Star mirror (stage B),
+        ${escapeHtml(copyTaken(meta.mirrored_at, now))} — NOAA was unreachable; these are its
+        bytes and its timestamps, copied</td></tr>` : ''}
       ${meta.error ? `<tr><td>Error</td><td class="err">${escapeHtml(meta.error)}</td></tr>` : ''}
     </tbody></table>` : '<p>No provenance recorded.</p>'}
     ${renderSubjectProse(inst.subject)}`;

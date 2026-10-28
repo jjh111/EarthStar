@@ -12,7 +12,8 @@
  * an old link opens what it still names and nothing else.
  *
  * `help` is a bare key: the help dialog is open, over whatever else the
- * address names, so Back closes it and a link can open it.
+ * address names, so Back closes it and a link can open it. `c` is the card
+ * open in the scene, by subject id: opening one is a step, so Back closes it.
  *
  * The splash links in through this: /viewer/#d=inst.kp, #d=inst.speed,
  * #d=inst.xray and #t=report (test/route.test.ts holds those four).
@@ -44,6 +45,8 @@ export interface Route {
   layers: Partial<Record<LayerId, boolean>>;
   /** The help dialog is open. */
   help?: true;
+  /** The card open in the scene, by subject id. */
+  card?: string;
 }
 
 /** Everything the address can say, as it is now. */
@@ -54,9 +57,10 @@ export interface RouteState {
   detail: string | null;
   layers: Record<LayerId, boolean>;
   help?: boolean;
+  card?: string | null;
 }
 
-const KEYS = new Set(['v', 's', 't', 'd', 'l', 'help']);
+const KEYS = new Set(['v', 's', 't', 'd', 'l', 'help', 'c']);
 
 function decode(s: string): string {
   try { return decodeURIComponent(s); } catch { return ''; }
@@ -100,6 +104,8 @@ export function parseHash(hash: string): Route | null {
       }
     } else if (k === 'help') {
       route.help = true;
+    } else if (k === 'c') {
+      if (subject(v)) route.card = v;
     }
   }
   return route;
@@ -115,6 +121,7 @@ export function formatHash(s: RouteState): string {
   const layers = LAYER_IDS.filter((id) => s.layers[id] !== DEFAULT_LAYERS[id])
     .map((id) => `${s.layers[id] ? '+' : '-'}${id}`);
   if (layers.length) out.push(`l=${layers.join(',')}`);
+  if (s.card) out.push(`c=${encodeURIComponent(s.card)}`);
   if (s.help) out.push('help');
   return out.length ? `#${out.join('&')}` : '';
 }

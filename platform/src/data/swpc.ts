@@ -335,6 +335,9 @@ function watchDays(message: string, issued: string): number[] {
   return out;
 }
 
+/** The notices that report an event rather than a condition: they carry only a Begin Time. */
+const EVENT_HEADLINE = /^(?:CONTINUED )?ALERT\s*:?\s*(?:Type II|Type IV|10 ?cm Radio Burst)/im;
+
 interface Validity {
   validFrom: string | null;
   validUntil: string | null;
@@ -350,10 +353,15 @@ interface Validity {
  *    extended.
  *  · ALERT with a synoptic period (the K-index alerts) — the end of that
  *    three-hour period.
- *  · any other ALERT, and CONTINUED ALERT — 24 h after issue, unless it states
- *    an end. NOAA reissues a CONTINUED ALERT daily for as long as the
- *    condition lasts, so a day without one means it has stopped. A SUMMARY of
- *    the same series ends it sooner (see `parseAlerts`).
+ *  · an ALERT that reports a one-off event — a Type II or Type IV radio sweep,
+ *    a 10 cm radio burst — with a Begin Time and nothing more: it happened,
+ *    it does not hold, so it is never in force and is said "reported".
+ *  · any other ALERT, and CONTINUED ALERT — held for 24 h after issue unless it
+ *    states an end, and flagged `validityStated: false`, because the 24 h is
+ *    Earth Star's rule and not NOAA's word. NOAA reissues a CONTINUED ALERT
+ *    daily for as long as the condition lasts, so a day without one means it
+ *    has stopped. A SUMMARY of the same series ends it sooner (see
+ *    `parseAlerts`).
  *  · WATCH — the end of the last UTC day it names, or 72 h after issue.
  *  · SUMMARY and CANCEL — already over: valid until the moment of issue.
  *  · anything the parser cannot read — 24 h after issue, flagged
@@ -375,7 +383,8 @@ function validity(
       if (stated) return { validFrom: from, validUntil: stated, validityStated: true };
       const period = synopticPeriod(field(lines, 'Synoptic Period'), began ?? issued);
       if (period) return { validFrom: period.from, validUntil: period.until, validityStated: true };
-      return { validFrom: from ?? began, validUntil: iso(t + DAY), validityStated: true };
+      if (EVENT_HEADLINE.test(message)) return { validFrom: began ?? issued, validUntil: issued, validityStated: true };
+      return { validFrom: from ?? began, validUntil: iso(t + DAY), validityStated: false };
     }
     case 'watch': {
       const days = watchDays(message, issued);
@@ -419,6 +428,7 @@ export function parseAlerts(json: unknown, limit = ALERT_LIMIT): AlertItem[] {
               : word === 'WATCH' ? 'watch'
                 : word === 'SUMMARY' ? 'summary' : 'other';
       const began = noaaTime(field(lines, 'Begin Time')) ?? noaaTime(field(lines, 'Threshold Reached'));
+      const valid = validity(level, lines, message, issued, began);
       return {
         issued, product: (r['product_id'] as string) ?? '', message, headline,
         level, text: (m?.[2] ?? headline).trim(),
@@ -427,7 +437,11 @@ export function parseAlerts(json: unknown, limit = ALERT_LIMIT): AlertItem[] {
           ?? field(lines, 'Continuation of Serial Number')
           ?? field(lines, 'Cancel Serial Number'),
         beganAt: began,
-        ...validity(level, lines, message, issued, began),
+        ...valid,
+        ...(level === 'alert' && EVENT_HEADLINE.test(message) && valid.validUntil === issued
+          ? { event: true } : {}),
+        // A watch or a warning is NOAA's forecast; the rest report a measurement.
+        tier: level === 'watch' || level === 'warning' ? 'D' : 'E',
       };
     })
     .filter((a): a is AlertItem => a !== null)

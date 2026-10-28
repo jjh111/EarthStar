@@ -13,7 +13,9 @@ import {
   BufferGeometry, Float32BufferAttribute, Group, Line, LineBasicMaterial,
   PerspectiveCamera, Vector3,
 } from 'three';
-import { isClick, pickAt, pickLayerAt, type Candidate } from '../src/scene/picking.js';
+import {
+  isClick, layerBeatsBody, pickAt, pickLayerAt, type Candidate, type LayerPick, type Pick,
+} from '../src/scene/picking.js';
 import { Pickables } from '../src/scene/pickables.js';
 
 const SIZE = { width: 800, height: 600 };
@@ -173,5 +175,36 @@ describe('telling a click from a camera move', () => {
     // A synthetic click, or one whose pointerdown landed elsewhere. Losing a
     // real click is worse than honouring an unusual one.
     expect(isClick(null, { x: 10, y: 10 })).toBe(true);
+  });
+});
+
+/**
+ * Which wins when a layer and a body are both under the pointer. At 1440×900
+ * a click on Earth's centre opened "Orbits and the Sun–Earth line" — the ring
+ * runs through Earth's centre — and the Sun's lower right opened the CME
+ * cones leaving it. Only what is drawn on a body's surface beats the body.
+ */
+describe('layerBeatsBody', () => {
+  const body = (id: string, r: number): Pick => ({
+    kind: id === 'Sun' ? 'sun' : 'planet', id, label: id, position: new Vector3(0, 0, 0), radius: r,
+    screen: { x: 0, y: 0 }, distancePx: 0, radiusPx: 30,
+  });
+  const hit = (subject: string, at = new Vector3(0, 0, 0)): LayerPick => ({ subject, screen: { x: 0, y: 0 }, point: at });
+  const r = (b: Pick) => b.radius;
+
+  it('gives the body a click on its centre, whatever line passes through it', () => {
+    for (const name of ['Earth', 'Sun', 'Venus']) {
+      for (const layer of ['layer.orbits', 'layer.cme-cones', 'layer.field-lines', 'layer.solar-wind',
+        'layer.magnetopause', 'layer.bow-shock']) {
+        expect(layerBeatsBody(hit(layer), body(name, 1), r), `${layer} on ${name}`).toBe(false);
+      }
+    }
+  });
+
+  it('still lets a quake marker or an active region on the surface win', () => {
+    expect(layerBeatsBody(hit('layer.quakes', new Vector3(1, 0, 0)), body('Earth', 1), r)).toBe(true);
+    expect(layerBeatsBody(hit('layer.active-regions', new Vector3(0, 0.99, 0)), body('Sun', 1), r)).toBe(true);
+    // Not one that is somewhere else entirely.
+    expect(layerBeatsBody(hit('layer.quakes', new Vector3(3, 0, 0)), body('Earth', 1), r)).toBe(false);
   });
 });

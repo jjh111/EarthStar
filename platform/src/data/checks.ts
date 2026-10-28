@@ -26,12 +26,19 @@ import { enlilAt, fetchEnlil } from './enlil.js';
 import { regionAgreement } from '../scene/region-agreement.js';
 import type { DiskCalibration } from '../scene/disk-calibration.js';
 import type { Vector3 } from 'three';
-import { hhmmUTC } from '../contract/types.js';
+import { minus, sci, whenUTC } from '../hud/format.js';
 
 export interface CheckRow {
   name: string;
   ours: string;
   theirs: string;
+  /**
+   * Whose figure `theirs` is. Not always NOAA's: a row may set our value
+   * against a second instrument (GOES), a grid (OVATION), our own second model
+   * (Shue 1998) or a calendar (IAGA's validity window), and crediting NOAA
+   * with any of those would misstate where the check's evidence comes from.
+   */
+  against: string;
   ok: boolean;
   note: string;
   /**
@@ -138,27 +145,40 @@ export async function runChecks(
     return (series.data[col] as (number | null)[])[idx] ?? null;
   };
 
-  const stamp = hhmmUTC(String(sm?.['time_tag'] ?? ''));
+  /** A time as the page writes one: today's HH:MM UTC, or with its date. */
+  const when = (raw: unknown): string => {
+    const s = String(raw ?? '').replace(' ', 'T');
+    return whenUTC(/Z$|[+-]\d{2}:?\d{2}$/.test(s) ? s : `${s}Z`);
+  };
+  /** A signed number as the panel writes it: U+2212 for the minus. */
+  const signed = (v: number | null | undefined, digits: number): string =>
+    v === null || v === undefined || !Number.isFinite(v) ? 'no data' : minus(v.toFixed(digits));
+  const theirsNum = (v: unknown): string => (v === null || v === undefined ? 'no data' : minus(String(v)));
+  const NOAA = 'NOAA SWPC';
+  const stamp = when(sm?.['time_tag']);
   rows.push({
     name: 'IMF Bz (GSM), nT',
-    ours: at(sm?.['time_tag'], 'bz_gsm')?.toFixed(2) ?? 'no data',
-    theirs: String(sm?.['bz_gsm'] ?? 'no data'),
+    ours: signed(at(sm?.['time_tag'], 'bz_gsm'), 2),
+    theirs: theirsNum(sm?.['bz_gsm']),
+    against: NOAA,
     ok: near(at(sm?.['time_tag'], 'bz_gsm'), Number(sm?.['bz_gsm']), 0.55),
-    note: `both at ${stamp} UTC · tol ±0.55 (their integer rounding)`,
+    note: `both at ${stamp} · tol ±0.55 (their integer rounding)`,
   });
   rows.push({
     name: 'IMF total Bt, nT',
-    ours: at(sm?.['time_tag'], 'bt')?.toFixed(2) ?? 'no data',
-    theirs: String(sm?.['bt'] ?? 'no data'),
+    ours: signed(at(sm?.['time_tag'], 'bt'), 2),
+    theirs: theirsNum(sm?.['bt']),
+    against: NOAA,
     ok: near(at(sm?.['time_tag'], 'bt'), Number(sm?.['bt']), 0.55),
-    note: `both at ${stamp} UTC · tol ±0.55`,
+    note: `both at ${stamp} · tol ±0.55`,
   });
   rows.push({
     name: 'Solar wind speed, km/s',
-    ours: at(sp?.['time_tag'], 'speed')?.toFixed(1) ?? 'no data',
-    theirs: String(sp?.['proton_speed'] ?? 'no data'),
+    ours: signed(at(sp?.['time_tag'], 'speed'), 1),
+    theirs: theirsNum(sp?.['proton_speed']),
+    against: NOAA,
     ok: near(at(sp?.['time_tag'], 'speed'), Number(sp?.['proton_speed']), 1.5),
-    note: `both at ${hhmmUTC(String(sp?.['time_tag'] ?? ''))} UTC · tol ±1.5`,
+    note: `both at ${when(sp?.['time_tag'])} · tol ±1.5`,
   });
 
   // Our class, from our parsed flux, against the label SWPC publishes elsewhere.
@@ -168,9 +188,10 @@ export async function runChecks(
     name: 'X-ray class',
     ours: ourClass ?? 'no data',
     theirs: theirClass || 'no data',
+    against: NOAA,
     ok: !!ourClass && !!theirClass && ourClass[0] === theirClass[0]
       && Math.abs(parseFloat(ourClass.slice(1)) - parseFloat(theirClass.slice(1))) <= 0.35,
-    note: `our thresholds on our parsed flux (${d.xray?.flux_long ? d.xray.flux_long.toExponential(2) : '—'} W/m²) `
+    note: `our thresholds on our parsed flux (${d.xray?.flux_long ? `${sci(d.xray.flux_long, 2)} W/m²` : 'no data'}) `
       + `vs SWPC's published label. This row caught current_int_xrlong being read as a flux.`,
   });
 
@@ -189,8 +210,9 @@ export async function runChecks(
     name: 'Planetary Kp (estimated)',
     ours: d.kp?.estimated_kp?.toFixed(2) ?? 'no data',
     theirs: theirKp ? String(theirKp['estimated_kp']) : 'minute not in feed',
+    against: NOAA,
     ok: !!theirKp && near(d.kp?.estimated_kp ?? null, Number(theirKp['estimated_kp']), 0.001),
-    note: `both at ${hhmmUTC(ourKpTime)} UTC · exact match required. Checks our `
+    note: `both at ${ourKpTime ? whenUTC(ourKpTime) : 'no time'} · exact match required. Checks our `
       + `newest-record selection against the same minute upstream.`,
   });
 
@@ -202,6 +224,7 @@ export async function runChecks(
     name: 'L1 spacecraft selected',
     ours: d.solar_wind?.spacecraft ?? 'no data',
     theirs: activeSources.join(', ') || 'none flagged active',
+    against: NOAA,
     ok: !!d.solar_wind?.spacecraft && activeSources.includes(d.solar_wind.spacecraft),
     note: `the feed interleaves several spacecraft; newest of ANY source right now is `
       + `"${String(newestAny['source'])}". Taking that instead is the bug this row guards.`,
@@ -227,10 +250,12 @@ export async function runChecks(
       name: 'Shield model vs GOES at 6.6 Rₑ',
       ours: `standoff ${standoff.toFixed(1)} Rₑ → ${insideModel ? 'inside' : 'OUTSIDE'}`,
       theirs: `${g.total_nt.toFixed(0)} nT → ${looksInside ? 'inside' : 'outside'}`,
+      against: `GOES-${g.satellite ?? '?'}`,
       ok: insideModel === looksInside,
       note: `Dipole at 6.6 Rₑ is ${dipole.toFixed(0)} nT; GOES-${g.satellite ?? '?'} reads `
-        + `${g.total_nt.toFixed(0)} nT, a deficit of ${(dipole - g.total_nt).toFixed(0)} nT `
-        + `from the ring and magnetopause currents. The check is the agreement of the two `
+        + `${Math.abs(dipole - g.total_nt).toFixed(0)} nT ${dipole - g.total_nt >= 0 ? 'below' : 'above'} `
+        + `it — ${dipole - g.total_nt >= 0 ? 'the ring current and the magnetopause currents taking from'
+          : 'on the dayside the magnetopause currents adding to'} Earth's own field. The check is the agreement of the two `
         + `verdicts, not the numbers — Shue's boundary and this magnetometer are `
         + `independent.${g.arcjet ? ' NOTE: thruster firing, reading suspect.' : ''}`,
     });
@@ -282,6 +307,7 @@ export async function runChecks(
         name: 'Aurora oval displaced toward magnetic midnight',
         ours: `centroid bears ${toCentroid.toFixed(0)}° from the pole`,
         theirs: `midnight bears ${toMidnight.toFixed(0)}°`,
+        against: 'OVATION grid',
         // The claim is deliberately weak, because the centroid is a coarse
         // statistic: a probability-weighted mean over a 45° latitude band that
         // includes the dayside cusp. What it can honestly assert is which half
@@ -297,7 +323,7 @@ export async function runChecks(
   } else {
     rows.push({
       name: 'Aurora oval displaced toward magnetic midnight',
-      ours: 'no data', theirs: '—', ok: false,
+      ours: 'no data', theirs: '—', against: 'OVATION grid', ok: false,
       // Absent evidence, not contradictory evidence. The grid is the largest
       // payload the Viewer fetches and it does occasionally fail to arrive;
       // calling that DRIFT accuses the orientation maths of a fault the run
@@ -324,6 +350,7 @@ export async function runChecks(
     name: 'Operational L1 spacecraft',
     ours: windActive ?? 'no data',
     theirs: ephemActive ?? 'no data',
+    against: NOAA,
     ok: !!windActive && windActive === ephemActive,
     note: pos
       ? `wind/mag feed vs ephemeris feed · ${pos.distanceRe.toFixed(0)} Rₑ upstream, `
@@ -361,8 +388,9 @@ export async function runChecks(
     const word = ['quiet', 'disturbed', 'severe'];
     rows.push({
       name: 'Modelled Dst vs measured Kp',
-      ours: `Dst ${dstNow.toFixed(0)} nT → ${word[dstBand]}`,
-      theirs: `Kp ${kpNow.toFixed(2)} → ${word[kpBand]}`,
+      ours: `Dst ${signed(dstNow, 0)} nT → ${word[dstBand]}`,
+      theirs: `Kp ${kpNow.toFixed(1)} → ${word[kpBand]}`,
+      against: 'NOAA Kp',
       ok: gap === 0,
       inconclusive: gap === 1,
       note: gap >= 2
@@ -407,9 +435,10 @@ export async function runChecks(
         name: 'WSA-Enlil hindcast vs measured wind',
         ours: `measured ${arriving.speed.toFixed(0)} km/s`,
         theirs: `Enlil ${at.speed.toFixed(0)} km/s`,
+        against: 'WSA-Enlil',
         ok: Math.abs(delta) <= 200,
-        note: `${delta >= 0 ? '+' : ''}${delta.toFixed(0)} km/s (${pct.toFixed(0)}%) at `
-          + `${hhmmUTC(arriving.arrives_at)} UTC. Enlil is driven by solar magnetograms and `
+        note: `${delta >= 0 ? '+' : ''}${signed(delta, 0)} km/s (${signed(pct, 0)}%) at `
+          + `${whenUTC(arriving.arrives_at)}. Enlil is driven by solar magnetograms and `
           + `CME cone fits and never sees L1, so this is a model against a measurement of `
           + `the same quantity. The tolerance is ±200 km/s: it catches a misread column or `
           + `a time misalignment, not ordinary forecast error.`,
@@ -451,6 +480,7 @@ export async function runChecks(
         name: 'Solar imagery lines up with the region list',
         ours: `${agree.ratio.toFixed(2)}x disk mean at ${agree.tested} reported positions`,
         theirs: `${agree.mirroredRatio.toFixed(2)}x mirrored east–west`,
+        against: 'NOAA region list',
         ok: decisive && margin > 1,
         inconclusive: !decisive,
         note: decisive
@@ -501,6 +531,7 @@ export async function runChecks(
       name: 'Dayside standoff: T89 (Kp) vs Shue 1998 (wind)',
       ours: t89Nose === null ? 'no Kp' : `${t89Nose.toFixed(1)} Rₑ`,
       theirs: windMp === null ? 'no wind' : `${windMp.r0Re.toFixed(1)} Rₑ`,
+      against: 'Shue 1998 (ours)',
       ok: false,
       inconclusive: true,
       note: 'One of the two drivers is missing, so there is nothing to compare. '
@@ -531,9 +562,10 @@ export async function runChecks(
       name: 'Dayside standoff: T89 (Kp) vs Shue 1998 (wind)',
       ours: `${t89Nose.toFixed(1)} Rₑ at Kp ${kpNow.toFixed(1)} (${t89BandLabel(band)})`,
       theirs: `${windMp.r0Re.toFixed(1)} Rₑ from ${windMp.dynPressureNPa.toFixed(2)} nPa`,
+      against: 'Shue 1998 (ours)',
       ok: Math.abs(gap) <= TOL_RE,
       inconclusive: midBand && Math.abs(gap) > TOL_RE,
-      note: `${gap >= 0 ? '+' : ''}${gap.toFixed(2)} Rₑ. Ours is the sunward reach of the last `
+      note: `${gap >= 0 ? '+' : ''}${signed(gap, 2)} Rₑ. Ours is the sunward reach of the last `
         + `closed field line through the traced field — T89's own answer, since the model has `
         + `no boundary in it. Theirs is the Shue nose from the propagated wind. `
         + `The two share no inputs. `
@@ -581,6 +613,7 @@ export async function runChecks(
       name: 'Dayside standoff: T96 vs Shue 1998, pressure response',
       ours: 'no wind',
       theirs: 'no wind',
+      against: 'Shue 1998 (ours)',
       ok: false,
       inconclusive: true,
       note: 'Both need the measured wind, and it has not arrived. Absent evidence, '
@@ -602,8 +635,9 @@ export async function runChecks(
       name: 'Dayside standoff: T96 vs Shue 1998, pressure response',
       ours: `${t96Nose.toFixed(2)} Rₑ from ${windMp.dynPressureNPa.toFixed(2)} nPa`,
       theirs: `${shueNoBz.toFixed(2)} Rₑ, same pressure at Bz 0`,
+      against: 'Shue 1998 (ours)',
       ok: offset >= LO_RE && offset <= HI_RE,
-      note: `${offset >= 0 ? '+' : ''}${offset.toFixed(2)} Rₑ apart on pressure alone, `
+      note: `${offset >= 0 ? '+' : ''}${signed(offset, 2)} Rₑ apart on pressure alone, `
         + `against ${LO_RE}–${HI_RE} Rₑ measured across the whole plausible wind. Two `
         + `independent fits to different spacecraft databases, agreeing on how hard the `
         + `wind pushes to about 8%. `
@@ -634,6 +668,7 @@ export async function runChecks(
     name: 'Field model inside its published validity',
     ours: `${yearNow.toFixed(2)}`,
     theirs: `IGRF-14, ${IGRF_EPOCH.toFixed(1)}–${IGRF_VALID_UNTIL.toFixed(1)}`,
+    against: 'IAGA',
     ok: igrfInValidity(new Date()),
     note: yearsLeft >= 0
       ? `${yearsLeft.toFixed(1)} years of validity remain; IAGA reissues the model every five `

@@ -121,6 +121,17 @@ export interface AlertItem {
    * ended on the day it was issued.
    */
   validityStated: boolean;
+  /**
+   * A one-off event NOAA reports with a Begin Time and nothing else — a Type II
+   * or Type IV radio sweep, a 10 cm radio burst. It happened; it does not hold.
+   * Never in force, and said "reported" rather than "now".
+   */
+  event?: boolean;
+  /**
+   * The notice's own evidence tier. An alert or a summary reports a measured
+   * threshold crossed [E]; a watch or a warning is NOAA's forecast [D].
+   */
+  tier?: Badge;
 }
 
 export interface MagnetopauseNow {
@@ -260,7 +271,7 @@ export function hhmmUTC(iso: string | null | undefined): string {
 export function formatAge(seconds: number): string {
   if (!Number.isFinite(seconds)) return 'unknown';
   const s = Math.max(0, Math.round(seconds));
-  if (s < 90) return `${s}s`;
+  if (s < 90) return `${s} s`;
   const m = Math.round(s / 60);
   if (m < 90) return `${m} min`;
   return `${(m / 60).toFixed(1)} h`;

@@ -90,15 +90,19 @@ export function scaleLabel(mode: ScaleMode): string {
  * shows one only while the body is drawn too small to make out (at true scale,
  * every planet), and Earth, the Moon and the Sun never carry one.
  */
-export function scaleNote(mode: ScaleMode): { text: string; flip: string } {
+export function scaleNote(mode: ScaleMode): { text: string; short: string; flip: string } {
+  // `short` is the note on a phone, one line over the band's top: the same
+  // claim, the compression stated, in what 360 px has room for.
   return mode === 'globe'
     ? {
       text: 'Globe scale · distances log-compressed, bodies enlarged '
         + `(Earth ×${GLOBE_EXAGGERATION.Earth}, Sun ×${GLOBE_EXAGGERATION.Sun})`,
+      short: `Globe · Earth ×${GLOBE_EXAGGERATION.Earth}, Sun ×${GLOBE_EXAGGERATION.Sun} ·`,
       flip: 'Show true scale',
     }
     : {
       text: 'True scale · distances and sizes to scale; rings mark planets too small to see',
+      short: 'True scale · sizes and distances ·',
       flip: 'Show globe scale',
     };
 }

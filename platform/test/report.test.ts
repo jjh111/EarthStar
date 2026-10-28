@@ -10,6 +10,11 @@
  * It has changed once since, on purpose: each code written in words where the
  * report first uses it (nanotesla (nT), particle flux units (pfu), Earth radii
  * (Rₑ), L1), Kp to one decimal with NOAA's thirds, and U+2212 for a minus.
+ * And twice: X-ray flux as "1.2 × 10⁻⁵", and the boundaries "re-shaped by the
+ * measured solar wind" rather than the live one, which on old data it is not.
+ * The same sky three hours and two days on is held too: every paragraph says
+ * its own reading is stale, nothing is "right now" or "today", and no time
+ * from another day is written as a bare clock time.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -39,8 +44,8 @@ const env = {
     magnetopause: { standoff_re: 8.4, alpha: 0.6, dyn_pressure_npa: 4.2, bow_shock_re: 10.9 },
     geosync: { time: '2026-09-07T18:05:00Z', total_nt: 96, deficit_nt: 12, satellite: 19, arcjet: false },
     particles: { time: '2026-09-07T18:00:00Z', proton_10mev: 0.3, s_scale: 0, s_text: 'None', electron_2mev: 1400 },
-    propagated: { observed_at: '2026-09-07T17:20:00Z', bz: -8, speed: 490, lead_minutes: 40,
-      density: 20 },
+    propagated: { observed_at: '2026-09-07T17:20:00Z', arrives_at: '2026-09-07T18:08:00Z', bz: -8,
+      speed: 490, lead_minutes: 40, density: 20 },
     dst: { time: '2026-09-07T18:09:00Z', value_nt: -64, level: 'moderate storm', lead_minutes: 25 },
   },
   parts: Object.fromEntries(['solar_wind','kp','xray','scales','alerts','magnetopause',
@@ -52,10 +57,10 @@ const scene = {
   cmes: { shown: true, count: 2 },
   fieldLines: { lines: 80, points: 9000, far: false,
     external: { name: 't89', band: 5 }, tiltDeg: 12.7, truncated: 4 },
-  aurora: true, wind: true, earthSurface: 'imagery',
+  aurora: true, wind: true, earthSurface: 'imagery', boundaries: true,
 } as never;
 
-const FIXTURE: { live: string[]; cold: string[] } = JSON.parse(
+const FIXTURE: { live: string[]; cold: string[]; stale3h: string[]; stale48h: string[] } = JSON.parse(
   readFileSync(new URL('./fixtures/report-briefing.json', import.meta.url), 'utf8'),
 );
 
@@ -63,6 +68,37 @@ describe('the briefing export', () => {
   it('is exactly what it was before the report gained sections', () => {
     expect(buildSituationReport(env, scene, NOW, null, [], [])).toEqual(FIXTURE.live);
     expect(buildSituationReport(null, scene, NOW, null, [], [])).toEqual(FIXTURE.cold);
+  });
+
+  it('ages honestly: the same sky three hours and two days on', () => {
+    const later = (h: number) => new Date(NOW.getTime() + h * 3.6e6);
+    expect(buildSituationReport(env, scene, later(3), null, [], [])).toEqual(FIXTURE.stale3h);
+    expect(buildSituationReport(env, scene, later(48), null, [], [])).toEqual(FIXTURE.stale48h);
+  });
+
+  it('two days on, says nothing is now, nothing is today, and dates every time', () => {
+    const at = new Date(NOW.getTime() + 48 * 3.6e6);
+    const text = buildSituationReport(env, scene, at, null, [], []).join(' ');
+    expect(text).not.toContain('right now');
+    // ("today's clouds", which the Earth's imagery is said not to be, is not a claim of now.)
+    expect(text).not.toMatch(/\btoday\b(?!['’]s)/);
+    // A bare HH:MM is only ever today's: here, the scene's own clock.
+    const clock = at.toISOString().slice(11, 16);
+    for (const m of text.matchAll(/(\d{2} [A-Z][a-z]{2} )?(\d{2}:\d{2}) UTC/g)) {
+      if (!m[1]) expect(m[2]).toBe(clock);
+    }
+    // Every measured paragraph says its reading is stale.
+    for (const lead of ['GOES-19 measures', 'Energetic particles', 'Planetary K index', 'NOAA scales at',
+      'Modeled [D] magnetopause standoff', 'Solar X-ray background']) {
+      const para = buildSituationReport(env, scene, at, null, [], []).find((l) => l.startsWith(lead));
+      expect(para, lead).toMatch(/STALE, 48\.\d h old/);
+    }
+  });
+
+  it('three hours on, the propagated wind is no longer "what is reaching Earth right now"', () => {
+    const text = buildSituationReport(env, scene, new Date(NOW.getTime() + 3 * 3.6e6), null, [], []).join(' ');
+    expect(text).not.toContain('right now');
+    expect(text).toContain('the newest propagated wind reached Earth at 18:08 UTC, 3.0 h ago; nothing newer is known');
   });
 
   it('says the same words as the structured build, in the same order', () => {

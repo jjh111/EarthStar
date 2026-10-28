@@ -72,6 +72,34 @@ const mirrored = new Set<string>();
 export function servedFromMirror(url: string): boolean { return mirrored.has(url); }
 export function anyServedFromMirror(): boolean { return mirrored.size > 0; }
 
+/**
+ * When Earth Star's copy was taken — the manifest's `mirrored_at` — or null
+ * while it is unknown. Every value on the mirror keeps NOAA's own timestamp,
+ * so ages stay true; what the bytes cannot say is how long ago they were
+ * copied, and "No NOAA notice in force · checked 13:33" on a copy taken two
+ * days earlier would claim a look NOAA never answered. Read once, the first
+ * time anything is served from the mirror; the workflow rewrites it every few
+ * hours, so a session that stays on the mirror reads it again after an hour.
+ */
+let captured: { at: string | null; read: number } | null = null;
+let capturing: Promise<void> | null = null;
+const MANIFEST_TTL_MS = 3_600_000;
+
+export function mirrorCapturedAt(): string | null { return captured?.at ?? null; }
+
+async function readManifest(signal?: AbortSignal): Promise<void> {
+  if (captured && Date.now() - captured.read < MANIFEST_TTL_MS) return;
+  capturing ??= (async () => {
+    const m = await attempt<{ mirrored_at?: unknown }>(`${MIRROR_BASE}/manifest.json`, signal);
+    const at = typeof m.json?.mirrored_at === 'string' && Number.isFinite(Date.parse(m.json.mirrored_at))
+      ? m.json.mirrored_at : null;
+    // A manifest that could not be read leaves the time unknown, said as such;
+    // it is not retried until the hour is up, so a dead one costs one request.
+    captured = { at: at ?? captured?.at ?? null, read: Date.now() };
+  })().finally(() => { capturing = null; });
+  await capturing;
+}
+
 /** One attempt. `retryable` means no answer arrived — as opposed to a status
  *  the server actually returned. */
 async function attempt<T>(
@@ -141,6 +169,7 @@ export async function get<T>(
     return { json: null, error: second.error ?? 'unreachable' };
   }
   mirrored.add(url);
+  await readManifest(signal);
   return { json: third.json, mirrored: true };
 }
 

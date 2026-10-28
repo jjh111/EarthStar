@@ -193,15 +193,17 @@ const CONCEPTS: Subject[] = [
       + 'message’s serial, validity and onset are parsed out of its own text; a chain of '
       + 'extensions, continuations or a cancellation collapses to its newest message, and '
       + 'the message itself is shown exactly as NOAA wrote it.',
-    limits: 'In force means inside NOAA’s own validity: a warning until its Valid To or Now '
-      + 'Valid Until, a K-index alert until its three-hour synoptic period ends, any other '
-      + 'alert for 24 hours after issue or until NOAA’s summary of it (NOAA reissues a '
-      + 'continuing alert daily), a watch '
-      + 'until the end of the last day it names, and a summary or cancellation not at all; '
-      + 'a notice whose wording the parser cannot read is held in force for 24 hours and '
-      + 'marked “validity not stated”, so a change in NOAA’s format errs toward showing a '
-      + 'notice rather than ending it. The feed holds about a month, and the panel keeps '
-      + 'its newest twenty notices.',
+    limits: '“In force” is NOAA’s stated validity where it gives one: a warning until its '
+      + 'Valid To or Now Valid Until, a K-index alert until its three-hour synoptic period '
+      + 'ends, a watch until the end of the last day it names, and a summary or '
+      + 'cancellation not at all. Where NOAA states none — most alerts, and any wording the '
+      + 'parser cannot read — Earth Star holds the notice for 24 hours after issue, or until '
+      + 'NOAA’s summary of it, and marks it “validity not stated”: that window is ours, not '
+      + 'NOAA’s (NOAA reissues a continuing alert daily, which is why it is a day). An '
+      + 'event NOAA reports with only its start — a Type II or IV radio sweep, a 10 cm '
+      + 'burst — is “reported”, never in force. Alerts and summaries report a threshold '
+      + 'measured as crossed [E]; watches and warnings are NOAA’s forecasts [D]. The feed '
+      + 'holds about a month, and the panel keeps its newest twenty notices.',
     sources: [{ name: 'NOAA SWPC products/alerts.json',
       url: 'https://services.swpc.noaa.gov/products/alerts.json' }],
     related: ['inst.kp', 'inst.electrons', 'inst.protons', 'inst.xray'],
@@ -768,10 +770,11 @@ const MEASUREMENTS: Subject[] = [
     howMade: 'NOAA’s estimated Kp, updated every minute from a network of ground '
       + 'magnetometers, ahead of the definitive three-hourly index.',
     limits: 'A range over three hours, quantised to thirds, and a planetary average — it '
-      + 'says nothing about where the disturbance is. It is also the only thing driving '
-      + 'T89, so the drawn magnetosphere inherits its coarseness: seven bands, stepping.',
+      + 'says nothing about where the disturbance is. Kp drives T89, the fallback, and the '
+      + 'drawn magnetosphere then inherits its coarseness: seven bands, stepping. Under '
+      + 'T96, the usual case, the drawn field takes the wind, Dst and the IMF instead.',
     sources: [SWPC],
-    related: ['model.t89', 'layer.field-lines', 'inst.dst', 'model.ovation',
+    related: ['model.t89', 'model.t96', 'layer.field-lines', 'inst.dst', 'model.ovation',
       'concept.noaa-notices'],
   },
   {
@@ -786,10 +789,11 @@ const MEASUREMENTS: Subject[] = [
       + 'NOAA’s real-time solar wind stream at L1, about an hour upstream.',
     limits: 'One point in a wind that is not uniform: the spacecraft sits tens of Earth '
       + 'radii off the Sun–Earth line, so what it measures is not exactly what arrives. '
-      + 'And nothing in the rendered magnetosphere responds to it — T89 has no IMF term, '
-      + 'so this number predicts a storm the drawn shape cannot show.',
+      + 'Under T96, the usual case, Bz and By reshape the drawn field lines; under the T89 '
+      + 'fallback, used when the wind is incomplete, nothing drawn responds to it. The '
+      + 'Shue boundary takes Bz in both.',
     sources: [SWPC],
-    related: ['concept.reconnection', 'model.t89', 'inst.bt', 'layer.solar-wind',
+    related: ['concept.reconnection', 'model.t96', 'model.t89', 'inst.bt', 'layer.solar-wind',
       'model.shue1998'],
   },
   {
@@ -904,10 +908,10 @@ const MEASUREMENTS: Subject[] = [
     limits: 'MODELLED, not Kyoto’s measured index, which has no route into a browser. '
       + 'Because the model propagates the wind to Earth it runs ahead of the clock, so the '
       + 'value shown is the newest that has actually arrived and the panel says how far '
-      + 'the forecast reaches beyond it. T89 does respond to the ring current, but through '
-      + 'Kp rather than through this number.',
+      + 'the forecast reaches beyond it. Under T96 this Dst drives the drawn field; under '
+      + 'the T89 fallback the ring current enters only through Kp.',
     sources: [SWPC],
-    related: ['model.geospace-dst', 'model.t89', 'inst.kp', 'inst.geosync'],
+    related: ['model.geospace-dst', 'model.t96', 'model.t89', 'inst.kp', 'inst.geosync'],
   },
   {
     id: 'inst.mpause', kind: 'measurement', tier: 'D', label: 'Magnetopause',
@@ -969,10 +973,9 @@ const BODIES: Subject[] = [
     'The induced ionospheric interaction is not modelled or drawn.',
     ['body.earth', 'body.mars']),
   body('earth', 'Earth', 'The only planet here with a strong, stable dipole.',
-    'The only planet here with a strong, stable dipole. Everything else in this '
-    + 'instrument is about what that field is doing today.',
+    'Everything else in this instrument is about what that field is doing today.',
     'The globe’s surface imagery is a fixed composite, not today’s cloud.',
-    ['model.igrf14', 'model.t89', 'layer.field-lines', 'layer.terminator', 'layer.aurora']),
+    ['model.igrf14', 'model.t96', 'model.t89', 'layer.field-lines', 'layer.terminator', 'layer.aurora']),
   body('mars', 'Mars', 'Lost its global field, and much of its atmosphere with it.',
     'Lost its global field roughly four billion years ago and kept only crustal '
     + 'patches. MAVEN measured the wind stripping the atmosphere at a rate that, over '

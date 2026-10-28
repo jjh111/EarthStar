@@ -8,7 +8,7 @@
  * `null` + an `error` on its PartMeta, which the HUD renders as "no data".
  */
 
-import { getJson, servedFromMirror } from './fetch-json.js';
+import { getJson, mirrorCapturedAt, servedFromMirror } from './fetch-json.js';
 import type { AuroraNow, Envelope, Now, SolarWindSeries } from '../contract/types.js';
 import { PARTICLE_URL, parseParticles, seriesFor } from './particles.js';
 import { PROPAGATED_URL, parsePropagated } from './geospace.js';
@@ -80,7 +80,7 @@ function meta(
     stale_after_s: staleAfter, ...(error ? { error } : {}),
     // Keyed by the upstream URL, which is the one this function is given —
     // so provenance costs nothing at fifteen call sites.
-    ...(servedFromMirror(url) ? { mirrored: true } : {}),
+    ...(servedFromMirror(url) ? { mirrored: true, mirrored_at: mirrorCapturedAt() } : {}),
   };
 }
 

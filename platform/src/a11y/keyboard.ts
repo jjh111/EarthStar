@@ -11,7 +11,7 @@
 
 import { VIEWS } from '../scene/camera-rig.js';
 export interface KeyActions {
-  /** Number keys 1..5 select a view, in the order they appear in the header. */
+  /** Number keys 1..6 select a view, in the order they appear in the header. */
   view(index: number): void;
   toggleScale(): void;
   toggleMotion(): void;
@@ -31,7 +31,7 @@ export interface KeyActions {
 export const SCENE_KEYS: [string, string][] = [
   // Built from the view list, so it cannot drift from what the keys select
   // (it once announced "Overhead, System" for keys that chose Polar and Corona).
-  ['1–5', `${VIEWS.slice(0, 5).map((v) => v.label).join(', ')} views`],
+  ['1–6', `${VIEWS.slice(0, 6).map((v) => v.label).join(', ')} views`],
   ['s', 'Globe or True scale'],
   ['m', 'Motion on or off'], ['f', 'The magnetic field'],
   ['a', 'The aurora oval'], ['w', 'The solar wind stream'], ['c', 'CME cones'],
@@ -80,7 +80,7 @@ export function installKeyboard(actions: KeyActions): () => void {
     if (scope !== 'scene' || selected) return;
 
     switch (e.key) {
-      case '1': case '2': case '3': case '4': case '5':
+      case '1': case '2': case '3': case '4': case '5': case '6':
         actions.view(Number(e.key) - 1); break;
       case 's': case 'S': actions.toggleScale(); break;
       case 'm': case 'M': actions.toggleMotion(); break;

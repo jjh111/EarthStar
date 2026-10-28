@@ -66,6 +66,26 @@ describe('selecting the newest rows', () => {
   });
 });
 
+describe('a forecast run keeps the rows around the copy', () => {
+  it('keeps the hours either side of now, not the far end of the run', () => {
+    // Enlil's shape: three days of hindcast and four of forecast, newest-first.
+    const rows = Array.from({ length: 2000 }, (_, i) => at(minutes(4000 - i * 5)));
+    const now = Date.UTC(2026, 8, 8, 12, 0, 0);
+    const { value, trimmed } = trim(rows, 100, now) as { value: typeof rows; trimmed: boolean };
+    expect(trimmed).toBe(true);
+    // A row either side at the same distance from now is kept, as a tie at
+    // the cutoff always is.
+    expect(value.length).toBeGreaterThanOrEqual(100);
+    expect(value.length).toBeLessThanOrEqual(101);
+    const times = value.map((r) => Date.parse(`${r.time_tag}Z`));
+    expect(Math.min(...times)).toBeLessThanOrEqual(now);
+    expect(Math.max(...times)).toBeGreaterThan(now);
+    // Without `around`, the same call keeps the run's far end, nowhere near now.
+    const tail = trim(rows, 100) as { value: typeof rows };
+    expect(Math.min(...tail.value.map((r) => Date.parse(`${r.time_tag}Z`)))).toBeGreaterThan(now + 2 * 864e5);
+  });
+});
+
 describe('archives are copied whole', () => {
   /** The sunspot record: monthly, dated to the month only, back to 1749. */
   const sunspots = Array.from({ length: 3332 }, (_, i) => ({

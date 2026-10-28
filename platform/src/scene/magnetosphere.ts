@@ -203,6 +203,8 @@ export class FieldLines {
   private external: ExternalField | null = null;
   /** A retrace in progress, spread over frames. See `ensureTraced`. */
   private job: TraceJob | null = null;
+  /** A new set of lines is on screen — for whatever narrates them. */
+  onTraced: (() => void) | null = null;
 
   constructor() {
     this.group.name = 'field-lines-igrf14-external';
@@ -281,6 +283,7 @@ export class FieldLines {
     this.truncated = job.done.filter((l) => l.truncated).length;
     this.build(job.done);
     this.job = null;
+    this.onTraced?.();
   }
 
   /** True while a retrace is still being spread across frames. */
