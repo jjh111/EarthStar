@@ -83,10 +83,33 @@ async function run(name, viewport) {
   await p.evaluate(() => scrollTo(0, 0));
   const earth = await p.evaluate(() => window.__viewer?.earthScreen());
   if (earth) {
+    const at = () => p.evaluate(() => ({
+      idx: navigation.currentEntry?.index, hash: location.hash,
+      help: !!document.getElementById('help')?.open,
+      card: document.querySelector('.subject-card')?.hidden === false,
+    }));
+    const base = (await at()).idx;
     await p.mouse.click(Math.round(earth.x), Math.round(earth.y));
     await p.waitForTimeout(600);
     total += await scan('scene card');
+    // The help over the card owns Escape: the first closes the help and
+    // leaves the card, on its own history entry; the second closes the card
+    // and lands on the entry before it, so Back has no dead step after.
+    const card = await at();
+    await p.keyboard.press('Shift+Slash');
+    await p.waitForTimeout(400);
     await p.keyboard.press('Escape');
+    await p.waitForTimeout(400);
+    const esc1 = await at();
+    await p.keyboard.press('Escape');
+    await p.waitForTimeout(400);
+    const esc2 = await at();
+    const ok = card.card && card.idx === base + 1
+      && !esc1.help && esc1.card && esc1.hash.includes('c=') && esc1.idx === card.idx
+      && !esc2.card && esc2.idx === base;
+    console.log(`  card, ?, Escape, Escape: ${ok ? 'help then card, back to the entry before'
+      : `wrong — base ${base}, card ${JSON.stringify(card)}, Esc1 ${JSON.stringify(esc1)}, Esc2 ${JSON.stringify(esc2)}`}`);
+    if (!ok) total += 1;
   }
   // And the help, opened the way a reader opens it: ? from the page.
   await p.evaluate(() => document.activeElement?.blur());

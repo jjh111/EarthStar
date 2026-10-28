@@ -490,6 +490,9 @@ header.top {
   font-family: var(--mono); font-size: var(--t-0); font-weight: 700;
   border: 1px solid currentColor; border-radius: 2px;
   padding: 0 0.2rem; letter-spacing: 0.03em; flex: none;
+  /* The sr-only " modelled" inside starts with a space, which let a narrow
+     cell break the badge in two. */
+  white-space: nowrap;
 }
 .badge-e { color: var(--badge-e); }
 .badge-d { color: var(--badge-d); }
@@ -714,6 +717,13 @@ kbd {
 }
 .prov td { color: var(--ink-dim); }
 .prov .num { font-family: var(--mono); color: var(--ink); white-space: nowrap; }
+/* The time and the state under the source, so the table needs three columns,
+   not five; and an unbroken error string must not widen the column again. */
+.prov .prov-when {
+  display: block; margin-top: 0.1rem; font-family: var(--mono); color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.prov .nw { white-space: nowrap; }
 .prov .err { color: var(--err); }
 .prov .warn { color: var(--warn); }
 

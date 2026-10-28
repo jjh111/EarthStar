@@ -468,6 +468,15 @@ const FORECAST_LINK = {
   threeDay: 'https://services.swpc.noaa.gov/text/3-day-forecast.txt',
 };
 
+/** Kept on one line: a time, or an age with its unit. */
+const nw = (s: string): string => `<span class="nw">${s}</span>`;
+/**
+ * The time and the state, on their own line under the source. As two more
+ * columns they made the table wider than the margin at every size but one.
+ */
+const provWhen = (time: string, state: string): string =>
+  `<span class="prov-when">${nw(time)} · ${state}</span>`;
+
 function metaRow(key: string, m: PartMeta, now = new Date()): string {
   const b = key === 'alerts' ? null : badgeFor(m);
   return `<tr>
@@ -479,17 +488,17 @@ function metaRow(key: string, m: PartMeta, now = new Date()): string {
         tierBadge('D', 'Watches and warnings: NOAA’s forecasts')}`}</td>
     <td><a href="${m.source_url}" rel="noreferrer noopener" target="_blank">${escapeHtml(m.source)}</a>${
       m.model ? `<br><span class="tile-meta">${escapeHtml(m.model.name)}</span>` : ''}${
-      m.mirrored ? `<br><span class="tile-meta warn">via Earth Star’s mirror · ${escapeHtml(copyTaken(m.mirrored_at, now))}</span>` : ''}</td>
-    <td class="num">${m.data_time ? whenUTC(m.data_time, now) : NO_DATA}</td>
-    <td class="num">${m.error ? `<span class="err">${escapeHtml(m.error)}</span>`
-      : m.latency_s === null ? NO_DATA : formatAge(m.latency_s)}</td>
+      m.mirrored ? `<br><span class="tile-meta warn">via Earth Star’s mirror · ${escapeHtml(copyTaken(m.mirrored_at, now))}</span>` : ''}${
+      provWhen(m.data_time ? whenUTC(m.data_time, now) : NO_DATA,
+        m.error ? `<span class="err">${escapeHtml(m.error)}</span>`
+          : m.latency_s === null ? NO_DATA : nw(formatAge(m.latency_s)))}</td>
   </tr>`;
 }
 
 /**
  * A Sources row for something that is not a NOAA snapshot part — DONKI, the
- * region list, USGS, the L1 positions, the solar imagery — in the same five
- * columns: what, tier, from where, when, and its state.
+ * region list, USGS, the L1 positions, the solar imagery — in the same three
+ * columns: what, tier, and from where, with when and its state under that.
  */
 function laneRow(
   key: string, tier: 'E' | 'D', source: string, url: string,
@@ -501,9 +510,8 @@ function laneRow(
     <td>${escapeHtml(key)}</td>
     <td>${tierBadge(tier)}</td>
     <td><a href="${url}" rel="noreferrer noopener" target="_blank">${escapeHtml(source)}</a>${
-      mirroredAt !== false ? `<br><span class="tile-meta warn">via Earth Star’s mirror · ${escapeHtml(copyTaken(mirroredAt, now))}</span>` : ''}</td>
-    <td class="num">${time ? whenUTC(time, now) : NO_DATA}</td>
-    <td class="num">${state}</td>
+      mirroredAt !== false ? `<br><span class="tile-meta warn">via Earth Star’s mirror · ${escapeHtml(copyTaken(mirroredAt, now))}</span>` : ''}${
+      provWhen(time ? whenUTC(time, now) : NO_DATA, state)}</td>
   </tr>`;
 }
 
@@ -523,7 +531,7 @@ function laneState(time: string | null, error: string | null, loading: boolean, 
   // "0 s old" on a time six hours away read as fresh.
   const age = (now.getTime() - Date.parse(time)) / 1000;
   if (age < -60) return `time ${formatAge(-age)} ahead of this clock`;
-  return `${formatAge(age)} old${error
+  return `${nw(`${formatAge(age)} old`)}${error
     ? ` · <span class="err">refresh failed</span>` : ''}`;
 }
 
@@ -568,9 +576,9 @@ export function renderSources(
     <td>aurora</td>
     <td>${tierBadge('D')}</td>
     <td><a href="${au.source_url}" rel="noreferrer noopener" target="_blank">${escapeHtml(au.source)}</a>
-      <br><span class="tile-meta">${escapeHtml(au.model?.name ?? '')}</span></td>
-    <td class="num">${au.data ? whenUTC(au.data.observation_time, now) : NO_DATA}</td>
-    <td class="num">${au.data ? formatAge(au.latency_s) : NO_DATA}</td>
+      <br><span class="tile-meta">${escapeHtml(au.model?.name ?? '')}</span>${
+      provWhen(au.data ? whenUTC(au.data.observation_time, now) : NO_DATA,
+        au.data ? nw(formatAge(au.latency_s)) : NO_DATA)}</td>
   </tr>` : '';
 
   // Everything else on screen that has a time of its own: the CME cones, the
@@ -581,7 +589,7 @@ export function renderSources(
   const laneRows = [
     laneRow('CME analyses', 'D', 'NASA DONKI · CME analyses', `${DONKI_BASE}/CMEAnalysis`, newestCme,
       laneState(newestCme, state.laneErrors.cmes, state.lanes.cmes, now)
-        + (state.cmes.length ? ` · ${state.cmes.length} in the week` : ''), now,
+        + (state.cmes.length ? ` · ${nw(`${state.cmes.length} in the week`)}` : ''), now,
       cmesFromMirror() ? mirrorCapturedAt() : false),
     laneRow('active regions', 'E', state.regions?.source ?? 'NOAA SWPC · solar region summary',
       state.regions?.source_url ?? 'https://services.swpc.noaa.gov/json/solar_regions.json',
@@ -593,7 +601,7 @@ export function renderSources(
       laneState(state.spacecraft?.data_time ?? null, state.laneErrors.spacecraft, state.lanes.spacecraft, now), now),
     extra.quakes ? laneRow('earthquakes', 'E', 'USGS · past day', USGS_URLS.day, extra.quakes.time,
       laneState(extra.quakes.time, extra.quakes.error, extra.quakes.loading, now)
-        + (extra.quakes.time ? ` · ${extra.quakes.count} events` : ''), now) : '',
+        + (extra.quakes.time ? ` · ${nw(`${extra.quakes.count} events`)}` : ''), now) : '',
     ...(extra.imagery ?? []).map((i) => laneRow(i.key, 'E', i.source, i.url, i.time,
       laneState(i.time, i.error, i.loading, now), now)),
   ].join('');
@@ -601,7 +609,7 @@ export function renderSources(
   // How the scene is being drawn on this device. Not a feed and not a tier:
   // the resolution the renderer chose, said here as the foot's chip says it.
   const renderingRow = rendering
-    ? `<tr><td>rendering</td><td>—</td><td colspan="3">${escapeHtml(rendering)}</td></tr>` : '';
+    ? `<tr><td>rendering</td><td>—</td><td>${escapeHtml(rendering)}</td></tr>` : '';
 
   const monitors = renderMonitors(
     state.spacecraft?.data ?? [], state.now?.data.solar_wind?.speed ?? null,
@@ -613,7 +621,7 @@ export function renderSources(
     ${checks ? checkSummary(checks) : ''}
     ${section('prov-table', 'Every element', `
       <table class="prov">
-        <thead><tr><th>Element</th><th>Tier</th><th>Source</th><th>Time</th><th>Latency · state</th></tr></thead>
+        <thead><tr><th>Element</th><th>Tier</th><th>Source · time · latency</th></tr></thead>
         <tbody>${Object.entries(env.parts).map(([k, m]) => metaRow(k, m, now)).join('')}${auRow}${laneRows}${renderingRow}</tbody>
       </table>`, true, remembered)}
     ${section('prov-earth', 'The Earth base — imagery, not a feed', `

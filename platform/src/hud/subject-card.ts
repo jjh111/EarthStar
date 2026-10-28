@@ -406,6 +406,10 @@ export class SubjectCard {
 
   private onKeyDown = (e: KeyboardEvent): void => {
     if (e.key !== 'Escape' || this.el.hidden) return;
+    // A modal over the card (the help) owns Escape: it closes that, and only
+    // that. Closing both on one key threw the card away and, with the help's
+    // history.back() landing on the card's own entry, left a dead Back step.
+    if (document.querySelector('dialog[open]')) return;
     // Only swallow the key when there was something to close, so Escape keeps
     // working for whatever else on the page wants it.
     e.stopPropagation();
