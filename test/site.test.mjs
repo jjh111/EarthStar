@@ -596,6 +596,37 @@ async function newPage(opts = {}) {
 }
 
 {
+  // The note promises live readings only while Kp, wind and X-rays are all
+  // live: the scales' 6 h cadence keeps that tile live through a 3 h outage
+  // (or the mirror's lag), and it alone never holds the promise up. The X-ray
+  // flux is written as the Viewer writes it, never toExponential's "1.1e-6"
+  const ago = (min) => new Date(Date.now() - min * 60e3).toISOString();
+  const note = async (old) => {
+    const { ctx, page } = await newPage();
+    await page.route('**/assets/data/now.mock.json', async (route) => {
+      const m = await (await route.fetch()).json();
+      m.kp.time = m.wind.time = m.xray.time = ago(old);
+      m.scales.time = ago(10);
+      route.fulfill({ json: m });
+    });
+    await page.goto(BASE + '/?mock=1#sky', { waitUntil: 'networkidle' });
+    await page.waitForTimeout(800);
+    const r = await page.evaluate(() => ({
+      states: [...document.querySelectorAll('.sky-tile')].map((t) => t.dataset.state).join(','),
+      note: document.querySelector('#sky .sky-note').textContent,
+      xray: document.querySelector('#sky-xray .sky-detail').textContent.replace(/\u00a0/g, ' '),
+    }));
+    await ctx.close();
+    return r;
+  };
+  const fresh = await note(2), late = await note(180);
+  check('sky note promises live readings while every reading is live', fresh.states === 'live,live,live,live' && /^Live readings/.test(fresh.note), `${fresh.states} · ${fresh.note}`);
+  check('sky note owns up when Kp, wind and X-rays are old, though the scales are live',
+    late.states === 'stale,stale,stale,live' && /fresh/.test(late.note) && !/^Live readings/.test(late.note), `${late.states} · ${late.note}`);
+  check('sky X-ray flux reads 1.1 × 10⁻⁶ W/m², never 1.1e-6', fresh.xray.startsWith('1.1 × 10⁻⁶ W/m² · GOES-') && !/\de-/.test(fresh.xray), fresh.xray);
+}
+
+{
   // Upstream blocked: every tile unavailable, the note says why, and a
   // refresh that changes nothing leaves the live sentence alone (it would be
   // read out again). Each tile opens its own reading in the Viewer.

@@ -94,6 +94,16 @@ function fmtSigned(v, digits) {
   return (v < 0 ? '\u2212' : '+') + s;
 }
 
+const SUP = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹', '-': '⁻' };
+function sci(v, digits = 1) {
+  // As the Viewer writes one (platform/src/hud/format.ts sci): "3.3 × 10⁻⁷",
+  // never toExponential's "3.3e-7", with no-break spaces so the × never wraps
+  // away from its number. toExponential is split, not log10 taken, so 9.96e-7
+  // rounds to 1.0 × 10⁻⁶ and never to 10.0 × 10⁻⁷
+  const [m, e] = v.toExponential(digits).split('e');
+  return `${m.replace(/^-(?=\d)/, '\u2212')}\u00a0×\u00a010${[...String(Number(e))].map((c) => SUP[c] ?? c).join('')}`;
+}
+
 function xrayClass(flux) {
   if (flux == null || !(flux > 0)) return null;
   const bands = [['A', 1e-8], ['B', 1e-7], ['C', 1e-6], ['M', 1e-5], ['X', 1e-4]];
@@ -140,7 +150,7 @@ function parse(key, data) {
 
 const TILES = ['kp', 'wind', 'xray', 'scales'];
 const NOTE_DOWN = 'NOAA could not be reached from this browser (offline or blocked). The page tries again each minute.';
-const NOTE_STALE = 'NOAA’s newest readings are old: each tile shows its age, and the page tries again every minute.';
+const NOTE_STALE = 'Not all of NOAA’s newest readings are fresh: a stale tile shows its age, and the page tries again every minute. <span class="badge" title="Measured" aria-hidden="true">E</span> measured, timestamped, never invented.';
 let noteLive = null; // the note as the page ships it, restored once a reading arrives
 let nextAt = 0;      // when the next attempt is due, for a failed tile to say
 
@@ -280,7 +290,7 @@ function render(results, via) {
   const x = results.xray;
   if (x === undefined) setTile('xray', 'error', { error: results.errors.xray });
   else if (!x || x.flux_long == null) setTile('xray', 'nodata', { at: x?.time });
-  else setTile('xray', st('xray', x.time), { value: x.class, unit: '', detail: `${x.flux_long.toExponential(1)} W/m²${DOT}GOES-${x.satellite}`, at: x.time, via });
+  else setTile('xray', st('xray', x.time), { value: x.class, unit: '', detail: `${sci(x.flux_long)}\u00a0W/m²${DOT}GOES-${x.satellite}`, at: x.time, via });
 
   const s = results.scales;
   if (s === undefined) setTile('scales', 'error', { error: results.errors.scales });
@@ -316,12 +326,15 @@ function render(results, via) {
   }
 
   // When no feed answered at all, the note says why instead of promising
-  // live readings, and when every reading is old it says that; any live
-  // reading brings the promise back
+  // live readings, and when a reading is old it says that. The promise holds
+  // only while Kp, wind and X-rays are all live (states[0..2], in TILES
+  // order), the sentence's own test: the scales' 6 h cadence keeps that tile
+  // live through a short outage (and through the mirror's 2–5 h lag), so it
+  // alone never brings the promise back
   const note = document.querySelector('#sky .sky-note');
   if (note) {
     noteLive ??= note.innerHTML;
-    const old = states.includes('stale') && !states.includes('live');
+    const old = states.slice(0, 3).includes('stale') || (states.includes('stale') && !states.includes('live'));
     const html = down ? NOTE_DOWN : old ? NOTE_STALE : noteLive;
     if (note.innerHTML !== html) note.innerHTML = html;
   }
