@@ -12,7 +12,8 @@ import type { StoreState } from '../data/store.js';
 import type { CheckResult } from '../data/checks.js';
 import { l1Inset } from './l1-inset.js';
 import { CLOUD_ARRIVAL, enlilSeries, type EnlilRun } from '../data/enlil.js';
-import { DONKI_BASE, type Cme } from '../data/cme.js';
+import { DONKI_BASE, cmesFromMirror, newestAnalysis, type Cme } from '../data/cme.js';
+import { mirrorCapturedAt } from '../data/fetch-json.js';
 import { USGS_URLS } from '../data/earth-quakes.js';
 import { SPACECRAFT_NOTE, type SpacecraftPos } from '../data/ephemerides.js';
 import { instrumentFor, type ImageLoop, type LoopKind } from '../data/solar-imagery.js';
@@ -139,6 +140,7 @@ export function reportLanes(state: StoreState): ReportLanes {
     snapshot: state.lanes.snapshot, aurora: state.lanes.aurora, cmes: state.lanes.cmes,
     nextAttempt: state.nextAttempt,
     cmesError: state.laneErrors.cmes, cmesNextAttempt: state.nextSlowAttempt ?? null,
+    cmesMirrored: cmesFromMirror(), cmesCopyAt: mirrorCapturedAt(),
   };
 }
 
@@ -202,7 +204,7 @@ export function renderDrawnIndex(narration: SceneNarration): string {
     const rows = drawn.filter((s) => s.tier === tier).map((s) => `
       <li><button type="button" class="subject-link" data-subject="${escapeHtml(s.id)}">
         ${tierBadge(tier)}
-        ${escapeHtml(s.label)}</button> — ${escapeHtml(s.oneLine)}${
+        ${escapeHtml(s.label)}</button> — ${escapeHtml(drawnLine(s, narration))}${
         s.keyedTo ? ` <em>Keyed to ${escapeHtml(s.keyedTo)}.</em>` : ''}</li>`).join('');
     return rows ? `<h4 class="index-tier">${escapeHtml(title)}</h4>
       <ul class="subject-links">${rows}</ul>` : '';
@@ -217,6 +219,22 @@ export function renderDrawnIndex(narration: SceneNarration): string {
       ${body}
     </div>
   </details>`;
+}
+
+/**
+ * A subject's line in the index, which claims "at this moment": the registry's
+ * own, except for the field lines, whose external model is a state of the sky.
+ * Offline the lines are IGRF alone, and a Tsyganenko model named beside the
+ * Shield paragraph that says none runs was the index contradicting the report.
+ */
+function drawnLine(s: Subject, n: SceneNarration): string {
+  if (s.id !== 'layer.field-lines') return s.oneLine;
+  const f = n.fieldLines, x = f?.external ?? null;
+  const how = f?.tracing && f.lines === 0 ? 'IGRF-14, being traced now'
+    : x === null ? 'IGRF-14 alone: no external model runs, because neither the solar wind nor Kp has arrived'
+    : x.name === 't96' ? 'IGRF-14 plus Tsyganenko T96, driven by the measured solar wind'
+    : 'IGRF-14 plus Tsyganenko T89, from Kp';
+  return `The Earth’s field, traced through ${how}. Blue closes, violet stays open.`;
 }
 
 /* ------------------------------------------------------------------ *
@@ -476,11 +494,14 @@ function metaRow(key: string, m: PartMeta, now = new Date()): string {
 function laneRow(
   key: string, tier: 'E' | 'D', source: string, url: string,
   time: string | null, state: string, now: Date,
+  /** When the lane's bytes came from Earth Star's mirror, the copy's time (or null, unknown); else false. */
+  mirroredAt: string | null | false = false,
 ): string {
   return `<tr>
     <td>${escapeHtml(key)}</td>
     <td>${tierBadge(tier)}</td>
-    <td><a href="${url}" rel="noreferrer noopener" target="_blank">${escapeHtml(source)}</a></td>
+    <td><a href="${url}" rel="noreferrer noopener" target="_blank">${escapeHtml(source)}</a>${
+      mirroredAt !== false ? `<br><span class="tile-meta warn">via Earth Star’s mirror · ${escapeHtml(copyTaken(mirroredAt, now))}</span>` : ''}</td>
     <td class="num">${time ? whenUTC(time, now) : NO_DATA}</td>
     <td class="num">${state}</td>
   </tr>`;
@@ -498,7 +519,11 @@ function laneState(time: string | null, error: string | null, loading: boolean, 
   if (error && !time) return `<span class="err">unavailable · ${escapeHtml(errorReason(error))}</span>`;
   if (loading && !time) return 'loading';
   if (!time) return NO_DATA;
-  return `${formatAge((now.getTime() - Date.parse(time)) / 1000)} old${error
+  // A time ahead of the clock is said as one: formatAge floors at zero, and
+  // "0 s old" on a time six hours away read as fresh.
+  const age = (now.getTime() - Date.parse(time)) / 1000;
+  if (age < -60) return `time ${formatAge(-age)} ahead of this clock`;
+  return `${formatAge(age)} old${error
     ? ` · <span class="err">refresh failed</span>` : ''}`;
 }
 
@@ -550,11 +575,14 @@ export function renderSources(
 
   // Everything else on screen that has a time of its own: the CME cones, the
   // region markers, the quakes, the monitors' positions and the Sun's frames.
-  const newestCme = state.cmes.reduce<string | null>((m, c) => (m === null || c.time215 > m ? c.time215 : m), null);
+  // The CME row is dated by its newest analysis, not its newest 21.5 R☉ time,
+  // which for a slow one lies hours ahead; and its tier is DONKI's fit, [D · NASA].
+  const newestCme = newestAnalysis(state.cmes, now);
   const laneRows = [
-    laneRow('CME analyses', 'E', 'NASA DONKI · CME analyses', `${DONKI_BASE}/CMEAnalysis`, newestCme,
+    laneRow('CME analyses', 'D', 'NASA DONKI · CME analyses', `${DONKI_BASE}/CMEAnalysis`, newestCme,
       laneState(newestCme, state.laneErrors.cmes, state.lanes.cmes, now)
-        + (state.cmes.length ? ` · ${state.cmes.length} in the week` : ''), now),
+        + (state.cmes.length ? ` · ${state.cmes.length} in the week` : ''), now,
+      cmesFromMirror() ? mirrorCapturedAt() : false),
     laneRow('active regions', 'E', state.regions?.source ?? 'NOAA SWPC · solar region summary',
       state.regions?.source_url ?? 'https://services.swpc.noaa.gov/json/solar_regions.json',
       state.regions?.data_time ?? null,

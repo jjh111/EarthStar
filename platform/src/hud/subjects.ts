@@ -459,7 +459,7 @@ const LAYERS: Subject[] = [
     id: 'layer.field-lines',
     aliases: ['field lines'],
     kind: 'layer', tier: 'D', label: 'Magnetic field lines',
-    oneLine: 'The Earth’s field, traced through IGRF-14 plus a Tsyganenko external model. Blue closes, violet stays open.',
+    oneLine: 'The Earth’s field, traced through IGRF-14, plus a Tsyganenko external model (T96 or T89) once its drivers have arrived. Blue closes, violet stays open.',
     meaning: 'These are the paths a charged particle is bound to follow, and they are the '
       + 'shield: a blue line has both feet on Earth and traps what is on it, a violet line '
       + 'has one foot on Earth and leads out toward the solar wind. The boundary between the '

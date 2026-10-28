@@ -771,22 +771,30 @@ btn('help-chip-close').addEventListener('click', dismissChip);
  * so Back closes it — on a phone, where it is a sheet over the page, Back
  * left the Viewer. Closed by its own means it takes that step back again; its
  * "Full detail" hands the step to the detail it opens.
+ *
+ * Only its own step. The entry is tagged when the card pushes it, and taken
+ * back only while that tag is on top: a tab chosen with the card up is a step
+ * of the reader's, and undoing it on × put the panel back on Now. Back to the
+ * card's own entry, the card still up, leaves the tag on top again, so × then
+ * takes that step too and leaves no dead Back behind it.
  */
-let cardPushed = false;
+let cardStep = 0;
+// From the clock, so a tag left in history by an earlier load is never reused.
+let stepSeq = Date.now();
 let cardHandover = false;
+const cardOnTop = (): boolean =>
+  cardStep !== 0 && (history.state as { card?: number } | null)?.card === cardStep;
 const card = new SubjectCard({
   showSubject,
   earthScreen: () => viewer.earthScreen(),
   keepClear: () => { const sun = viewer.sunScreen(); return sun ? [sun] : []; },
-  onOpened: (_id, fresh) => {
-    if (fresh) cardPushed = true;
-    writeHash(fresh);
-  },
+  onOpened: (_id, fresh) => writeHash(fresh, fresh),
   onClosed: (reason) => {
-    if (reason === 'address') { cardPushed = false; return; }
-    if (reason === 'more') { cardHandover = cardPushed && ownEntry(); cardPushed = false; return; }
-    if (cardPushed && ownEntry() && parseHash(location.hash)?.card) { cardPushed = false; history.back(); return; }
-    cardPushed = false;
+    const onTop = cardOnTop();
+    cardStep = 0;
+    if (reason === 'address') return;
+    if (reason === 'more') { cardHandover = onTop; return; }
+    if (onTop) { history.back(); return; }
     writeHash(false);
   },
 });
@@ -839,8 +847,11 @@ const SET_LAYER: Record<LayerId, (on: boolean) => void> = {
 /** Whether the current history entry is one this page wrote. */
 const ownEntry = (): boolean => (history.state as { viewer?: number } | null)?.viewer === 1;
 
-/** Write the page's state into the address: a new entry for a step, else in place. */
-function writeHash(push: boolean): void {
+/**
+ * Write the page's state into the address: a new entry for a step, else in
+ * place. `cardEntry` tags the new entry as the card's own (see the card).
+ */
+function writeHash(push: boolean, cardEntry = false): void {
   if (routing) return;
   const hash = formatHash({
     view, scale: viewer.scaleMode, tab: hud.activeTab, detail: hud.activeDetail, layers: layersNow(),
@@ -851,8 +862,14 @@ function writeHash(push: boolean): void {
   // a step behind that Back would land on with nothing open.
   if (push && cardHandover) { push = false; cardHandover = false; }
   const url = `${location.pathname}${location.search}${hash}`;
-  if (push && hash !== location.hash) history.pushState(ROUTE_STATE, '', url);
-  else history.replaceState(ROUTE_STATE, '', url);
+  if (push && hash !== location.hash) {
+    history.pushState(cardEntry ? { ...ROUTE_STATE, card: (cardStep = ++stepSeq) } : ROUTE_STATE, '', url);
+  } else {
+    // In place (a layer, a view, a card swapped, Back landing here): the
+    // card's tag stays on its entry while the card is up.
+    const tag = card.isOpen ? (history.state as { card?: number } | null)?.card : undefined;
+    history.replaceState(tag ? { ...ROUTE_STATE, card: tag } : ROUTE_STATE, '', url);
+  }
 }
 
 /**

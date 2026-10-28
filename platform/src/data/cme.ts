@@ -30,6 +30,12 @@ export interface Cme extends ConeParams {
   arrival: { time: string; windowHours: number; transitHours: number } | null;
   /** Null when DONKI supplied a modelled arrival instead of ours. */
   arrivalFromEnlil: boolean;
+  /**
+   * When DONKI's analyst submitted this fit (`submissionTime`). The 21.5 R☉
+   * time is the fit's, and for a slow CME it is extrapolated hours past the
+   * submission — so it is not when the catalogue last learned anything.
+   */
+  analysedAt?: string | null;
 }
 
 const iso = (v: unknown): string | null => {
@@ -78,6 +84,7 @@ export function parseCmes(json: unknown, now = new Date()): Cme[] {
         ? { time: enlilArrival, windowHours: 7, transitHours: (Date.parse(enlilArrival) - Date.parse(time215)) / 3.6e6 }
         : arrivalAtEarth(cone),
       arrivalFromEnlil: enlilArrival !== null,
+      analysedAt: iso(r['submissionTime']),
     });
   }
 
@@ -106,6 +113,31 @@ export function activeCmes(
   return [...directed, ...others];
 }
 
+/**
+ * The newest analysis in the list: the latest submission time, or, for a
+ * record without one, its 21.5 R☉ time once that has passed. Never the
+ * newest 21.5 R☉ time as such — two of the week's six newest were fitted to
+ * cross it after they were submitted, and "newest 20:14 UTC" at 13:33 named
+ * an afternoon that had not happened.
+ */
+export function newestAnalysis(cmes: Cme[], now = new Date()): string | null {
+  let best: string | null = null;
+  for (const c of cmes) {
+    const t = c.analysedAt ?? (Date.parse(c.time215) <= now.getTime() ? c.time215 : null);
+    if (t && (best === null || t > best)) best = t;
+  }
+  return best;
+}
+
+/**
+ * Whether the list on screen came from Earth Star's mirror, kept here as
+ * fetch-json keeps its own provenance. Set only when a fetch succeeds, so a
+ * refresh that fails goes on describing the list that was kept.
+ */
+let fromMirror = false;
+/** Whether the CME list on screen came from Earth Star's mirror. */
+export const cmesFromMirror = (): boolean => fromMirror;
+
 export async function fetchCmes(signal?: AbortSignal, days = 7): Promise<Cme[]> {
   const start = new Date(Date.now() - days * 86_400_000);
   // One template literal, so the mirror's endpoint discovery copies exactly
@@ -115,5 +147,6 @@ export async function fetchCmes(signal?: AbortSignal, days = 7): Promise<Cme[]> 
   // A failure throws, so the lane shows an error. Returning [] here once made
   // a blocked request look exactly like a quiet week with no ejections.
   if (r.json === null) throw new Error(r.error ?? 'DONKI unreachable');
+  fromMirror = r.mirrored === true;
   return parseCmes(r.json);
 }

@@ -12,7 +12,7 @@ import type { SpacecraftPos } from '../data/ephemerides.js';
 import { formatAge } from '../contract/types.js';
 import type { AuroraNow, Envelope } from '../contract/types.js';
 import type { PartMeta } from '../data/source.js';
-import type { Cme } from '../data/cme.js';
+import { newestAnalysis, type Cme } from '../data/cme.js';
 import { WORDS, copyTaken, kpLabel, minus, sci, splitNotices, stalenessOf, whenUTC } from './format.js';
 import { liveAge, liveClock, liveSubsolar, liveText } from './live.js';
 import { errorReason, valueState } from '../data/state.js';
@@ -98,6 +98,9 @@ export interface ReportLanes {
   /** The CME catalogue's last failure, and when the slow lane tries again. */
   cmesError?: string | null;
   cmesNextAttempt?: string | null;
+  /** The CME list came from Earth Star's mirror, and when that copy was taken. */
+  cmesMirrored?: boolean;
+  cmesCopyAt?: string | null;
 }
 
 export interface SceneNarration {
@@ -599,14 +602,42 @@ export function buildReportLines(
   } else if (cmes.length > 0) {
     // When the catalogue's window opens and its newest analysis, so "nothing
     // inbound" is a statement about a stated week of DONKI, not a vague "lately".
-    const newest = cmes.reduce((m, c) => (c.time215 > m ? c.time215 : m), cmes[0]!.time215);
-    const since = new Date(now.getTime() - 7 * 86_400_000).toISOString();
-    say('sun', 
-      `${cmes.length} coronal mass ejection${cmes.length > 1 ? 's have' : ' has'} been ` +
-      `analysed since ${when(since).slice(0, 6)} (NASA DONKI, newest ${when(newest)}), none of ` +
-      `them Earth-directed with an arrival still ahead of us. Nothing is inbound.`,
-      'model.cme-cone',
-    );
+    // The window is the list's own when it reaches further back than a week —
+    // a copy taken days ago starts days before this one would.
+    const newest = newestAnalysis(cmes, now);
+    const weekAgo = new Date(now.getTime() - 7 * 86_400_000).toISOString();
+    const earliest = cmes.reduce((m, c) => (c.time215 < m ? c.time215 : m), cmes[0]!.time215);
+    const since = when(earliest < weekAgo ? earliest : weekAgo).slice(0, 6);
+    const counted = `${cmes.length} coronal mass ejection${cmes.length > 1 ? 's have' : ' has'} been ` +
+      `analysed since ${since}`;
+    const none = 'none of them Earth-directed with an arrival still ahead';
+    // "Nothing is inbound" is said only of a list that arrived from DONKI and
+    // has not failed since: of a copy, or of the list a failed refresh kept,
+    // it is an all-clear about a sky nobody has looked at.
+    if (lanes.cmesMirrored) {
+      say('sun',
+        `In Earth Star's copy of NASA DONKI (${copyTaken(lanes.cmesCopyAt, now)}), ${counted}${
+          newest ? ` (newest analysis ${when(newest)})` : ''}, ${none}. DONKI itself could not be ` +
+        `reached, so anything analysed since the copy is not in it.`,
+        'model.cme-cone',
+      );
+      acc[acc.length - 1]!.tone = 'warn';
+    } else if (lanes.cmesError) {
+      say('sun',
+        `NASA DONKI's last refresh failed (${errorReason(lanes.cmesError)}).${
+          nextAttemptText(lanes, now, lanes.cmesNextAttempt ?? lanes.nextAttempt)} In the last list ` +
+        `that arrived, ${counted}${newest ? ` (newest analysis ${when(newest)})` : ''}, ${none}; ` +
+        `nothing here says whether one has launched since.`,
+        'model.cme-cone',
+      );
+      acc[acc.length - 1]!.tone = 'warn';
+    } else {
+      say('sun',
+        `${counted} (NASA DONKI${newest ? `, newest analysis ${when(newest)}` : ''}), ${none} of us. ` +
+        `Nothing is inbound.`,
+        'model.cme-cone',
+      );
+    }
   } else if (lanes.cmesError) {
     // A failed catalogue is said, never left out: a Sun section with no CME
     // line reads as a quiet week, which a failed read cannot claim.

@@ -13,7 +13,7 @@ import {
   AU_KM, MEASUREMENT_HEIGHT_RSUN, SOLAR_RADIUS_KM, angleFromEarth, arrivalAtEarth,
   coneAxis, frontDistanceAu, isEarthDirected, subEarthLatitude,
 } from '../src/models/cme-cone.js';
-import { activeCmes, parseCmes } from '../src/data/cme.js';
+import { activeCmes, newestAnalysis, parseCmes } from '../src/data/cme.js';
 
 const DATE = new Date('2026-09-06T00:00:00Z');
 const cone = (o: Partial<Parameters<typeof arrivalAtEarth>[0]> = {}) => ({
@@ -190,5 +190,34 @@ describe('parsing DONKI', () => {
   it('survives junk', () => {
     expect(parseCmes(null)).toEqual([]);
     expect(parseCmes([{}])).toEqual([]);
+  });
+});
+
+/**
+ * A slow CME is submitted before it reaches 21.5 R☉: DONKI's analyst fits the
+ * cone and extrapolates the crossing hours ahead. Two of the week's six newest
+ * were like this, and "newest 20:14 UTC" at 13:33 read as a time already past.
+ */
+describe('the newest analysis is a submission, not a crossing', () => {
+  const week = [
+    { time21_5: '2026-10-27T20:14Z', submissionTime: '2026-10-27T12:10Z', latitude: -20, longitude: 80,
+      halfAngle: 20, speed: 260, associatedCMEID: 'slow' },
+    { time21_5: '2026-10-20T10:15Z', submissionTime: '2026-10-20T14:02Z', latitude: 10, longitude: -70,
+      halfAngle: 15, speed: 450, associatedCMEID: 'old' },
+  ];
+  const now = new Date('2026-10-27T13:33Z');
+
+  it('keeps DONKI’s submission time', () => {
+    expect(parseCmes(week).find((c) => c.id === 'slow')!.analysedAt).toBe('2026-10-27T12:10:00.000Z');
+  });
+
+  it('dates the list by its newest submission', () => {
+    expect(newestAnalysis(parseCmes(week), now)).toBe('2026-10-27T12:10:00.000Z');
+  });
+
+  it('without a submission time, takes a crossing only once it has passed', () => {
+    const bare = week.map(({ submissionTime: _, ...r }) => r);
+    expect(newestAnalysis(parseCmes(bare), now)).toBe('2026-10-20T10:15:00.000Z');
+    expect(newestAnalysis([], now)).toBeNull();
   });
 });

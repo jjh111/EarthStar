@@ -10,13 +10,14 @@
  * fine and is false; these hold the true one.
  */
 
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { parseAlerts } from '../src/data/swpc.js';
 import { noticeTicker, statusLine } from '../src/hud/hud.js';
-import { buildSituationReport } from '../src/hud/situation-report.js';
+import { buildReportLines, buildSituationReport } from '../src/hud/situation-report.js';
 import { buildBriefing } from '../src/hud/briefing.js';
-import { renderChecks, renderDetail, renderNotices } from '../src/hud/margin.js';
+import { renderChecks, renderDetail, renderDrawnIndex, renderNotices, renderSources, reportLanes } from '../src/hud/margin.js';
+import { fetchCmes, parseCmes } from '../src/data/cme.js';
 import { INSTRUMENTS } from '../src/hud/instruments.js';
 import { sci } from '../src/hud/format.js';
 import type { CheckResult } from '../src/data/checks.js';
@@ -143,6 +144,124 @@ describe('a failed CME catalogue is said', () => {
   it('and an empty week as an empty week', () => {
     const report = buildSituationReport(env, scene(), NOW).join('\n');
     expect(report).toContain('NASA DONKI lists no CME analyses in the past week');
+  });
+});
+
+/**
+ * A week of DONKI as the mirror held it on 27 Oct: the newest a slow CME
+ * submitted at 12:10 and fitted to cross 21.5 R☉ at 20:14, the oldest on
+ * 20 Oct, from the query's startDate. Neither is Earth-directed.
+ */
+const DONKI_WEEK = [
+  { time21_5: '2026-10-27T20:14Z', submissionTime: '2026-10-27T12:10Z', latitude: -20, longitude: 80,
+    halfAngle: 20, speed: 260, associatedCMEID: '2026-10-27T17:36:00-CME-001', type: 'S' },
+  { time21_5: '2026-10-20T10:15Z', submissionTime: '2026-10-20T14:02Z', latitude: 10, longitude: -70,
+    halfAngle: 15, speed: 450, associatedCMEID: '2026-10-20T08:00:00-CME-001', type: 'C' },
+];
+const sunLine = (lines: string[]): string => lines.find((l) => l.includes('coronal mass ejection')) ?? '';
+const cmeRow = (html: string): string => html.split('<tr>').find((r) => r.includes('CME analyses')) ?? '';
+
+describe('a CME list whose newest crossing is still ahead', () => {
+  // The page's clock on the mirror's day, an hour and a half after the submission.
+  const AT = new Date('2026-10-27T13:33:00Z');
+  const env = envelope(Object.fromEntries(PARTS.map((k) => [k, meta({ error: 'Failed to fetch' })])), AT);
+  const cmes = parseCmes(DONKI_WEEK, AT);
+
+  it('dates the report by the newest analysis, never by a time that has not happened', () => {
+    const line = sunLine(buildSituationReport(env, scene(), AT, null, cmes, []));
+    expect(line).toContain('newest analysis 12:10 UTC');
+    expect(line).not.toContain('20:14');
+    expect(line).toContain('Nothing is inbound.');
+  });
+
+  it('the Sources row is as old as that analysis, and tiered as DONKI’s fit', () => {
+    const row = cmeRow(renderSources(store(env, { cmes }), null, undefined, undefined, null, {}, AT));
+    expect(row).toContain('83 min old');
+    expect(row).not.toContain('0 s old');
+    expect(row).toContain('badge-d');
+    expect(row).not.toContain('mirror');
+  });
+
+  it('a lane time after the clock is said as ahead of it, not as fresh', () => {
+    const ahead = new Date(AT.getTime() + 3600_000).toISOString();
+    const html = renderSources(store(env), null, undefined, undefined, null,
+      { quakes: { time: ahead, count: 3, error: null, loading: false } }, AT);
+    const row = html.split('<tr>').find((r) => r.includes('earthquakes')) ?? '';
+    expect(row).toContain('time 60 min ahead of this clock');
+    expect(row).not.toContain('0 s old');
+  });
+});
+
+describe('a CME list from Earth Star’s copy, two days on', () => {
+  const env = envelope(Object.fromEntries(PARTS.map((k) => [k, meta({ error: 'Failed to fetch' })])));
+  const cmes = parseCmes(DONKI_WEEK, NOW);
+
+  it('names the copy, in amber, and never says nothing is inbound', () => {
+    const lines = buildReportLines(env, scene(), NOW, null, cmes, [],
+      { snapshot: false, aurora: false, cmes: false, cmesMirrored: true, cmesCopyAt: COPY });
+    const line = lines.find((l) => l.section === 'sun' && l.text.includes('coronal mass ejection'))!;
+    expect(line.text).toContain("In Earth Star's copy of NASA DONKI (copy taken 27 Oct 13:27 UTC)");
+    // The copy's own week, not one counted back from a clock two days later.
+    expect(line.text).toContain('since 20 Oct');
+    expect(line.text).toContain('anything analysed since the copy is not in it');
+    expect(line.tone).toBe('warn');
+    expect(line.text).not.toContain('Nothing is inbound');
+  });
+
+  it('a failed refresh says the list it kept is the last one that arrived', () => {
+    const lines = buildReportLines(env, scene(), NOW, null, cmes, [],
+      { snapshot: false, aurora: false, cmes: false, cmesError: 'Failed to fetch',
+        cmesNextAttempt: new Date(NOW.getTime() + 300_000).toISOString() });
+    const line = lines.find((l) => l.section === 'sun' && l.text.includes('coronal mass ejection'))!;
+    expect(line.text).toContain("NASA DONKI's last refresh failed (offline or blocked). The next attempt is at 13:32 UTC.");
+    expect(line.text).toContain('In the last list that arrived, 2 coronal mass ejections have been analysed since 20 Oct');
+    expect(line.tone).toBe('warn');
+    expect(line.text).not.toContain('Nothing is inbound');
+  });
+
+  describe('read through the fallback', () => {
+    afterAll(async () => {
+      // Upstream answering again puts the module's provenance back for whatever runs after.
+      vi.stubGlobal('fetch', async () => new Response(JSON.stringify([]), { status: 200 }));
+      await fetchCmes();
+      vi.unstubAllGlobals();
+    });
+
+    it('the Sources row and the report both carry the copy', async () => {
+      vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.startsWith('https://ccmc.gsfc.nasa.gov')) throw new TypeError('Failed to fetch');
+        if (url.endsWith('/manifest.json')) return new Response(JSON.stringify({ mirrored_at: COPY }), { status: 200 });
+        if (url.endsWith('/donki/CMEAnalysis.json')) return new Response(JSON.stringify(DONKI_WEEK), { status: 200 });
+        throw new TypeError(`unexpected ${url}`);
+      });
+      const list = await fetchCmes();
+      const s = store(env, { cmes: list });
+      expect(cmeRow(renderSources(s, null, undefined, undefined, null, {}, NOW)))
+        .toContain('via Earth Star’s mirror · copy taken 27 Oct 13:27 UTC');
+      const lanes = reportLanes(s);
+      expect(lanes).toMatchObject({ cmesMirrored: true, cmesCopyAt: COPY });
+      expect(sunLine(buildSituationReport(env, scene(), NOW, null, list, [], lanes)))
+        .toContain("In Earth Star's copy of NASA DONKI");
+    });
+  });
+});
+
+describe('the index names the field model the scene is running', () => {
+  const index = (external: unknown) => renderDrawnIndex({
+    mode: 'globe', view: 'deck', reducedMotion: false, shield: true, aurora: true,
+    fieldLines: { lines: 80, points: 9000, external }, drawn: ['layer.field-lines'],
+  } as never);
+
+  it('IGRF alone when no driver arrived, with no Tsyganenko named', () => {
+    const html = index(null);
+    expect(html).toContain('IGRF-14 alone');
+    expect(html).not.toContain('Tsyganenko');
+  });
+
+  it('T96 or T89 when one runs', () => {
+    expect(index({ name: 't96', input: {} })).toContain('Tsyganenko T96');
+    expect(index({ name: 't89', band: 3 })).toContain('Tsyganenko T89');
   });
 });
 

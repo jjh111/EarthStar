@@ -1689,7 +1689,7 @@ text.l1-idle { fill: var(--ink-faint); }
    noscript sheet hides those and this card says why, on the stage. */
 .noscript-note {
   position: fixed; z-index: 50; left: calc((100vw - var(--margin-w)) / 2); top: 50%; transform: translate(-50%, -50%);
-  width: min(30rem, calc(100vw - 2rem)); padding: 1rem 1.2rem;
+  width: min(30rem, calc(100vw - var(--margin-w) - 2rem)); padding: 1rem 1.2rem;
   background: rgba(9, 14, 24, 0.96); border: 1px solid var(--line-strong); border-radius: 0.5rem;
   font-size: var(--t-5); line-height: 1.5; color: var(--ink-dim);
 }
@@ -1706,6 +1706,9 @@ text.l1-idle { fill: var(--ink-faint); }
     forced-color-adjust: none; background: Highlight; color: HighlightText; border-color: Highlight;
   }
   .ctl-toggles .ctl[aria-pressed='false'] { color: GrayText; border-color: GrayText; }
+  /* An unselected tab's rule is transparent, which forced colours paint as text:
+     all five read as underlined, the selected one a pixel thicker. */
+  .tab { border-bottom-color: Canvas; }
   [role='tab'][aria-selected='true'] { border-bottom: 3px solid Highlight; }
   .badge { forced-color-adjust: auto; }
 }
