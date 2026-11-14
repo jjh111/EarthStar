@@ -1,0 +1,58 @@
+:Product: Forecast Discussion
+:Issued: 2026 Nov 14 1230 UTC
+# Prepared by the U.S. Dept. of Commerce, NOAA, Space Weather Prediction Center
+#
+Solar Activity
+
+.24 hr Summary...
+Solar activity remained at low levels with C-class flares observed.
+Newly numbered Region 4579 (N15E79, Hsx/alpha) produced a C5.5 flare at
+13/1821 UTC, the largest of the period, as well as the majority of the
+other C-flares observed. Region 4568 (S08W60, Axx/alpha) added a C4.4
+flare at 14/0606 UTC, while a few other regions contributed smaller
+C-flares during the period. Regions 4574 (N16E27, Dso/beta), 4576
+(S17W30, Dai/beta-gamma), and 4577 (S06E11, Dso/beta) all experienced
+growth during the period, while the remaining regions were stable or in
+decay.
+
+No Earth-directed CMEs were observed in available coronagraph imagery.
+
+.Forecast...
+Solar activity is expected to be low with a chance for M-class flares
+(R1-R2, Minor-Moderate) over 14-16 Nov.
+
+Energetic Particle
+
+.24 hr Summary...
+The greater than 2 MeV electron flux reached high levels with a peak
+flux of 5,223 pfu observed at 13/1700 UTC. The greater than 10 MeV
+proton flux was at background levels.
+
+.Forecast...
+The greater than 2 MeV electron flux is expected to reach high levels
+through 16 Nov. The greater than 10 MeV proton flux is expected to
+continue at background levels on 14-16 Nov.
+
+Solar Wind
+
+.24 hr Summary...
+Solar wind parameters reflected a near background solar wind regime.
+Total field ranged from 3-6 nT while the Bz component was variable
+between +/-4 nT. Solar wind speed was mainly between 350-400 km/s until
+~14/1100 UTC when it saw a slight increase to around 430 km/s. Phi was
+in a mostly negative orientation.
+
+.Forecast...
+Nominal solar wind conditions are expected on 14-15 Nov. A gradual
+increase in solar wind parameters is expected on 16 Nov due to an SSBC
+in advance of a positive polarity CH HSS.
+
+Geospace
+
+.24 hr Summary...
+The geomagnetic field was quiet.
+
+.Forecast...
+Mostly quiet conditions are expected on 14-15 Nov, with an increase to
+unsettled to isolated active periods on 16 Nov as the CH HSS moves into
+a geoeffective position.
